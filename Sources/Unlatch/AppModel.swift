@@ -14,10 +14,18 @@ final class AppModel {
     var dragging = false
 
     var password = ""
+    /// The exact string `passwordWorks` accepted at the password step. save()
+    /// must pass this same string to `unlock` — never a re-read or normalized
+    /// copy of `password` — so verify and save can never disagree.
+    private(set) var verifiedPassword: String?
     var revealPassword = false
     var passwordError = false
     /// Incremented on each failed attempt to drive the shake animation.
     var shakeCount = 0
+
+    /// Bumped on every load; a finishing classification task from an older
+    /// generation is stale and its result is dropped.
+    private var loadGeneration = 0
 
     var destination: DestinationOption = .suffix
     var chosenFolder: URL?
@@ -43,11 +51,18 @@ final class AppModel {
 
     // MARK: Loading
 
+    // Known limitation: presenting an NSOpenPanel steals key status from the
+    // MenuBarExtra(.window) popover, which macOS then dismisses — there is no
+    // public API to pin or programmatically reopen a MenuBarExtra window.
+    // Mitigations: activate the app and float the panel so it stays front,
+    // and keep all flow state in this model so clicking the status item again
+    // reopens the popover on exactly the step the panel produced.
     func browse() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
+        panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK {
             load(panel.urls)
@@ -57,12 +72,17 @@ final class AppModel {
     func load(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
         dragging = false
+        loadGeneration += 1
+        let generation = loadGeneration
         Task {
             let classified = await Task.detached {
                 urls.map { LoadedFile(url: $0, kind: FileKind(classify($0))) }
             }.value
+            // Two rapid drops race: only the newest batch may apply.
+            guard generation == loadGeneration else { return }
             files = classified
             password = ""
+            verifiedPassword = nil
             passwordError = false
             step = Unlatch.step(afterLoading: classified.map(\.kind))
         }
@@ -71,7 +91,9 @@ final class AppModel {
     // MARK: Password
 
     func submitPassword() {
-        let attempt = password.trimmingCharacters(in: .whitespaces)
+        // No trimming: a real PDF password can legitimately start or end with
+        // whitespace. Only a fully empty field does nothing.
+        let attempt = password
         guard !attempt.isEmpty else { return }
         let targets = encryptedFiles.map(\.url)
         step = .working
@@ -84,6 +106,7 @@ final class AppModel {
                 passwordError = true
                 shakeCount += 1
             } else {
+                verifiedPassword = attempt
                 for index in files.indices
                 where files[index].kind == .encrypted && !matched.contains(files[index].url) {
                     files[index].skipped = true
@@ -97,13 +120,15 @@ final class AppModel {
     // MARK: Destination
 
     /// "Choose folder…" opens the picker right away; canceling keeps the
-    /// previous selection.
+    /// previous selection. Same popover-dismissal caveat as `browse()`:
+    /// state persists, so reopening the popover lands back on this step.
     func chooseOtherFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.prompt = "Choose"
+        panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {
             chosenFolder = url
@@ -113,25 +138,18 @@ final class AppModel {
 
     func save() {
         let option = destination
-        let desktop = desktopFolder
-        let chosen = chosenFolder
-        let jobs: [(source: URL, dest: URL, password: String?)] = usableFiles.map { file in
-            (
-                source: file.url,
-                dest: destinationURL(
-                    for: file.url, option: option,
-                    desktopFolder: desktop, chosenFolder: chosen),
-                password: file.kind == .encrypted ? password : nil
-            )
-        }
+        let jobs = saveJobs(
+            for: files, option: option,
+            desktopFolder: desktopFolder, chosenFolder: chosenFolder,
+            password: verifiedPassword)
         guard !jobs.isEmpty else { return }
         step = .working
         Task {
             let succeeded = await Task.detached {
                 jobs.compactMap { job -> (source: URL, dest: URL)? in
                     do {
-                        try unlock(job.source, password: job.password, destination: job.dest)
-                        return (job.source, job.dest)
+                        try executeSaveJob(job)
+                        return (job.source, job.destination)
                     } catch {
                         return nil
                     }
@@ -141,6 +159,8 @@ final class AppModel {
             for index in files.indices where sources.contains(files[index].url) {
                 files[index].unlocked = true
             }
+            // An empty `succeeded` renders as the failure variant of the done
+            // step: doneTitle(savedCount: 0) and no Show in Finder button.
             savedURLs = succeeded.map(\.dest)
             savedTo = doneSummary(destinations: savedURLs, option: option)
             step = .done
@@ -158,6 +178,7 @@ final class AppModel {
         files = []
         dragging = false
         password = ""
+        verifiedPassword = nil
         revealPassword = false
         passwordError = false
         destination = .suffix

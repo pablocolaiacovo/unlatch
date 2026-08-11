@@ -46,7 +46,10 @@ struct FileRowList: View {
 
     private func badgeColor(_ tone: RowTone) -> Color {
         switch tone {
-        case .neutral: Color.primary.opacity(0.28)
+        // systemGray, not primary.opacity: primary flips to white in dark
+        // mode, which would erase the white badge glyph. A mid gray keeps
+        // the white text legible in both appearances.
+        case .neutral: Color(nsColor: .systemGray)
         case .success: Color(hex: 0x3A9D5D)
         case .warning: Color(hex: 0xB9A24A)
         case .error: Color(hex: 0xD0563E)

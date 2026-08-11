@@ -7,8 +7,9 @@ import UnlatchCore
 
 /// The design's three file kinds, folded down from `Classification`.
 /// `.notEncrypted` joins `.ownerRestricted` under `owner`: both are usable
-/// files with no open password, and the "Copied as-is — opens without a
-/// password" copy is accurate for either.
+/// files with no open password. Owner files are copied to the destination
+/// byte-for-byte (see `saveJobs`), so the "Copied as-is — opens without a
+/// password" copy is literally true for either.
 enum FileKind: Equatable, Sendable {
     case encrypted, owner, corrupt
 
@@ -98,6 +99,63 @@ func destinationURL(
     }
 }
 
+// MARK: - Save jobs
+
+/// What saving does to one file. Encrypted files go through `unlock`;
+/// owner/plain files are copied byte-for-byte so "Copied as-is" stays true —
+/// rewriting them through `unlock` would silently strip owner restrictions.
+enum SaveAction: Equatable, Sendable {
+    case unlock(password: String?)
+    case copy
+}
+
+struct SaveJob: Equatable, Sendable {
+    let source: URL
+    let destination: URL
+    let action: SaveAction
+}
+
+/// Builds the batch of save jobs. `password` must be the exact string the
+/// password step verified — no trimming or other normalization — so that
+/// verification and saving can never disagree about the password.
+func saveJobs(
+    for files: [LoadedFile],
+    option: DestinationOption,
+    desktopFolder: URL,
+    chosenFolder: URL?,
+    password: String?
+) -> [SaveJob] {
+    files.compactMap { file in
+        guard file.kind != .corrupt, !file.skipped else { return nil }
+        let destination = destinationURL(
+            for: file.url, option: option,
+            desktopFolder: desktopFolder, chosenFolder: chosenFolder)
+        return SaveJob(
+            source: file.url,
+            destination: destination,
+            action: file.kind == .encrypted ? .unlock(password: password) : .copy)
+    }
+}
+
+/// Executes one job (blocking; call off the main actor). Copies go through a
+/// temp file and an atomic replace, mirroring `unlock`'s write path; copying
+/// a file onto itself (the "replace original" option) is a no-op success.
+func executeSaveJob(_ job: SaveJob) throws {
+    switch job.action {
+    case .unlock(let password):
+        try unlock(job.source, password: password, destination: job.destination)
+    case .copy:
+        guard job.source.standardizedFileURL != job.destination.standardizedFileURL else {
+            return
+        }
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("pdf")
+        try FileManager.default.copyItem(at: job.source, to: temp)
+        _ = try FileManager.default.replaceItemAt(job.destination, withItemAt: temp)
+    }
+}
+
 // MARK: - Display strings
 
 func abbreviatedPath(_ url: URL) -> String {
@@ -121,15 +179,25 @@ func passwordSubtitle(encrypted: [LoadedFile]) -> String {
     return encrypted.first?.name ?? ""
 }
 
+/// Zero saved files is the failure state: nothing was written, so the step
+/// must not read as a success.
 func doneTitle(savedCount: Int) -> String {
-    savedCount > 1 ? "\(savedCount) files saved" : "Saved"
+    if savedCount == 0 { return "Couldn’t save — nothing was written" }
+    return savedCount > 1 ? "\(savedCount) files saved" : "Saved"
 }
 
 /// The monospaced "where it went" line on the done step. A single file shows
-/// its full path; a batch summarizes the folder the way the design does.
+/// its full path; a batch in one folder summarizes that folder the way the
+/// design does; a batch spanning folders states the spread truthfully.
 func doneSummary(destinations: [URL], option: DestinationOption) -> String {
     guard let first = destinations.first else { return "" }
     if destinations.count == 1 { return abbreviatedPath(first) }
+
+    let folders = Set(destinations.map { $0.deletingLastPathComponent().standardizedFileURL.path })
+    guard folders.count == 1 else {
+        return "\(destinations.count) files in \(folders.count) folders"
+    }
+
     let dir = abbreviatedPath(first.deletingLastPathComponent())
     switch option {
     case .suffix: return dir + "/…-unlocked.pdf"

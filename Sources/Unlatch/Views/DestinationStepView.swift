@@ -32,8 +32,11 @@ struct DestinationStepView: View {
         let selected = model.destination == option
         return HStack(alignment: .top, spacing: 8) {
             ZStack {
+                // Semantic fill so the unselected radio doesn't glare in
+                // dark mode; the inner dot stays white on the accent fill,
+                // matching real AppKit radios in both appearances.
                 Circle()
-                    .fill(selected ? Color.accentColor : Color.white)
+                    .fill(selected ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
                 Circle()
                     .strokeBorder(Color.primary.opacity(0.28), lineWidth: 0.5)
                 if selected {

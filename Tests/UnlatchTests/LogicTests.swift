@@ -1,7 +1,16 @@
 import Foundation
+import PDFKit
 import Testing
 import UnlatchCore
 @testable import Unlatch
+
+/// A unique path in an existing scratch directory, for tests that write files.
+private func scratchURL(ext: String = "pdf") -> URL {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("UnlatchAppTests", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent(UUID().uuidString).appendingPathExtension(ext)
+}
 
 // MARK: - Classification mapping
 
@@ -128,6 +137,10 @@ private func file(_ kind: FileKind, skipped: Bool = false, unlocked: Bool = fals
     #expect(doneTitle(savedCount: 3) == "3 files saved")
 }
 
+@Test func doneTitleZeroSavedIsFailure() {
+    #expect(doneTitle(savedCount: 0) == "Couldn’t save — nothing was written")
+}
+
 @Test func doneSummaryFormats() {
     let a = URL(fileURLWithPath: "/tmp/Documents/A-unlocked.pdf")
     let b = URL(fileURLWithPath: "/tmp/Documents/B-unlocked.pdf")
@@ -137,6 +150,81 @@ private func file(_ kind: FileKind, skipped: Bool = false, unlocked: Bool = fals
         == "/tmp/Documents/ (originals replaced)")
     #expect(doneSummary(destinations: [a, b], option: .desktop) == "/tmp/Documents/")
     #expect(doneSummary(destinations: [], option: .suffix) == "")
+}
+
+@Test func doneSummarySpanningFoldersStatesTheSpread() {
+    let a = URL(fileURLWithPath: "/tmp/Documents/A-unlocked.pdf")
+    let b = URL(fileURLWithPath: "/tmp/Archive/B-unlocked.pdf")
+    let c = URL(fileURLWithPath: "/tmp/Archive/C-unlocked.pdf")
+    #expect(doneSummary(destinations: [a, b], option: .suffix) == "2 files in 2 folders")
+    #expect(doneSummary(destinations: [a, b, c], option: .replace) == "3 files in 2 folders")
+}
+
+// MARK: - Save jobs
+
+@Test func saveJobsPassPasswordThroughExactly() {
+    // A password with surrounding whitespace must reach unlock() untouched —
+    // it is the exact string the password step verified.
+    let spaced = "  hunter2  "
+    let jobs = saveJobs(
+        for: [file(.encrypted)], option: .suffix,
+        desktopFolder: desktop, chosenFolder: nil, password: spaced)
+    #expect(jobs.count == 1)
+    #expect(jobs[0].action == .unlock(password: spaced))
+}
+
+@Test func saveJobsCopyOwnerFilesAndSkipTheRest() {
+    let batch = [
+        file(.encrypted),
+        file(.owner),
+        file(.corrupt),
+        file(.encrypted, skipped: true),
+    ]
+    let jobs = saveJobs(
+        for: batch, option: .desktop,
+        desktopFolder: desktop, chosenFolder: nil, password: "pw")
+    #expect(jobs.count == 2)
+    #expect(jobs[0].action == .unlock(password: "pw"))
+    // Owner files are copied byte-for-byte, never rewritten through unlock().
+    #expect(jobs[1].action == .copy)
+}
+
+@Test func copyJobPreservesBytesExactly() throws {
+    let source = scratchURL()
+    let destination = scratchURL()
+    let bytes = Data((0..<512).map { _ in UInt8.random(in: .min ... .max) })
+    try bytes.write(to: source)
+
+    try executeSaveJob(SaveJob(source: source, destination: destination, action: .copy))
+    #expect(try Data(contentsOf: destination) == bytes)
+
+    // "Replace original" copies a file onto itself: a no-op success.
+    try executeSaveJob(SaveJob(source: source, destination: source, action: .copy))
+    #expect(try Data(contentsOf: source) == bytes)
+}
+
+/// Locks the verify/save contract end to end: the exact string that
+/// `passwordWorks` accepts — including surrounding whitespace — is the one
+/// `unlock` succeeds with, and its trimmed variant fails both.
+@Test func verifyAndUnlockAgreeOnWhitespacePassword() throws {
+    let spaced = "  spaced pw  "
+    let locked = scratchURL()
+    let doc = PDFDocument()
+    doc.insert(PDFPage(), at: 0)
+    let wrote = doc.write(to: locked, withOptions: [
+        .userPasswordOption: spaced,
+        .ownerPasswordOption: spaced,
+    ])
+    try #require(wrote)
+    try #require(classify(locked) == .userLocked)
+
+    #expect(passwordWorks(spaced, for: locked))
+    #expect(!passwordWorks(spaced.trimmingCharacters(in: .whitespaces), for: locked))
+
+    let destination = scratchURL()
+    try executeSaveJob(SaveJob(
+        source: locked, destination: destination, action: .unlock(password: spaced)))
+    #expect(classify(destination) == .notEncrypted)
 }
 
 @Test func destinationHints() {

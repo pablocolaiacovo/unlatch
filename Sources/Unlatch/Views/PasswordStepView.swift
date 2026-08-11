@@ -3,8 +3,12 @@ import SwiftUI
 /// Password entry with a Show/Hide toggle, inline error, and a shake on a
 /// wrong password. Enter submits; empty passwords do nothing.
 struct PasswordStepView: View {
+    private enum Field: Hashable {
+        case secure, plain
+    }
+
     @Bindable var model: AppModel
-    @FocusState private var fieldFocused: Bool
+    @FocusState private var focusedField: Field?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -19,12 +23,11 @@ struct PasswordStepView: View {
 
             HStack(spacing: 6) {
                 passwordField
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .focused($fieldFocused)
-                    .onSubmit { model.submitPassword() }
                 Button(model.revealPassword ? "Hide" : "Show") {
                     model.revealPassword.toggle()
+                    // Re-assert focus on the now-visible twin so typing
+                    // continues uninterrupted after the toggle.
+                    focusedField = model.revealPassword ? .plain : .secure
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
@@ -49,17 +52,28 @@ struct PasswordStepView: View {
             .padding(.top, 14)
         }
         .padding(14)
-        .onAppear { fieldFocused = true }
+        .onAppear { focusedField = .secure }
         .onChange(of: model.password) { model.passwordError = false }
     }
 
-    @ViewBuilder
+    /// Both fields stay mounted, sharing the text binding; Show/Hide only
+    /// swaps which one is visible and focused. Conditionally replacing
+    /// SecureField with TextField would tear down the control and drop
+    /// focus mid-typing.
     private var passwordField: some View {
-        if model.revealPassword {
-            TextField("Password", text: $model.password)
-        } else {
+        ZStack {
             SecureField("Password", text: $model.password)
+                .focused($focusedField, equals: .secure)
+                .opacity(model.revealPassword ? 0 : 1)
+                .allowsHitTesting(!model.revealPassword)
+            TextField("Password", text: $model.password)
+                .focused($focusedField, equals: .plain)
+                .opacity(model.revealPassword ? 1 : 0)
+                .allowsHitTesting(model.revealPassword)
         }
+        .textFieldStyle(.roundedBorder)
+        .controlSize(.small)
+        .onSubmit { model.submitPassword() }
     }
 }
 
