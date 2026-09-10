@@ -1,0 +1,69 @@
+name: Feature request
+description: Propose a change or addition to Unlatch or UnlatchCore.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The sections below match the structure every issue in this repo uses. A proposal that
+        fills them in can be handed to an implementer directly.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - The menu bar app (Unlatch)
+        - The library (UnlatchCore)
+        - Packaging, install or updates
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: >
+        One paragraph. What problem does this solve, for whom, and what do they do today instead?
+        Lead with the problem rather than the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Acceptance criteria as a task list. What must be true for this to be done?
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this deliberately does not cover, so it does not grow during implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: depends-on
+    attributes:
+      label: Depends on
+      description: Links to issues that must land first, or "nothing".
+      value: "nothing"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes for implementer
+      description: >
+        Optional. Real gotchas only, naming actual files and types — for example that
+        MenuBarExtra does not expose its NSStatusItem. Leave blank if there is nothing to add.
+    validations:
+      required: false
