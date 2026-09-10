@@ -1,0 +1,31 @@
+# Groups auto-generated release notes by label. `gh release create --generate-notes`
+# and the "Generate release notes" button both read this file from the default branch.
+#
+# Notes are built from squash-merged PR titles, which is why the PR title has to read
+# as a user-facing changelog line. See RELEASING.md.
+changelog:
+  exclude:
+    labels:
+      - needs-decision
+      - duplicate
+      - invalid
+      - wontfix
+      - question
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+    - title: Fixes
+      labels:
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Packaging and release
+      labels:
+        - area:release
+    # Catch-all, so a PR that slipped through unlabelled still appears rather than
+    # vanishing from the notes.
+    - title: Other changes
+      labels:
+        - "*"

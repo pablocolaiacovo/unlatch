@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+contact_links:
+  # Requires "Private vulnerability reporting" to be enabled in
+  # Settings > Code security. Remove this link if it is turned off.
+  - name: Report a security vulnerability
+    url: https://github.com/pablocolaiacovo/unlatch/security/advisories/new
+    about: Report a vulnerability privately. Please do not open a public issue.

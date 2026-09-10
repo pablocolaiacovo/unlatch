@@ -1,0 +1,83 @@
+name: Bug report
+description: Something in Unlatch or UnlatchCore does not behave as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The sections below match the structure every issue in this
+        repo uses, so a maintainer or an agent can pick it up without a round trip.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project is affected?
+      options:
+        - The menu bar app (Unlatch)
+        - The library (UnlatchCore)
+        - Packaging, install or updates
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: One paragraph. What went wrong, and what it cost you.
+      placeholder: Unlocking a batch of five PDFs reported "3 files saved" and the other two silently disappeared from the result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, then what you expected and what happened instead.
+      value: |
+        1.
+        2.
+        3.
+
+        **Expected:**
+
+        **Actual:**
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: If you already know what a fix has to satisfy, list it as a task list. Leave blank if not.
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Unlatch version
+      description: From the app's Get Info panel, or the release you downloaded. Say "built from source" plus the commit if so.
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+      placeholder: macOS 15.3, M2 MacBook Air
+    validations:
+      required: true
+
+  - type: textarea
+    id: pdf
+    attributes:
+      label: About the PDF, if one is involved
+      description: >
+        Do not attach a confidential document. What matters is how it is protected (open password,
+        permissions only, neither) and what produced it (Acrobat, Word, a scanner, another tool).
+    validations:
+      required: false
