@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shake { 10%,90%{transform:translateX(-1px)} 20%,80%{transform:translateX(2px)} 30%,50%,70%{transform:translateX(-4px)} 40%,60%{transform:translateX(4px)} }
+@keyframes pop { from { opacity:0; transform: scale(.96) translateY(-4px);} to {opacity:1; transform:none;} }
+body { margin:0; font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color:#0A6CFF; } a:hover { color:#0954c9; }
+</style>
+</helmet>
+<div style="position:relative; width:1180px; height:760px; overflow:hidden; background:#3d4a5c; background-image: radial-gradient(120% 90% at 20% 0%, #56637a 0%, #2f3a49 60%, #232b36 100%); font-family:-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;">
+
+  <div style="position:absolute; top:0; left:0; right:0; height:26px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:rgba(245,245,247,0.62); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px); border-bottom:0.5px solid rgba(0,0,0,0.14); color:#1d1d1f; font-size:13px;">
+    <div style="display:flex; align-items:center; gap:18px;">
+      <div style="width:13px; height:15px; background:#1d1d1f; border-radius:3px 3px 4px 4px; opacity:.85;"></div>
+      <div style="font-weight:600;">Finder</div>
+      <div>File</div><div>Edit</div><div>View</div><div>Go</div><div>Window</div><div>Help</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <div onClick="{{ togglePopover }}" style="display:flex; align-items:center; justify-content:center; width:26px; height:20px; border-radius:4px; cursor:pointer; background:{{ menuIconBg }};">
+        <div style="position:relative; width:11px; height:9px; border-radius:2px; background:#1d1d1f;">
+          <div style="position:absolute; left:2px; top:-6px; width:7px; height:7px; border:1.6px solid #1d1d1f; border-bottom:none; border-radius:4px 4px 0 0;"></div>
+        </div>
+      </div>
+      <div style="opacity:.85;">100%</div>
+      <div style="opacity:.85;">Tue 10:24</div>
+    </div>
+  </div>
+
+  <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+  <div style="position:absolute; top:24px; right:36px; width:372px; z-index:3;">
+    <div style="position:absolute; top:0; right:68px; width:14px; height:9px; background:rgba(246,246,248,0.94); clip-path:polygon(50% 0, 100% 100%, 0 100%);"></div>
+    <div style="margin-top:8px; background:rgba(246,246,248,0.94); backdrop-filter:saturate(180%) blur(28px); -webkit-backdrop-filter:saturate(180%) blur(28px); border:0.5px solid rgba(0,0,0,0.16); border-radius:12px; box-shadow:0 18px 44px rgba(0,0,0,.34), 0 2px 6px rgba(0,0,0,.18); overflow:hidden; color:#1d1d1f; animation:pop .16s ease-out;">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:11px 14px 9px; border-bottom:0.5px solid rgba(0,0,0,0.09);">
+        <div style="font-size:13px; font-weight:600; letter-spacing:-0.01em;">Unlatch</div>
+        <div style="font-size:11px; color:rgba(0,0,0,.5);">{{ headerNote }}</div>
+      </div>
+
+      <sc-if value="{{ isIdle }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:14px;">
+          <div onClick="{{ chooseFiles }}" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; height:150px; border-radius:10px; border:1.5px dashed {{ dropBorder }}; background:{{ dropBg }}; cursor:pointer; transition:background .12s, border-color .12s;">
+            <div style="position:relative; width:26px; height:20px; border-radius:4px; background:rgba(0,0,0,.72);">
+              <div style="position:absolute; left:5px; top:-13px; width:16px; height:15px; border:3px solid rgba(0,0,0,.72); border-bottom:none; border-radius:8px 8px 0 0;"></div>
+              <div style="position:absolute; left:11px; top:6px; width:4px; height:4px; border-radius:50%; background:rgba(246,246,248,.94);"></div>
+            </div>
+            <div style="font-size:13px; font-weight:500;">Drop PDFs here</div>
+            <div style="font-size:11px; color:rgba(0,0,0,.5);">or click to browse</div>
+          </div>
+          <div style="margin-top:11px; font-size:11px; line-height:1.45; color:rgba(0,0,0,.5); text-wrap:pretty;">Removes the open password so the file opens without one. Nothing leaves your Mac.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPassword }}">
+        <div style="padding:14px;">
+          <div style="font-size:13px; font-weight:500; margin-bottom:4px;">{{ pwTitle }}</div>
+          <div style="font-size:11px; color:rgba(0,0,0,.55); line-height:1.45; margin-bottom:12px; text-wrap:pretty;">{{ pwSubtitle }}</div>
+          <div style="display:flex; gap:6px; align-items:center; animation:{{ shakeAnim }};">
+            <input type="{{ pwInputType }}" value="{{ password }}" onChange="{{ onPasswordChange }}" onKeyDown="{{ onPasswordKey }}" placeholder="Password" style="flex:1; height:24px; padding:0 8px; font-size:13px; font-family:inherit; color:#1d1d1f; background:#fff; border:0.5px solid rgba(0,0,0,.28); border-radius:5px; box-shadow:inset 0 1px 1px rgba(0,0,0,.05); outline:none;">
+            <div onClick="{{ toggleReveal }}" style="font-size:11px; color:#0A6CFF; cursor:pointer; padding:4px 2px; user-select:none;">{{ revealLabel }}</div>
+          </div>
+          <sc-if value="{{ pwError }}">
+            <div style="margin-top:8px; font-size:11px; color:#c9302c;">That password didn’t work. Try again.</div>
+          </sc-if>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+            <div onClick="{{ reset }}" style="padding:4px 13px; font-size:13px; border-radius:6px; background:#fff; border:0.5px solid rgba(0,0,0,.2); box-shadow:0 1px 1px rgba(0,0,0,.06); cursor:pointer;" style-hover="background:#f2f2f4">Cancel</div>
+            <div onClick="{{ submitPassword }}" style="padding:4px 15px; font-size:13px; font-weight:500; color:#fff; border-radius:6px; background:#0A6CFF; box-shadow:0 1px 1px rgba(0,0,0,.14); cursor:pointer;" style-hover="background:#0958d6">Unlock</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isWorking }}">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; height:160px;">
+          <div style="width:20px; height:20px; border-radius:50%; border:2px solid rgba(0,0,0,.14); border-top-color:rgba(0,0,0,.5); animation:spin .7s linear infinite;"></div>
+          <div style="font-size:12px; color:rgba(0,0,0,.55);">Unlocking…</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isDestination }}">
+        <div style="padding:14px;">
+          <div style="font-size:13px; font-weight:500; margin-bottom:10px;">Where should the unlocked {{ fileWord }} go?</div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <sc-for list="{{ destinations }}" as="d" hint-placeholder-count="4">
+              <div onClick="{{ d.select }}" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+                <div style="flex:none; width:14px; height:14px; margin-top:1px; border-radius:50%; border:0.5px solid rgba(0,0,0,.28); background:{{ d.dotBg }}; box-shadow:inset 0 1px 1px rgba(0,0,0,.06); display:flex; align-items:center; justify-content:center;">
+                  <div style="width:5px; height:5px; border-radius:50%; background:{{ d.dotInner }};"></div>
+                </div>
+                <div>
+                  <div style="font-size:13px; line-height:1.25;">{{ d.label }}</div>
+                  <div style="font-size:11px; color:rgba(0,0,0,.45); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; margin-top:2px;">{{ d.hint }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <div onClick="{{ reset }}" style="padding:4px 13px; font-size:13px; border-radius:6px; background:#fff; border:0.5px solid rgba(0,0,0,.2); box-shadow:0 1px 1px rgba(0,0,0,.06); cursor:pointer;" style-hover="background:#f2f2f4">Cancel</div>
+            <div onClick="{{ save }}" style="padding:4px 15px; font-size:13px; font-weight:500; color:#fff; border-radius:6px; background:#0A6CFF; box-shadow:0 1px 1px rgba(0,0,0,.14); cursor:pointer;" style-hover="background:#0958d6">Save</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isDone }}">
+        <div style="padding:14px;">
+          <div style="font-size:13px; font-weight:500; margin-bottom:2px;">{{ doneTitle }}</div>
+          <div style="font-size:11px; color:rgba(0,0,0,.5); font-family:ui-monospace, SFMono-Regular, Menlo, monospace;">{{ doneWhere }}</div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+            <div onClick="{{ reset }}" style="padding:4px 13px; font-size:13px; border-radius:6px; background:#fff; border:0.5px solid rgba(0,0,0,.2); box-shadow:0 1px 1px rgba(0,0,0,.06); cursor:pointer;" style-hover="background:#f2f2f4">Show in Finder</div>
+            <div onClick="{{ reset }}" style="padding:4px 15px; font-size:13px; font-weight:500; color:#fff; border-radius:6px; background:#0A6CFF; box-shadow:0 1px 1px rgba(0,0,0,.14); cursor:pointer;" style-hover="background:#0958d6">Done</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasFiles }}">
+        <div style="border-top:0.5px solid rgba(0,0,0,0.09); background:rgba(0,0,0,0.025); padding:6px 0;">
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
+            <div style="display:flex; align-items:center; gap:8px; padding:5px 14px;">
+              <div style="flex:none; width:14px; height:14px; border-radius:50%; background:{{ r.badgeBg }}; display:flex; align-items:center; justify-content:center; font-size:9px; color:#fff; font-weight:700;">{{ r.badge }}</div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ r.name }}</div>
+                <div style="font-size:10.5px; color:{{ r.noteColor }}; margin-top:1px;">{{ r.note }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <div style="position:absolute; left:36px; bottom:28px; max-width:420px; color:rgba(255,255,255,.72); font-size:11.5px; line-height:1.55; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; text-wrap:pretty;">Prototype — click the menu bar lock to open/close. Click the drop zone (or drag real files onto it) to load a batch. Any password works; type “wrong” to see the failure state.</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:760},&quot;sampleBatch&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;mixed&quot;,&quot;encrypted&quot;,&quot;clean&quot;],&quot;default&quot;:&quot;mixed&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype data&quot;},&quot;defaultDestination&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;suffix&quot;,&quot;replace&quot;,&quot;desktop&quot;,&quot;other&quot;],&quot;default&quot;:&quot;suffix&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;spinnerMs&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:900,&quot;min&quot;:0,&quot;max&quot;:3000,&quot;step&quot;:100,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
+const SAMPLES = {
+  mixed: [
+    { name: "Q3-Financials.pdf", kind: "encrypted" },
+    { name: "Lease-Agreement.pdf", kind: "encrypted" },
+    { name: "Scan_0042.pdf", kind: "owner" },
+    { name: "Broken-Export.pdf", kind: "corrupt" }
+  ],
+  encrypted: [
+    { name: "Q3-Financials.pdf", kind: "encrypted" },
+    { name: "Lease-Agreement.pdf", kind: "encrypted" }
+  ],
+  clean: [{ name: "Scan_0042.pdf", kind: "owner" }]
+};
+
+const DEST_OPTS = [
+  { id: "suffix", label: "Same folder, add “-unlocked”", hint: "~/Documents/Q3-Financials-unlocked.pdf" },
+  { id: "replace", label: "Same folder, replace original", hint: "~/Documents/Q3-Financials.pdf" },
+  { id: "desktop", label: "Desktop", hint: "~/Desktop/" },
+  { id: "other", label: "Choose folder…", hint: "opens a save panel" }
+];
+
+const SAVED_TO = {
+  suffix: "~/Documents/…-unlocked.pdf",
+  replace: "~/Documents/ (originals replaced)",
+  desktop: "~/Desktop/",
+  other: "~/Documents/Unlocked/"
+};
+
+class Component extends DCLogic {
+  state = {
+    open: true, step: "idle", files: [], dragging: false,
+    password: "", reveal: false, pwError: false, dest: null, savedTo: ""
+  };
+
+  constructor(props) {
+    super(props);
+    this.togglePopover = () => this.setState(s => ({ open: !s.open }));
+    this.chooseFiles = () => this.load(SAMPLES[this.props.sampleBatch ?? "mixed"] || SAMPLES.mixed);
+    this.onDragOver = (e) => { e.preventDefault(); if (!this.state.dragging) this.setState({ dragging: true }); };
+    this.onDragLeave = () => { if (this.state.dragging) this.setState({ dragging: false }); };
+    this.onDrop = (e) => {
+      e.preventDefault();
+      const dropped = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+      if (!dropped.length) return this.chooseFiles();
+      this.load(dropped.map((f, i) => ({
+        name: f.name,
+        kind: /\.pdf$/i.test(f.name) ? (i % 3 === 2 ? "owner" : "encrypted") : "corrupt"
+      })));
+    };
+    this.onPasswordChange = (e) => this.setState({ password: e.target.value, pwError: false });
+    this.onPasswordKey = (e) => { if (e.key === "Enter") this.submit(); };
+    this.toggleReveal = () => this.setState(s => ({ reveal: !s.reveal }));
+    this.submitPassword = () => this.submit();
+    this.save = () => {
+      const dest = this.state.dest || (this.props.defaultDestination ?? "suffix");
+      this.setState({ step: "working" });
+      setTimeout(() => this.setState({ step: "done", savedTo: SAVED_TO[dest] }), this.props.spinnerMs ?? 900);
+    };
+    this.reset = () => this.setState({ step: "idle", files: [], password: "", pwError: false, savedTo: "", dest: null });
+    this.selectors = {};
+    DEST_OPTS.forEach(o => { this.selectors[o.id] = () => this.setState({ dest: o.id }); });
+  }
+
+  load(files) {
+    if (!files.length) return;
+    const encrypted = files.filter(f => f.kind === "encrypted");
+    const usable = files.filter(f => f.kind !== "corrupt");
+    this.setState({
+      files,
+      step: encrypted.length ? "password" : (usable.length ? "destination" : "idle"),
+      password: "", pwError: false, dragging: false
+    });
+  }
+
+  submit() {
+    const pw = (this.state.password || "").trim();
+    if (!pw) return;
+    if (pw.toLowerCase() === "wrong") return this.setState({ pwError: true });
+    this.setState({ step: "working" });
+    setTimeout(() => this.setState({ step: "destination", pwError: false }), this.props.spinnerMs ?? 900);
+  }
+
+  buildRows(files, done) {
+    return files.map(f => {
+      if (f.kind === "corrupt") return { name: f.name, badge: "!", badgeBg: "#d0563e", note: "Not a readable PDF — skipped", noteColor: "#b04a34" };
+      if (f.kind === "owner") return { name: f.name, badge: "i", badgeBg: "#b9a24a", note: done ? "Copied as-is — opens without a password" : "No open password — permissions only", noteColor: "rgba(0,0,0,.5)" };
+      return { name: f.name, badge: done ? "✓" : "•", badgeBg: done ? "#3a9d5d" : "rgba(0,0,0,.28)", note: done ? "Unlocked" : "Password protected", noteColor: "rgba(0,0,0,.5)" };
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const done = s.step === "done";
+    const usable = s.files.filter(f => f.kind !== "corrupt");
+    const encrypted = s.files.filter(f => f.kind === "encrypted");
+    const dest = s.dest || (this.props.defaultDestination ?? "suffix");
+
+    const rowsKey = s.files.map(f => f.name + ":" + f.kind).join("|") + "/" + done;
+    if (this._rowsKey !== rowsKey) { this._rowsKey = rowsKey; this._rows = this.buildRows(s.files, done); }
+    if (this._destKey !== dest) {
+      this._destKey = dest;
+      this._dests = DEST_OPTS.map(o => ({
+        label: o.label,
+        hint: o.id === "other" && dest === "other" ? "~/Documents/Unlocked/" : o.hint,
+        dotBg: dest === o.id ? "#0A6CFF" : "#fff",
+        dotInner: dest === o.id ? "#fff" : "transparent",
+        select: this.selectors[o.id]
+      }));
+    }
+
+    return {
+      open: s.open,
+      isIdle: s.step === "idle",
+      isPassword: s.step === "password",
+      isWorking: s.step === "working",
+      isDestination: s.step === "destination",
+      isDone: done,
+      hasFiles: s.files.length > 0 && s.step !== "working",
+      menuIconBg: s.open ? "rgba(0,0,0,.10)" : "transparent",
+      headerNote: s.files.length ? s.files.length + (s.files.length === 1 ? " file" : " files") : "Remove PDF passwords",
+      dropBorder: s.dragging ? "#0A6CFF" : "rgba(0,0,0,.22)",
+      dropBg: s.dragging ? "rgba(10,108,255,.07)" : "rgba(0,0,0,.02)",
+      pwTitle: encrypted.length > 1 ? encrypted.length + " files need a password" : "This PDF needs a password",
+      pwSubtitle: encrypted.length > 1
+        ? "We’ll try the same password on all of them. Anything that doesn’t match gets skipped."
+        : (encrypted[0] ? encrypted[0].name : ""),
+      pwInputType: s.reveal ? "text" : "password",
+      revealLabel: s.reveal ? "Hide" : "Show",
+      password: s.password,
+      pwError: s.pwError,
+      shakeAnim: s.pwError ? "shake .4s ease" : "none",
+      fileWord: usable.length > 1 ? "files" : "file",
+      destinations: this._dests,
+      doneTitle: usable.length > 1 ? usable.length + " files saved" : "Saved",
+      doneWhere: s.savedTo,
+      rows: this._rows,
+      togglePopover: this.togglePopover,
+      chooseFiles: this.chooseFiles,
+      onDragOver: this.onDragOver,
+      onDragLeave: this.onDragLeave,
+      onDrop: this.onDrop,
+      onPasswordChange: this.onPasswordChange,
+      onPasswordKey: this.onPasswordKey,
+      toggleReveal: this.toggleReveal,
+      submitPassword: this.submitPassword,
+      save: this.save,
+      reset: this.reset
+    };
+  }
+}
+
+</script>
+</body>
+</html>
