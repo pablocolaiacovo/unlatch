@@ -8,7 +8,7 @@ struct DoneStepView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(doneTitle(savedCount: model.savedURLs.count))
+            Text(doneTitle(savedCount: model.savedURLs.count, failedCount: model.failedCount))
                 .font(.system(size: 13, weight: .medium))
                 .padding(.bottom, 2)
             if !model.savedTo.isEmpty {

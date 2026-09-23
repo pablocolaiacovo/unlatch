@@ -50,6 +50,9 @@ struct LoadedFile: Identifiable, Equatable, Sendable {
     var skipped = false
     /// Set once the file has been written to its destination.
     var unlocked = false
+    /// Set when `save()` attempted this file and it did not write. Distinct
+    /// from `skipped`, which means the file was never attempted at all.
+    var failure: SaveFailure?
 
     init(url: URL, kind: FileKind) {
         self.id = UUID()
@@ -58,6 +61,33 @@ struct LoadedFile: Identifiable, Equatable, Sendable {
     }
 
     var name: String { url.lastPathComponent }
+}
+
+/// Why one file's save job didn't write, Sendable so it can cross the
+/// detached task boundary that runs `executeSaveJob` — the thrown `Error`
+/// itself is not. `.wrongPassword`, `.unreadable`, and `.writeFailed` mirror
+/// `UnlockError`; `.copyFailed` is the fallback for the `FileManager` errors
+/// a plain `copy` job can throw.
+enum SaveFailure: Equatable, Sendable {
+    case wrongPassword, unreadable, writeFailed, copyFailed
+
+    init(_ error: UnlockError) {
+        switch error {
+        case .wrongPassword: self = .wrongPassword
+        case .unreadable: self = .unreadable
+        case .writeFailed: self = .writeFailed
+        }
+    }
+
+    /// Short, human note for the file row — never a raw `localizedDescription`.
+    var note: String {
+        switch self {
+        case .wrongPassword: "Password didn’t match — not saved"
+        case .unreadable: "Couldn’t be read — not saved"
+        case .writeFailed: "Couldn’t write the file — not saved"
+        case .copyFailed: "Couldn’t be copied — not saved"
+        }
+    }
 }
 
 // MARK: - Step transitions
@@ -180,10 +210,19 @@ func passwordSubtitle(encrypted: [LoadedFile]) -> String {
 }
 
 /// Zero saved files is the failure state: nothing was written, so the step
-/// must not read as a success.
-func doneTitle(savedCount: Int) -> String {
-    if savedCount == 0 { return "Couldn’t save — nothing was written" }
-    return savedCount > 1 ? "\(savedCount) files saved" : "Saved"
+/// must not read as a success. `failedCount` makes a partial batch honest
+/// instead of only reporting the successes.
+func doneTitle(savedCount: Int, failedCount: Int = 0) -> String {
+    guard failedCount > 0 else {
+        if savedCount == 0 { return "Couldn’t save — nothing was written" }
+        return savedCount > 1 ? "\(savedCount) files saved" : "Saved"
+    }
+    if savedCount == 0 {
+        return failedCount > 1
+            ? "Couldn’t save — all \(failedCount) files failed"
+            : "Couldn’t save — the file failed"
+    }
+    return "\(savedCount) saved, \(failedCount) failed"
 }
 
 /// The monospaced "where it went" line on the done step. A single file shows
@@ -245,8 +284,13 @@ struct RowInfo: Equatable, Sendable {
 
 /// Badge and note for one file row, matching the design's `buildRows`.
 /// An encrypted file whose password didn't match keeps its pending look —
-/// it was skipped, not unlocked.
+/// it was skipped, not unlocked. A file that was attempted and failed to
+/// write gets its own error badge, distinct from both "Unlocked" and the
+/// pending "Password protected" look.
 func rowInfo(for file: LoadedFile, done: Bool) -> RowInfo {
+    if done, let failure = file.failure {
+        return RowInfo(badge: "!", tone: .error, note: failure.note)
+    }
     switch file.kind {
     case .corrupt:
         return RowInfo(badge: "!", tone: .error, note: "Not a readable PDF — skipped")
