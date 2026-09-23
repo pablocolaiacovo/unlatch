@@ -1,31 +1,34 @@
 import AppKit
 import SwiftUI
 
-/// Menu-bar-only app: accessory activation policy (no Dock icon), a lock
-/// status item, and the popover panel as a MenuBarExtra window.
+/// Menu-bar-only app: accessory activation policy (no Dock icon), with the
+/// status item and popover owned by AppKit (`StatusItemController`) instead
+/// of `MenuBarExtra`. `Settings` is a placeholder scene — it opens no window
+/// at launch — kept only because a SwiftUI `App` needs at least one scene to
+/// install the standard main menu. That menu's Edit items are how ⌘V, ⌘C,
+/// ⌘X, and ⌘A reach the password field; its own "Settings…" item is removed
+/// so it can't open an empty window.
 @main
 struct UnlatchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @State private var model = AppModel()
 
     var body: some Scene {
-        MenuBarExtra {
-            PopoverView(model: model)
-        } label: {
-            Image(systemName: hasLockedWork ? "lock" : "lock.open")
+        Settings {
+            EmptyView()
         }
-        .menuBarExtraStyle(.window)
-    }
-
-    /// Closed lock while an encrypted file is loaded and not yet unlocked.
-    private var hasLockedWork: Bool {
-        model.files.contains { $0.kind == .encrypted && !$0.unlocked }
+        .commands {
+            CommandGroup(replacing: .appSettings) {}
+        }
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let model = AppModel()
+    private var statusItemController: StatusItemController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        statusItemController = StatusItemController(model: model)
     }
 }

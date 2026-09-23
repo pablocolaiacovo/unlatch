@@ -308,6 +308,19 @@ func rowInfo(for file: LoadedFile, done: Bool) -> RowInfo {
     }
 }
 
+// MARK: - Status item
+
+/// Closed lock while any loaded file is still encrypted and not yet
+/// unlocked. Drives the status item glyph in `StatusItemController`.
+func hasLockedWork(_ files: [LoadedFile]) -> Bool {
+    files.contains { $0.kind == .encrypted && !$0.unlocked }
+}
+
+/// SF Symbol name for the status item button.
+func statusSymbolName(hasLockedWork: Bool) -> String {
+    hasLockedWork ? "lock" : "lock.open"
+}
+
 // MARK: - PDF helpers (blocking; call off the main actor)
 
 /// True when `password` opens the document (or it needs no password at all).

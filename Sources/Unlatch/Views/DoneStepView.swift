@@ -10,6 +10,7 @@ struct DoneStepView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(doneTitle(savedCount: model.savedURLs.count, failedCount: model.failedCount))
                 .font(.system(size: 13, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 2)
             if !model.savedTo.isEmpty {
                 Text(model.savedTo)

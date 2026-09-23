@@ -11,6 +11,9 @@ import UnlatchCore
 final class AppModel {
     var step: Step = .idle
     var files: [LoadedFile] = []
+    /// The in-popover drop zone's `isTargeted` state only. The status item's
+    /// own hover highlight is tracked separately by `StatusItemController`
+    /// and does not set this, so hovering the icon never lights up the zone.
     var dragging = false
 
     var password = ""
@@ -40,6 +43,16 @@ final class AppModel {
 
     // MARK: Derived state
 
+    /// Closed lock while an encrypted file is loaded and not yet unlocked.
+    /// Drives the `lock` / `lock.open` status item glyph.
+    var hasLockedWork: Bool { Unlatch.hasLockedWork(files) }
+
+    /// Set by `StatusItemController`. Called synchronously at the start of
+    /// every accepted load (in-popover drop, browse, status item drop) so
+    /// the AppKit layer can show the popover and make it key before the
+    /// step changes.
+    @ObservationIgnored var onLoad: (@MainActor () -> Void)?
+
     var encryptedFiles: [LoadedFile] { files.filter { $0.kind == .encrypted } }
     var usableFiles: [LoadedFile] { files.filter { $0.kind != .corrupt && !$0.skipped } }
     /// Files `save()` attempted and that did not write, for the done step's title.
@@ -53,12 +66,11 @@ final class AppModel {
 
     // MARK: Loading
 
-    // Known limitation: presenting an NSOpenPanel steals key status from the
-    // MenuBarExtra(.window) popover, which macOS then dismisses — there is no
-    // public API to pin or programmatically reopen a MenuBarExtra window.
-    // Mitigations: activate the app and float the panel so it stays front,
-    // and keep all flow state in this model so clicking the status item again
-    // reopens the popover on exactly the step the panel produced.
+    // StatusItemController's dismissal monitor ignores outside interactions
+    // while an NSOpenPanel is modal (NSApp.modalWindow != nil), so opening
+    // this panel no longer dismisses the popover. `.level = .modalPanel`
+    // keeps the panel in front, and activating first raises it above other
+    // apps too.
     func browse() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]
@@ -73,6 +85,7 @@ final class AppModel {
 
     func load(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
+        onLoad?()
         dragging = false
         loadGeneration += 1
         let generation = loadGeneration
@@ -122,8 +135,8 @@ final class AppModel {
     // MARK: Destination
 
     /// "Choose folder…" opens the picker right away; canceling keeps the
-    /// previous selection. Same popover-dismissal caveat as `browse()`:
-    /// state persists, so reopening the popover lands back on this step.
+    /// previous selection. The popover stays open behind the panel, same as
+    /// `browse()`.
     func chooseOtherFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
