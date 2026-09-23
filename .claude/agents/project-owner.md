@@ -67,6 +67,9 @@ you find in existing state.
 - Area: `area:core`, `area:app`, `area:release`.
 - Status: `release-blocker` (must ship before the milestone closes), `needs-decision` (waiting on the
   user), `good first issue` (only if genuinely self-contained).
+- Release notes: `skip-changelog` on a PR with no user-facing effect (agent and tooling config,
+  CI-only housekeeping, maintainer docs) keeps it out of the generated notes. It never replaces the
+  type label.
 - Every issue carries exactly one type label and at least one area label.
 
 **Issues**
