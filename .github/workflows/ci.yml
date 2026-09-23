@@ -18,21 +18,31 @@ permissions:
   contents: read
 
 env:
-  # Pinned to a specific Xcode on the macos-26 image rather than trusting whatever the
+  # Pinned to a specific Xcode on the xcode-27 image rather than trusting whatever the
   # image's default happens to be, so a runner-image update can't silently change the
   # toolchain under us. Package.swift declares swift-tools-version: 6.3 and
   # swiftLanguageModes: [.v6], which an older toolchain can't even parse.
   #
-  # Per the actions/runner-images macos-26 readme, Xcode 26.4 was the first version to
-  # ship Swift 6.3; Xcode 26.6 (build 17F113) is the current default on this image and
-  # also ships Swift 6.3, so it's the one pinned here. Bump this (and re-check the
-  # image's README for the installed path) when a newer Xcode is needed.
-  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  # Per the actions/runner-images xcode-27-arm64 readme, this image ships a single
+  # Xcode: 27.0, build 27A266a, matching the maintainer's local Xcode 27.0 (27A266a) /
+  # Swift 6.4. The image installs it at /Applications/Xcode_27_Release_Candidate.app,
+  # with /Applications/Xcode_27.0.app as a stable alias to that same build, and
+  # /Applications/Xcode.app as the (mutable) default symlink; this pins the 27.0 alias
+  # rather than the default so a future image update can't silently repoint us. Bump
+  # this (and re-check the image's README for the installed path) when a newer Xcode
+  # is needed.
+  #
+  # The xcode-27 runner image is in public preview (macOS 27, arm64 only) as of the
+  # 2026-09-10 GitHub changelog announcement. If preview instability shows up here
+  # (queue times, flaky toolchain behavior, image churn), fall back to runs-on: macos-26
+  # with DEVELOPER_DIR pinned to /Applications/Xcode_26.6.app/Contents/Developer, which
+  # is the last known-good pin (see git history of this file).
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
 
 jobs:
   build-and-test:
     name: build-and-test
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 20
     steps:
       # First step, per the issue: if anything below fails, the log immediately shows
@@ -53,9 +63,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .build
-          key: macos-26-xcode26.6-spm-${{ hashFiles('**/Package.resolved', 'Package.swift') }}
+          key: macos-27-xcode27.0-spm-${{ hashFiles('**/Package.resolved', 'Package.swift') }}
           restore-keys: |
-            macos-26-xcode26.6-spm-
+            macos-27-xcode27.0-spm-
 
       - name: Build
         run: swift build
