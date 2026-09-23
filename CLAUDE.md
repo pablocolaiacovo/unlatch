@@ -54,7 +54,8 @@ Rules that decide the edge cases:
 3. `macos-developer` or `devops` implements on a `feature/` or `fix/` branch, with a clean build and
    passing tests.
 4. `reviewer` reviews the PR. The PR title is the changelog line, so it reads as a user-facing sentence,
-   the body says `Closes #N`, and it carries a type label plus an `area:` label.
+   the body says `Closes #N`, and it carries a type label plus an `area:` label. A PR with no
+   user-facing effect also carries `skip-changelog` to keep it out of the release notes.
 5. The maintainer squash-merges.
 6. When the milestone is empty, `release-manager` cuts a beta, the maintainer runs the clean-machine
    smoke test, and `release-manager` tags the release.
