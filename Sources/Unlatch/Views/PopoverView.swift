@@ -5,6 +5,7 @@ import SwiftUI
 /// rows section.
 struct PopoverView: View {
     @Bindable var model: AppModel
+    @State private var quitHovering = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,13 +55,21 @@ struct PopoverView: View {
             NSApplication.shared.terminate(nil)
         } label: {
             Image(systemName: "power")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(quitHovering ? .primary : .secondary)
+                .frame(width: 20, height: 20)
+                .background(
+                    Circle().fill(Color.primary.opacity(quitHovering ? 0.08 : 0))
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .keyboardShortcut("q", modifiers: .command)
         .help("Quit Unlatch")
         .accessibilityLabel("Quit Unlatch")
+        .onHover { hovering in
+            quitHovering = hovering
+        }
     }
 
     private var workingView: some View {
