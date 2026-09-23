@@ -77,7 +77,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         dismissalMonitor.stop()
-        model.dragging = false
         updateHighlight()
     }
 

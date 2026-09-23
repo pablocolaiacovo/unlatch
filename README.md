@@ -1,7 +1,7 @@
 # Unlatch
 
 Unlatch is a macOS menu bar app for inspecting how a PDF is protected and saving a decrypted copy.
-Click the lock icon, drop in one or more PDFs, and it tells you which ones need a password, which
+Click the lock icon, choose one or more PDFs, and it tells you which ones need a password, which
 are only owner-restricted (so they open freely but PDFKit and other readers honor a printing or
 copying lock), and which are unreadable — then writes unlocked copies wherever you choose.
 
@@ -52,10 +52,10 @@ be opened."** That's not a corrupt download — the `xattr` command above resolv
 
 ## Using the app
 
-Click the lock icon in the menu bar to open the popover, then choose PDFs (via the file picker) or
-drop them onto the window that opens. Unlatch classifies each file — not encrypted, password
-protected, owner-restricted, or unreadable — prompts for a password only where one is actually
-needed, and lets you pick a destination for the unlocked copies.
+Click the lock icon in the menu bar to open the popover, then choose PDFs via the file picker.
+Unlatch classifies each file — not encrypted, password protected, owner-restricted, or unreadable —
+prompts for a password only where one is actually needed, and lets you pick a destination for the
+unlocked copies.
 
 ## Building from source
 
