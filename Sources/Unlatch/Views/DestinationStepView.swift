@@ -9,6 +9,7 @@ struct DestinationStepView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Where should the unlocked \(model.usableFiles.count > 1 ? "files" : "file") go?")
                 .font(.system(size: 13, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 10)
 
             VStack(alignment: .leading, spacing: 9) {

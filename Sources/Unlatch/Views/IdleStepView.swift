@@ -12,6 +12,11 @@ struct IdleStepView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
+                // Under NSHostingController's preferredContentSize sizing,
+                // an unconstrained multi-line Text can report a one-line
+                // ideal height and get clipped. Forcing the ideal height at
+                // the frame's fixed width makes it grow to fit both lines.
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
     }

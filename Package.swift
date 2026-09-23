@@ -6,8 +6,9 @@ import PackageDescription
 let package = Package(
     name: "UnlatchCore",
     // PDFKit is Apple-only, so declare the platform rather than let consumers
-    // discover it as an import failure. The menu bar app uses MenuBarExtra
-    // window style plus @Observable, which need macOS 14.
+    // discover it as an import failure. The menu bar app's macOS 14 floor is
+    // for @Observable and NSApp.activate(ignoringOtherApps:), not for
+    // MenuBarExtra — the popover is hosted via NSStatusItem + NSPopover.
     platforms: [.macOS(.v14)],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.

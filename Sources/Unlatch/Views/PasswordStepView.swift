@@ -19,6 +19,9 @@ struct PasswordStepView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
+                // See IdleStepView: the batch wording can wrap to two lines
+                // and must not get clipped under the new hosting controller.
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 12)
 
             HStack(spacing: 6) {
@@ -40,6 +43,7 @@ struct PasswordStepView: View {
                 Text("That password didn’t work. Try again.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color(hex: 0xC9302C))
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
             }
 
