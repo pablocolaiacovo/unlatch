@@ -6,6 +6,9 @@
 changelog:
   exclude:
     labels:
+      # Internal changes with no user-facing effect (agent and tooling config, CI-only
+      # housekeeping, maintainer docs). The PR still carries its type label.
+      - skip-changelog
       - needs-decision
       - duplicate
       - invalid

@@ -30,6 +30,8 @@ Trunk-based. `main` is always green and always releasable.
 - The PR body references its issue with `Closes #N`.
 - The PR carries the labels that decide its release-note section: `enhancement`, `bug`, or
   `documentation`, plus its `area:` labels. See [.github/release.yml](.github/release.yml).
+- A PR with no user-facing effect also carries `skip-changelog`, which keeps it out of the release
+  notes. Its title still follows the rule above, because it is still the commit subject on `main`.
 - Head branches are deleted automatically on merge (repository setting); nothing to do by hand.
 
 CI (`.github/workflows/ci.yml`) runs `swift build` and `swift test` on every pull request and every
@@ -82,9 +84,19 @@ reason to leave a `release-blocker` open.
 | Type | `bug`, `enhancement`, `documentation` | Exactly one per issue |
 | Area | `area:core`, `area:app`, `area:release` | At least one per issue |
 | Status | `release-blocker`, `needs-decision`, `good first issue` | As applicable |
+| Release notes | `skip-changelog` | Pull requests only, as applicable |
 
 `release-blocker` means the milestone cannot close while it is open. `needs-decision` means the
 issue is waiting on the maintainer, not on an implementer — it is excluded from release notes.
+
+`skip-changelog` goes on a pull request whose change has no user-facing effect: agent and tooling
+configuration (`CLAUDE.md`, `.claude/`), CI-only housekeeping that does not change the published
+artifact, and repository docs written for maintainers (`RELEASING.md`, issue templates,
+`.github/release.yml`). It excludes the PR from the generated release notes. It does not replace the
+type label: the PR still carries exactly one of `bug`, `enhancement`, or `documentation`, plus its
+`area:` labels. When in doubt, leave it off; a line users can ignore is better than a change users
+needed to know about going missing. User-facing docs such as the README's Install steps are not
+internal and do not get it.
 
 ---
 
