@@ -7,8 +7,8 @@ same pull request.
 Unlatch ships two things from one SwiftPM package:
 
 - **`UnlatchCore`**, a library consumed through Swift Package Manager, versioned by the git tag.
-- **`Unlatch.app`**, a signed and notarized menu bar app, distributed as a zip attached to a
-  GitHub Release.
+- **`Unlatch.app`**, a menu bar app, distributed as a zip attached to a GitHub Release. It is
+  **ad-hoc signed and not notarized** (see [Distribution and signing](#distribution-and-signing)).
 
 Both are released together under a single version.
 
@@ -21,17 +21,23 @@ Trunk-based. `main` is always green and always releasable.
 - Work happens on short-lived branches off `main`: `feature/...`, `fix/...`. Use `release/...` only
   if a release genuinely needs stabilization while other work continues; this should be rare.
 - Every change lands through a pull request. Nothing is pushed to `main` directly.
-- **Pull requests are squash-merged**, and the PR title becomes the merge commit message and the
-  changelog line. Write it as a user-facing, imperative sentence — "Add drag-and-drop onto the menu
+- **Pull requests are squash-merged.** The repository allows squash merges only (merge commits and
+  rebase merges are disabled), and the squash commit takes the PR title as its title and the PR body
+  as its message. The PR title is therefore both the commit subject on `main` and the changelog
+  line. Write it as a user-facing, imperative sentence — "Add drag-and-drop onto the menu
   bar icon", not "wip: fix stuff" and not a dump of commit subjects. If you would not want to read
   it in release notes, retitle before merging.
 - The PR body references its issue with `Closes #N`.
 - The PR carries the labels that decide its release-note section: `enhancement`, `bug`, or
   `documentation`, plus its `area:` labels. See [.github/release.yml](.github/release.yml).
-- Delete the branch after merging.
+- Head branches are deleted automatically on merge (repository setting); nothing to do by hand.
 
 CI (`.github/workflows/ci.yml`) runs `swift build` and `swift test` on every pull request and every
 push to `main`. A red `main` is fixed before anything else is merged.
+
+`main` is intended to be protected so that the `build-and-test` check (the job in `ci.yml`) must pass
+before a pull request can merge. Branch protection is configured by the maintainer in the repository
+settings, not by any agent or workflow; if it is missing, merge only with that check green anyway.
 
 ---
 
@@ -114,9 +120,14 @@ git tag -a v1.0.0-beta.1 -m "Unlatch 1.0.0-beta.1"
 git push origin v1.0.0-beta.1
 ```
 
-Verify on the clean machine:
+Verify on the clean machine, running macOS 15 or later:
 
-- Unzipping and launching from `/Applications` raises no Gatekeeper warning.
+- Unzipping and launching from `/Applications` shows the Gatekeeper block that the README's Install
+  section describes, and the README's first-launch steps get past it **exactly as written**. Check
+  both paths, System Settings > Privacy & Security > Open Anyway and `xattr -dr
+  com.apple.quarantine /Applications/Unlatch.app`, each on a fresh copy. If the dialog wording or the
+  steps differ from the README, fix the README before tagging.
+- After that first launch, relaunching with a plain double-click raises no further prompt.
 - No Dock icon appears; the lock status item does.
 - A password-protected PDF, an owner-restricted one, and a damaged one each behave correctly.
 - The outputs open in Preview without a password.
@@ -140,10 +151,11 @@ every local tag, including experiments you meant to keep to yourself.
 
 ### 5. Verify the published release
 
-`.github/workflows/release.yml` runs on the pushed tag: it packages, signs, notarizes, staples, zips,
-and publishes a GitHub Release with notes generated from squashed PR titles. Once it finishes:
+`.github/workflows/release.yml` runs on the pushed tag: it packages and ad-hoc signs through
+`Scripts/package-app.sh`, verifies the signature, zips, and publishes a GitHub Release with notes
+generated from squashed PR titles. Once it finishes:
 
-- The run is green, and the notarization and `spctl` verification steps genuinely passed.
+- The run is green, and the `codesign --verify --deep --strict` step genuinely passed.
 - `Unlatch.zip` is attached and its size is plausible.
 - The generated notes read like a changelog. Fix a bad line by editing the release body; fix the
   cause by writing better PR titles next time.
@@ -167,7 +179,8 @@ into `Backlog`.
 ## Hotfix path
 
 For a bug serious enough that it cannot wait for the next planned release — data loss, a crash on
-launch, a build that fails Gatekeeper.
+launch, a build whose signature is broken so macOS reports it as damaged even after the documented
+first-launch steps.
 
 1. Open an issue, label it `bug` and `release-blocker`, and put it in a new patch milestone
    (`v1.0.1` belongs to the `v1.0` milestone if it is still open, otherwise create `v1.0.1`).
@@ -184,37 +197,67 @@ start maintaining release branches.
 
 ---
 
-## Signing and notarization credentials
+## Distribution and signing
 
-Distribution requires a paid Apple Developer Program membership and a **Developer ID Application**
-certificate. The release workflow reads these from repository secrets:
+**Current state: ad-hoc signed, not notarized.** The maintainer decided not to join the paid Apple
+Developer Program for now, because the expected audience is small (issue #8). This decision is
+deferred, not rejected.
 
-| Secret | What it is |
-| --- | --- |
-| `MACOS_CERTIFICATE_P12` | Base64 of the exported Developer ID Application `.p12` |
-| `MACOS_CERTIFICATE_PASSWORD` | Password protecting that `.p12` |
-| `MACOS_SIGNING_IDENTITY` | Full identity string, `Developer ID Application: Name (TEAMID)` |
-| `APPLE_API_KEY_ID` | App Store Connect API key ID, used by `notarytool` |
-| `APPLE_API_ISSUER_ID` | App Store Connect issuer ID |
-| `APPLE_API_KEY_P8` | Base64 of the `.p8` private key |
-| `APPLE_TEAM_ID` | Apple Developer team identifier |
+What that means in practice:
 
-Rules:
+- `Scripts/package-app.sh` seals the whole bundle with an ad-hoc signature (`codesign --force --sign
+  -`), without the hardened runtime. That signature is required on Apple Silicon, not optional: a
+  bundle that is not sealed as a whole is reported as "damaged" once downloaded. The release workflow
+  verifies it with `codesign --verify --deep --strict` before publishing.
+- The release workflow reads no Apple credentials and needs no repository secrets.
+- Every downloaded copy is quarantined, and Gatekeeper blocks its first launch. The README's Install
+  section tells users how to open it: System Settings > Privacy & Security > Open Anyway, or `xattr
+  -dr com.apple.quarantine /Applications/Unlatch.app`. Right-click > Open no longer bypasses
+  Gatekeeper on macOS 15 and later. Keep that section accurate. It is part of the product.
+- Never strip the quarantine attribute in the workflow, the zip, or a Homebrew cask. The user takes
+  that step knowingly.
+- The official `homebrew/cask` repository does not accept apps that fail Gatekeeper checks, so a
+  cask (#12) can only live in a personal tap until the app is notarized.
+
+### Path back to notarization
+
+Tracked in issue #8, in the `Backlog` milestone. Revisit it when people other than the maintainer
+report Gatekeeper friction, or when an official Homebrew cask or smoother Sparkle updates become
+goals. Switching requires:
+
+1. A paid Apple Developer Program membership, a **Developer ID Application** certificate, and an App
+   Store Connect API key for `notarytool`.
+2. These repository secrets:
+
+   | Secret | What it is |
+   | --- | --- |
+   | `MACOS_CERTIFICATE_P12` | Base64 of the exported Developer ID Application `.p12` |
+   | `MACOS_CERTIFICATE_PASSWORD` | Password protecting that `.p12` |
+   | `MACOS_SIGNING_IDENTITY` | Full identity string, `Developer ID Application: Name (TEAMID)` |
+   | `APPLE_API_KEY_ID` | App Store Connect API key ID, used by `notarytool` |
+   | `APPLE_API_ISSUER_ID` | App Store Connect issuer ID |
+   | `APPLE_API_KEY_P8` | Base64 of the `.p8` private key |
+   | `APPLE_TEAM_ID` | Apple Developer team identifier |
+
+3. Passing that identity to `Scripts/package-app.sh` instead of `-`, which enables the hardened
+   runtime and a secure timestamp, then `notarytool submit --wait`, `stapler staple`, and `spctl -a
+   -vvv -t install`. In the workflow: import the certificate into a temporary keychain, deleted in an
+   `always()` step, and attach the zip only after stapling.
+4. Updating this file: the release checklist verifies that the app opens with no Gatekeeper prompt,
+   and the published-release check confirms that notarization and `spctl` passed. The README's
+   first-launch steps are removed. Record the certificate's expiry date here. **Developer ID
+   certificates expire after five years**, and an expired certificate breaks releases, although
+   already-notarized builds keep working.
+
+Rules that hold either way:
 
 - Signing material is never committed. `.gitignore` already excludes `*.p12`, `*.cer`, `*.pem`, and
   `.env`; do not weaken it.
-- The workflow imports the certificate into a temporary keychain and deletes it in an `always()`
-  step, so a failed run leaves nothing behind on the runner.
-- **Developer ID certificates expire after five years.** Record the expiry date here when the
-  certificate is created, and renew before it lapses — an expired certificate breaks releases, though
-  already-notarized builds keep working.
-
-Certificate expiry: _to be recorded when the certificate is created (see issue #8)._
 
 ---
 
-## Building locally without a certificate
+## Building locally
 
-Contributors do not need an Apple Developer account. `Scripts/package-app.sh` has an unsigned mode
-that produces a launchable `dist/Unlatch.app` for local testing. The result is not distributable and
-will be rejected by Gatekeeper on any other machine — that is expected.
+Contributors do not need an Apple Developer account. `Scripts/package-app.sh` produces the same
+ad-hoc signed `dist/Unlatch.app` that the release workflow ships. A locally built copy is not
+quarantined, so it opens without the first-launch steps.

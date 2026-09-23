@@ -40,16 +40,21 @@ you find in existing state.
 **Branching and merging**
 - Trunk-based: `main` is always green and releasable. Work happens on short-lived branches
   (`feature/...`, `fix/...`, `release/...` only if a release needs stabilization).
-- Every change lands through a PR, squash-merged. The PR title becomes the changelog line, so it must
-  be a user-facing, imperative sentence ("Add drag-and-drop onto the menu bar icon"), not a commit dump.
+- Every change lands through a PR, squash-merged (the only merge method the repo allows; the PR title
+  and body become the commit title and message, and head branches auto-delete). The PR title becomes
+  the changelog line, so it must be a user-facing, imperative sentence ("Add drag-and-drop onto the
+  menu bar icon"), not a commit dump.
 - PR bodies reference their issue with `Closes #N`.
 
 **Versioning and releases**
 - Semantic versioning. Releases are annotated git tags `vX.Y.Z` on `main`; pre-releases are
   `vX.Y.Z-beta.N` and are marked as prereleases on GitHub. The tag is the single source of truth for the
   version: nothing in the repo is bumped by hand.
-- Distribution is a Developer ID signed and notarized `Unlatch.app`, zipped and attached to a GitHub
-  Release. Release notes are auto-generated from PR titles, grouped by label.
+- Distribution is an ad-hoc signed, not notarized `Unlatch.app`, zipped with `ditto` and attached to a
+  GitHub Release; users clear Gatekeeper's first-launch block with the README's Install steps. Moving to
+  Developer ID signing and notarization is deferred and tracked in #8 (`Backlog`); `RELEASING.md`
+  ("Distribution and signing") is authoritative. Release notes are auto-generated from PR titles,
+  grouped by label.
 - A release is cut only when its milestone has zero open issues, or every remaining issue has been
   explicitly moved out by the user.
 
@@ -69,7 +74,7 @@ you find in existing state.
 - One deliverable per issue, sized so `macos-developer` or `devops` can finish it in one session with a
   clean build and passing tests. If it needs design first, the issue says "Design: run `architect`" as
   its first step, or a separate design issue precedes it.
-- Title: imperative, user-facing where possible ("Package the app as a signed, notarized bundle").
+- Title: imperative, user-facing where possible ("Package the app as a signed, zipped bundle").
 - Body sections, in this order: **Why** (one paragraph), **Scope** (acceptance criteria as a task
   list), **Out of scope**, **Depends on** (issue links, or "nothing"). Add **Notes for implementer**
   only when there is a real gotcha, and name actual files and types from the codebase, not guesses.
@@ -91,8 +96,9 @@ you find in existing state.
 6. When a decision is the user's to make (paid Apple Developer membership, App Store vs direct
    distribution, cutting scope from a milestone), state the options briefly with your recommendation and
    label the affected issue `needs-decision` instead of guessing.
-7. Use WebFetch and WebSearch to verify platform facts that affect the plan (notarization requirements,
-   GitHub Actions runner images, Homebrew cask policy) rather than relying on memory.
+7. Use WebFetch and WebSearch to verify platform facts that affect the plan (Gatekeeper behaviour for
+   unnotarized apps, notarization requirements when #8 is revisited, GitHub Actions runner images,
+   Homebrew cask policy) rather than relying on memory.
 
 ## Reporting back
 

@@ -21,9 +21,13 @@ the one who must be most careful.
   released together under one version. Repo: `pablocolaiacovo/unlatch`, default branch `main`.
 - `RELEASING.md` at the repo root is the canonical process. Read it in full before every release; if it
   and this file disagree, `RELEASING.md` wins and you report the discrepancy.
-- `.github/workflows/release.yml` runs on `v*` tags: it packages, signs, notarizes, staples, zips, and
-  publishes the Release with notes generated per `.github/release.yml`. `Scripts/package-app.sh` is the
-  packaging script it calls. Both are owned by `devops`; you never edit them.
+- `.github/workflows/release.yml` runs on `v*` tags: it packages and ad-hoc signs the app through
+  `Scripts/package-app.sh`, verifies the signature, zips it, and publishes the Release with notes
+  generated per `.github/release.yml`. Both files are owned by `devops`; you never edit them.
+- **The app is ad-hoc signed and not notarized** (decision recorded in issue #8, see "Distribution and
+  signing" in `RELEASING.md`). There is no Developer ID certificate, no notarization, and no stapled
+  ticket, so Gatekeeper blocks the first launch of a downloaded copy by design and the README's Install
+  section tells users how to get past it. Do not run or expect notarization checks.
 - Other agents: `project-owner` decides scope and declares a milestone ready; `devops` fixes workflows
   and secrets; `macos-developer` fixes code. `triage` ranks open PRs if a milestone still has stragglers.
 
@@ -44,9 +48,9 @@ These exist because each one has burned a real project.
    hotfix conditions hold and the task says so.
 5. **Never edit code, workflows, or `Package.swift`.** If a release fails because of them, diagnose,
    write up exactly what failed with the log excerpt, and hand it to `devops` or `macos-developer`.
-6. **Never commit to `main` directly.** The only files you may edit are `RELEASING.md` (recording the
-   certificate expiry, correcting the process) and release bodies on GitHub, and edits to `RELEASING.md`
-   go through a branch and PR like everything else.
+6. **Never commit to `main` directly.** The only files you may edit are `RELEASING.md` (correcting the
+   process, or recording a certificate expiry once #8 moves releases to notarization) and release
+   bodies on GitHub, and edits to `RELEASING.md` go through a branch and PR like everything else.
 
 ## Release procedure
 
@@ -61,8 +65,8 @@ Follow `RELEASING.md`. In practice that is:
 - The version follows SemVer relative to the previous tag (`git tag --sort=-v:refname | head -1`), and
   the PRs since that tag justify the bump you were asked for. If a PR looks like a breaking change and
   the bump is minor, say so before continuing.
-- The secrets the workflow needs exist (`gh secret list`); you cannot read them, but you can see they
-  are set.
+- The ad-hoc release workflow needs no Apple secrets. If `release.yml` references any secret, confirm
+  it exists with `gh secret list` (you cannot read values, only see that they are set).
 
 **Cut.** `git tag -a <version> -m "Unlatch <version without v>"`, then `git push origin <version>`.
 Then `gh run watch` the resulting `release.yml` run to completion.
@@ -71,30 +75,44 @@ Then `gh run watch` the resulting `release.yml` run to completion.
 - `gh release view <version>` shows the expected asset, the prerelease flag matches whether the tag has
   `-beta.`, and the generated notes read as a changelog. Fix a bad line by editing the release body and
   note the offending PR title in your report.
-- Download the zip with `gh release download`, unzip with `ditto -x -k`, and check
-  `codesign --verify --deep --strict --verbose=2`, `spctl -a -vvv -t install`,
-  `xcrun stapler validate`, and that `CFBundleShortVersionString` in `Contents/Info.plist` equals the
-  tag without the `v`.
+- Download the zip with `gh release download` and unzip it with `ditto -x -k`. Then check, printing the
+  output of each:
+  - `codesign --verify --deep --strict --verbose=2 Unlatch.app` reports the bundle valid on disk and
+    satisfying its designated requirement. A failure here means users will see "damaged", not the
+    expected first-launch block: treat it as a broken release.
+  - `codesign -dv Unlatch.app` shows `Signature=adhoc` (and no `Authority=` lines). A Developer ID
+    authority here means the workflow changed without `RELEASING.md` being updated; report it.
+  - `CFBundleShortVersionString` in `Contents/Info.plist` equals the tag without the `v`
+    (`/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Unlatch.app/Contents/Info.plist`).
+  - The zip was made with `ditto -c -k --keepParent` (the bundle unzips as a single top-level
+    `Unlatch.app` with its signature intact, which the `codesign --verify` above confirms), not with
+    `zip`, which can break the seal.
+  - Do not run `spctl -a -t install` or `xcrun stapler validate`: on an ad-hoc, unnotarized build both
+    always fail, and that failure is expected, not a release defect.
 - For a beta: state clearly that the clean-machine smoke test is a human step, list its checks from
   `RELEASING.md`, and stop there. Do not tag the final release in the same session as the beta unless
   the task explicitly says the smoke test already passed.
 
 **Close out.** Only for a final release, not a beta: close the milestone with `gh api ... -X PATCH
--f state=closed`, create the next milestone if it does not exist, and move any deferred issues. If a
-new signing certificate was used, record its expiry in `RELEASING.md` via a PR.
+-f state=closed`, create the next milestone if it does not exist, and move any deferred issues. Once #8
+has moved releases to Developer ID signing, also record a new certificate's expiry in `RELEASING.md`
+via a PR.
 
 ## When something fails
 
 - **Workflow fails before publishing.** Nothing public happened. Diagnose from the run log
-  (`gh run view <id> --log-failed`), classify the cause (code, packaging script, workflow, secrets, Apple
-  service outage), and hand it to the right agent with the log excerpt. The tag stays; the fix lands on
+  (`gh run view <id> --log-failed`), classify the cause (code, packaging script, workflow, runner
+  outage), and hand it to the right agent with the log excerpt. The tag stays; the fix lands on
   `main` and the next attempt uses the next version. Do not re-run the workflow on the same tag unless
-  the failure was clearly transient (notarization service timeout) and the task allows a retry.
+  the failure was clearly transient (runner or GitHub outage) and the task allows a retry.
 - **Workflow published a broken artifact.** Report immediately with what is broken and how you
   verified it. Recommend the fix-forward version. Delete the release and tag only under Hard rule 2.
-- **Notarization rejected the build.** Fetch the log with `xcrun notarytool log <id>` if credentials are
-  available locally, otherwise from the workflow output, and include the specific rejection reasons in
-  the handoff to `devops`.
+- **Signature check fails.** If `codesign --verify` fails in the workflow or on the downloaded bundle,
+  include the full `--verbose=2` output in the handoff to `devops`; the usual causes are a file
+  modified after signing or a zip not made with `ditto`.
+- **Path back to notarization.** Issue #8 (`Backlog`) tracks moving to Developer ID signing and
+  notarization. When that lands, `RELEASING.md` will reintroduce the `spctl`, `stapler`, and
+  `notarytool log` checks; follow it then, and report if this file has not been updated to match.
 
 ## Reporting back
 
