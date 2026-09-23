@@ -5,7 +5,7 @@ import SwiftUI
 /// reaches this view (see `PopoverDismissalMonitor`), so the copy never
 /// promises a drop. The button is still a drop destination for file URLs,
 /// harmless on the rare occasion a drop reaches it, but nothing here
-/// advertises it, and the highlight only appears during an actual drag.
+/// advertises it: no drop wording and no hover highlight.
 /// Click or Return opens the file picker.
 struct IdleStepView: View {
     @Bindable var model: AppModel
@@ -32,6 +32,7 @@ struct IdleStepView: View {
                 Image(systemName: "lock.open.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(.primary.opacity(0.72))
+                    .accessibilityHidden(true)
                 Text("Choose PDFs…")
                     .font(.system(size: 13, weight: .medium))
             }
@@ -39,7 +40,11 @@ struct IdleStepView: View {
             .frame(height: 150)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(model.dragging ? Color.accentColor.opacity(0.07) : Color.primary.opacity(0.02))
+                    .fill(Color.primary.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.14), lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 10))
         }
@@ -48,9 +53,6 @@ struct IdleStepView: View {
         .dropDestination(for: URL.self) { urls, _ in
             model.load(urls)
             return true
-        } isTargeted: { targeted in
-            model.dragging = targeted
         }
-        .animation(.easeOut(duration: 0.12), value: model.dragging)
     }
 }

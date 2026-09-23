@@ -11,10 +11,6 @@ import UnlatchCore
 final class AppModel {
     var step: Step = .idle
     var files: [LoadedFile] = []
-    /// The in-popover drop zone's `isTargeted` state only. The status item's
-    /// own hover highlight is tracked separately by `StatusItemController`
-    /// and does not set this, so hovering the icon never lights up the zone.
-    var dragging = false
 
     var password = ""
     /// The exact string `passwordWorks` accepted at the password step. save()
@@ -85,7 +81,6 @@ final class AppModel {
     func load(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
         onLoad?()
-        dragging = false
         loadGeneration += 1
         let generation = loadGeneration
         Task {
@@ -210,7 +205,6 @@ final class AppModel {
     func reset() {
         step = .idle
         files = []
-        dragging = false
         password = ""
         verifiedPassword = nil
         revealPassword = false
