@@ -34,18 +34,21 @@ Then open the app normally. This works on every supported version of macOS.
 
 If you'd rather not use Terminal:
 
-1. Try to open Unlatch once (double-click it, or launch it from Spotlight) and dismiss the block.
-2. Open **System Settings > Privacy & Security**, scroll to the Security section, and click
-   **Open Anyway** next to the mention of Unlatch.
+1. Double-click Unlatch (or launch it from Spotlight). macOS shows a dialog titled **"Unlatch" Not
+   Opened**, saying *Apple could not verify "Unlatch" is free of malware that may harm your Mac or
+   compromise your privacy.* There is no Open button on this dialog — only **Move to Trash** and
+   **Done**. Click **Done**. **Do not click "Move to Trash"** — it's the default, highlighted button,
+   but it deletes the app instead of dismissing the warning.
+2. Open **System Settings > Privacy & Security**, scroll to the Security section, where it now says
+   Unlatch **was blocked to protect your Mac**, and click **Open Anyway**.
 3. Confirm in the dialog that appears. You only need to do this once.
 
 **Right-click (Control-click) > Open no longer bypasses Gatekeeper.** That trick still works on
 macOS 14, but Apple removed it starting with macOS 15 Sequoia — use one of the two steps above
 instead.
 
-If macOS instead says Unlatch **"is damaged and can't be opened"**, that's the same Gatekeeper
-block wearing different wording, not a corrupt download. The `xattr` command above resolves it the
-same way.
+On some macOS versions, this same Gatekeeper block can instead say Unlatch **"is damaged and can't
+be opened."** That's not a corrupt download — the `xattr` command above resolves it the same way.
 
 ## Using the app
 
