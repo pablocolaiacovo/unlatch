@@ -25,6 +25,7 @@ button also becomes a drop target that accepts PDFs only.
    dragged from Finder into the in-popover zone. Without a drag, an outside click closes it as today.
 3. The status item button accepts PDF file drops. It highlights while a valid drag hovers, rejects
    non-PDFs, routes the URLs into `AppModel.load(_:)`, and opens the popover on drop.
+   (Dropped 2026-09-23 after a spike showed it is not viable; see the note at the top of Task 3.)
 4. Parity with today:
    - The `lock` / `lock.open` glyph follows `hasLockedWork`.
    - `.accessory` activation policy, so no Dock icon.
@@ -710,7 +711,8 @@ That file belongs to `project-owner`, so this design does not change it.
 
 Originally three PRs on `fix/` or `feature/` branches off `main`, one per task below. The maintainer
 has since deferred Task 2 to the `Backlog` milestone (see that section), so v1.0 ships as two PRs:
-Task 1 (`Part of #15`) and Task 3 (`Closes #15`). Each leaves the app working and ends with a clean
+Task 1 (`Part of #15`) and Task 3 (`Closes #15`), with Task 3 later reduced to an idle-step copy
+change (see its note). Each leaves the app working and ends with a clean
 `swift build` and a passing `swift test`. Suggested PR titles follow the changelog convention. Type
 labels are `project-owner`'s call.
 
@@ -741,7 +743,9 @@ Acceptance criteria:
 shipped: the mechanism in §2.4 — a global mouse monitor, a deferred-close state machine, three
 separate release sources, and a 50 ms polling watcher as a last resort — is real fragility to carry
 for a gap that Task 3 already closes a different way. A PDF dragged from Finder can be dropped
-directly on the menu bar icon instead of needing the in-popover zone to survive the drag. §2.4's
+directly on the menu bar icon instead of needing the in-popover zone to survive the drag.
+(Superseded 2026-09-23: the icon drop turned out not to be viable, see the note at the top of
+Task 3. Task 3 no longer closes this gap; v1.0 is picker-only, and the Finder path is #14.) §2.4's
 analysis and the reducer design below are kept as reference for whoever picks this up from Backlog,
 not as an interim step Task 1 was building toward — `PopoverDismissalMonitor` as shipped in Task 1
 (§2.3, and §2.4's "Chosen mechanism" without the reducer) is v1.0's final dismissal behaviour.
@@ -766,6 +770,17 @@ flow, record the flow in the PR and stop. Do not switch to `.transient` without 
 `architect`.
 
 ### Task 3: Accept PDFs dropped onto the menu bar icon
+
+> **Reduced to a copy change (maintainer decision, 2026-09-23).** A spike showed that the status item
+> cannot work as a drop target in practice. The button did receive `draggingEntered` and
+> `draggingUpdated`, but on every attempt macOS's "drag to the top of the screen enters Mission
+> Control" behaviour (on by default) took over the drag: `draggingExited` arrived about 15 ms after
+> the last update, then `draggingEnded` with no `performDragOperation`. v1.0 is therefore picker-only.
+> Task 3 now only changes `IdleStepView`'s copy so it stops promising a "Drop PDFs here" zone and
+> presents "Choose PDFs…" (the file picker) as the primary action. The in-popover drop zone may keep
+> accepting a drop silently when a drag does reach it, but it is not advertised. `StatusItemDropView`,
+> the drop helpers, §2.7, and manual checks 7 to 10 are not built. Finder integration moves to the
+> Finder Quick Action, #14, planned for v1.1. The original plan is kept below for reference.
 
 Depends on task 1 only. Task 2 is deferred (above), so this task does not need a dismissal latch —
 `PopoverDismissalMonitor` has no reducer to feed in v1.0.
