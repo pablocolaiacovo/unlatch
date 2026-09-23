@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.pablocolaiacovo.unlatch</string>
+    <key>CFBundleName</key>
+    <string>Unlatch</string>
+    <key>CFBundleDisplayName</key>
+    <string>Unlatch</string>
+    <key>CFBundleExecutable</key>
+    <string>Unlatch</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <!-- Substituted by Scripts/package-app.sh from `git describe --tags`. Never
+         hardcode a version here: the git tag is the only source of truth
+         (see RELEASING.md). -->
+    <key>CFBundleShortVersionString</key>
+    <string>__SHORT_VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__BUILD_VERSION__</string>
+    <!-- Matches platforms: [.macOS(.v14)] in Package.swift. -->
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <!-- Menu-bar-only: no Dock icon, no app switcher entry. Belt-and-braces
+         with the runtime NSApp.setActivationPolicy(.accessory) call in
+         UnlatchApp.swift's AppDelegate, since the two are not always
+         equivalent inside a real bundle. -->
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Pablo Colaiacovo</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
