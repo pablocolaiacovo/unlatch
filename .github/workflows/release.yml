@@ -5,21 +5,16 @@ name: Release
 #
 # Triggers:
 #   - A pushed `v*` tag (the real release path). Only this path publishes.
-#   - workflow_dispatch, for exercising build/package/verify on a branch
-#     without a tag and without publishing anything. Defaults to dry-run so
-#     a manual run is never able to publish by accident; there is no tag on
-#     a workflow_dispatch ref anyway, so publishing would have nothing to
-#     attach a release to.
+#   - workflow_dispatch, to exercise build/package/verify on a branch without
+#     a tag. This trigger never publishes: the `publish` job is gated to
+#     `github.event_name == 'push'` unconditionally, because a manual
+#     dispatch has no tag to attach a release to. There is no separate
+#     dry-run input - dispatching this workflow IS the dry run.
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Build, package, and verify, but skip publishing'
-        type: boolean
-        default: true
 
 # One release run per tag (or per branch, for a manual dry run) at a time.
 # Unlike ci.yml this does not cancel an in-progress run: a half-finished
@@ -137,11 +132,13 @@ jobs:
     name: publish
     needs: build-and-package
     # Only a real tag push publishes. A workflow_dispatch run never has a
-    # tag to attach a release to, so it always stops after verification
-    # regardless of the dry_run input; the input exists so an invocation
-    # reads as an explicit, deliberate dry run rather than an accident.
+    # tag to attach a release to, so it always stops after verification.
     if: github.event_name == 'push'
-    runs-on: xcode-27
+    # No Swift/Xcode toolchain needed here - just downloading an artifact
+    # and calling gh - so this runs on a Linux runner rather than the
+    # macOS/Xcode runner build-and-package needs, which costs 10x the
+    # Actions minutes.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
@@ -152,13 +149,18 @@ jobs:
           name: unlatch-zip
           path: dist
 
-      # --generate-notes reads .github/release.yml from the default branch
-      # to group squashed PR titles into the changelog. Prerelease status
-      # is derived from the tag per RELEASING.md's versioning rules:
+      # No checkout in this job, so gh has no local git repository to infer
+      # the target repo from: GH_REPO makes that explicit rather than
+      # relying on gh failing to resolve it. --generate-notes still works
+      # with no checkout - it reads .github/release.yml and the merged PRs
+      # to build notes entirely through the GitHub API, keyed off GH_REPO
+      # and the tag, not off a local working tree. Prerelease status is
+      # derived from the tag per RELEASING.md's versioning rules:
       # vX.Y.Z-beta.N tags publish as prereleases, plain vX.Y.Z tags do not.
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
