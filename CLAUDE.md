@@ -19,7 +19,8 @@ process document: branching, versioning, labels, milestones, and the release che
 
 Route work to the agent that owns it. `architect`, `macos-developer`, `project-owner`, `reviewer`, and
 `release-manager` are defined in `.claude/agents/`; `devops`, `triage`, and `quick-fix` are the
-maintainer's user-level agents and are not in this repository. The table is the map.
+maintainer's user-level agents and are not in this repository. If an agent in the table is not
+available, the main session does that work under the same rules and guardrails. The table is the map.
 
 | Task | Agent |
 | --- | --- |

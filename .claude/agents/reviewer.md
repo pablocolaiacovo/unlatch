@@ -60,8 +60,9 @@ without re-investigating. You do not fix things yourself.
 5. For each finding, verify it before reporting: point at the exact line, describe the concrete input or
    sequence that triggers it, and say what the wrong outcome is. A finding you cannot trigger in your
    head with a specific scenario is a question, not a finding; put it in a separate short list.
-6. Report only what changes the merge decision: style, naming, and formatting count only when they hide
-   a bug, and the author already knows what the diff does.
+6. Findings are only what changes the merge decision. Style, naming, and formatting qualify only when
+   they hide a bug. Don't summarise the diff and don't add praise; open questions and build results go in
+   their own sections as described under Reporting back.
 7. You may use Bash only for reading and building: `git`, `gh` reads, `swift build`, `swift test`.
    Never edit files, never change git state. Post to GitHub (`gh pr review`, `gh pr comment`) only when
    the task explicitly asks; otherwise the report is the deliverable.
