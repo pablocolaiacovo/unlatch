@@ -48,9 +48,8 @@ final class AppModel {
     var hasLockedWork: Bool { Unlatch.hasLockedWork(files) }
 
     /// Set by `StatusItemController`. Called synchronously at the start of
-    /// every accepted load (in-popover drop, browse, status item drop) so
-    /// the AppKit layer can show the popover and make it key before the
-    /// step changes.
+    /// every accepted load (in-popover drop or browse) so the AppKit layer
+    /// can show the popover and make it key before the step changes.
     @ObservationIgnored var onLoad: (@MainActor () -> Void)?
 
     var encryptedFiles: [LoadedFile] { files.filter { $0.kind == .encrypted } }
