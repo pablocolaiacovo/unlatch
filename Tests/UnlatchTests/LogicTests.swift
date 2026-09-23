@@ -77,10 +77,14 @@ private let desktop = URL(fileURLWithPath: "/tmp/Desktop", isDirectory: true)
 
 // MARK: - Row mapping
 
-private func file(_ kind: FileKind, skipped: Bool = false, unlocked: Bool = false) -> LoadedFile {
+private func file(
+    _ kind: FileKind, skipped: Bool = false, unlocked: Bool = false,
+    failure: SaveFailure? = nil
+) -> LoadedFile {
     var file = LoadedFile(url: URL(fileURLWithPath: "/tmp/a.pdf"), kind: kind)
     file.skipped = skipped
     file.unlocked = unlocked
+    file.failure = failure
     return file
 }
 
@@ -113,6 +117,35 @@ private func file(_ kind: FileKind, skipped: Bool = false, unlocked: Bool = fals
     #expect(rowInfo(for: file(.corrupt), done: true) == info)
 }
 
+// MARK: - Failed row mapping
+
+@Test func failedEncryptedRowShowsDistinctErrorNotes() {
+    #expect(rowInfo(for: file(.encrypted, failure: .wrongPassword), done: true)
+        == RowInfo(badge: "!", tone: .error, note: "Password didn’t match — not saved"))
+    #expect(rowInfo(for: file(.encrypted, failure: .unreadable), done: true)
+        == RowInfo(badge: "!", tone: .error, note: "Couldn’t be read — not saved"))
+    #expect(rowInfo(for: file(.encrypted, failure: .writeFailed), done: true)
+        == RowInfo(badge: "!", tone: .error, note: "Couldn’t write the file — not saved"))
+}
+
+@Test func failedOwnerRowUsesCopyFailedFallback() {
+    #expect(rowInfo(for: file(.owner, failure: .copyFailed), done: true)
+        == RowInfo(badge: "!", tone: .error, note: "Couldn’t be copied — not saved"))
+}
+
+@Test func failureIsOnlyShownWhenDone() {
+    // A failure recorded before the done step (shouldn't happen, but the
+    // pending look must win if it ever did) never leaks into an earlier step.
+    let pending = rowInfo(for: file(.encrypted, failure: .writeFailed), done: false)
+    #expect(pending == RowInfo(badge: "•", tone: .neutral, note: "Password protected"))
+}
+
+@Test func unlockErrorMapsToMatchingSaveFailure() {
+    #expect(SaveFailure(.wrongPassword) == .wrongPassword)
+    #expect(SaveFailure(.unreadable) == .unreadable)
+    #expect(SaveFailure(.writeFailed) == .writeFailed)
+}
+
 // MARK: - Display strings
 
 @Test func headerNoteCountsFiles() {
@@ -139,6 +172,16 @@ private func file(_ kind: FileKind, skipped: Bool = false, unlocked: Bool = fals
 
 @Test func doneTitleZeroSavedIsFailure() {
     #expect(doneTitle(savedCount: 0) == "Couldn’t save — nothing was written")
+}
+
+@Test func doneTitlePartialBatchReportsBoth() {
+    #expect(doneTitle(savedCount: 3, failedCount: 2) == "3 saved, 2 failed")
+    #expect(doneTitle(savedCount: 1, failedCount: 1) == "1 saved, 1 failed")
+}
+
+@Test func doneTitleAllFailedNamesTheCount() {
+    #expect(doneTitle(savedCount: 0, failedCount: 1) == "Couldn’t save — the file failed")
+    #expect(doneTitle(savedCount: 0, failedCount: 3) == "Couldn’t save — all 3 files failed")
 }
 
 @Test func doneSummaryFormats() {

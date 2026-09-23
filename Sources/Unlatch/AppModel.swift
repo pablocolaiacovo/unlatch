@@ -42,6 +42,8 @@ final class AppModel {
 
     var encryptedFiles: [LoadedFile] { files.filter { $0.kind == .encrypted } }
     var usableFiles: [LoadedFile] { files.filter { $0.kind != .corrupt && !$0.skipped } }
+    /// Files `save()` attempted and that did not write, for the done step's title.
+    var failedCount: Int { files.count { $0.failure != nil } }
     /// The persistent rows section shows whenever files are loaded, except
     /// while the spinner is up.
     var showsFileRows: Bool { !files.isEmpty && step != .working }
@@ -145,19 +147,32 @@ final class AppModel {
         guard !jobs.isEmpty else { return }
         step = .working
         Task {
-            let succeeded = await Task.detached {
-                jobs.compactMap { job -> (source: URL, dest: URL)? in
+            // The concrete Error thrown by executeSaveJob is not Sendable, so
+            // it's mapped to SaveFailure inside the detached closure — only
+            // that Sendable outcome crosses back to the main actor.
+            let outcomes = await Task.detached {
+                jobs.map { job -> (source: URL, dest: URL, failure: SaveFailure?) in
                     do {
                         try executeSaveJob(job)
-                        return (job.source, job.destination)
+                        return (job.source, job.destination, nil)
+                    } catch let error as UnlockError {
+                        return (job.source, job.destination, SaveFailure(error))
                     } catch {
-                        return nil
+                        return (job.source, job.destination, .copyFailed)
                     }
                 }
             }.value
-            let sources = Set(succeeded.map(\.source))
-            for index in files.indices where sources.contains(files[index].url) {
-                files[index].unlocked = true
+            let failures = Dictionary(uniqueKeysWithValues: outcomes.compactMap { outcome in
+                outcome.failure.map { (outcome.source, $0) }
+            })
+            let succeeded = outcomes.filter { $0.failure == nil }
+            for index in files.indices {
+                let url = files[index].url
+                if let failure = failures[url] {
+                    files[index].failure = failure
+                } else if succeeded.contains(where: { $0.source == url }) {
+                    files[index].unlocked = true
+                }
             }
             // An empty `succeeded` renders as the failure variant of the done
             // step: doneTitle(savedCount: 0) and no Show in Finder button.
