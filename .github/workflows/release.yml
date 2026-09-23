@@ -1,0 +1,171 @@
+name: Release
+
+# Publishes a downloadable Unlatch.zip to GitHub Releases. See issue #9 and
+# RELEASING.md's "Distribution and signing" section.
+#
+# Triggers:
+#   - A pushed `v*` tag (the real release path). Only this path publishes.
+#   - workflow_dispatch, to exercise build/package/verify on a branch without
+#     a tag. This trigger never publishes: the `publish` job is gated to
+#     `github.event_name == 'push'` unconditionally, because a manual
+#     dispatch has no tag to attach a release to. There is no separate
+#     dry-run input - dispatching this workflow IS the dry run.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# One release run per tag (or per branch, for a manual dry run) at a time.
+# Unlike ci.yml this does not cancel an in-progress run: a half-finished
+# publish is worse than a queued duplicate, and a given tag is only ever
+# pushed once.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Same pinned toolchain as ci.yml (see that file's comment for the
+  # rationale and the macos-26 fallback).
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+  # Ad-hoc only for now: no paid Apple Developer Program membership yet
+  # (decision recorded in issue #8; see RELEASING.md's "Distribution and
+  # signing"). Scripts/package-app.sh reads this single value and defaults
+  # to "-" itself, but it is set explicitly here so the seam is visible.
+  # Issue #8 will change this to a "Developer ID Application: Name (TEAMID)"
+  # identity read from a repository secret, add a keychain-import step
+  # before "Build and package" and a notarize step after "Verify", and
+  # delete a temporary keychain in an always() step - not rewrite this
+  # workflow.
+  SIGN_IDENTITY: '-'
+
+jobs:
+  build-and-package:
+    name: build-and-package
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      # First step, matching ci.yml: if anything below fails, the log
+      # immediately shows which Xcode/Swift toolchain was actually in effect.
+      - name: Print Swift version
+        run: swift --version
+
+      # fetch-depth: 0 is required, not optional: Scripts/package-app.sh
+      # derives CFBundleShortVersionString from `git describe --tags` and
+      # CFBundleVersion from `git rev-list --count HEAD`. The default
+      # shallow, tagless checkout makes both meaningless and silently
+      # produces a 0.0.0-<sha> dev build instead of the tagged version.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Builds, bundles, ad-hoc signs, and zips. All of that logic lives in
+      # the script (issue #7); this workflow does not duplicate it.
+      - name: Build and package
+        run: Scripts/package-app.sh
+        env:
+          SIGN_IDENTITY: ${{ env.SIGN_IDENTITY }}
+
+      # A failure here must fail the job rather than publish an unusable
+      # build. package-app.sh already runs this same check right after
+      # signing, but it is repeated here as the workflow's own gate, and
+      # extended to also assert the signature is ad-hoc (no Developer ID
+      # authority, which would mean SIGN_IDENTITY changed without
+      # RELEASING.md being updated to match).
+      - name: Verify signature
+        run: |
+          set -euo pipefail
+          codesign --verify --deep --strict --verbose=2 dist/Unlatch.app
+
+          DV_OUTPUT="$(codesign -dv dist/Unlatch.app 2>&1)"
+          echo "$DV_OUTPUT"
+          if ! grep -q '^Signature=adhoc$' <<<"$DV_OUTPUT"; then
+            echo "::error::expected an ad-hoc signature (Signature=adhoc); codesign -dv did not report one" >&2
+            exit 1
+          fi
+          if grep -q '^Authority=' <<<"$DV_OUTPUT"; then
+            echo "::error::found an Authority= line on an ad-hoc build; SIGN_IDENTITY may have changed without RELEASING.md being updated" >&2
+            exit 1
+          fi
+
+      # Only meaningful for a real tag push: workflow_dispatch runs against
+      # a branch, which has no tag, so package-app.sh falls back to its
+      # 0.0.0-<sha> dev version and there is nothing to compare it against.
+      - name: Verify version matches tag
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          EXPECTED="${TAG#v}"
+          ACTUAL="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Unlatch.app/Contents/Info.plist)"
+          echo "tag=$TAG expected-version=$EXPECTED actual-version=$ACTUAL"
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo "::error::Info.plist CFBundleShortVersionString ($ACTUAL) does not match the tag ($EXPECTED). fetch-depth may be wrong, or the tag is not an exact 'git describe' match." >&2
+            exit 1
+          fi
+
+      # dist/Unlatch.zip is what package-app.sh produced with `ditto -c -k
+      # --keepParent`. Confirm the signature actually survives an unzip
+      # round-trip - the same check anyone downloading the release will
+      # implicitly rely on - rather than only trusting the pre-zip bundle.
+      - name: Verify zip round-trip
+        run: |
+          set -euo pipefail
+          ROUNDTRIP_DIR="$(mktemp -d)"
+          ditto -x -k dist/Unlatch.zip "$ROUNDTRIP_DIR"
+          codesign --verify --deep --strict --verbose=2 "$ROUNDTRIP_DIR/Unlatch.app"
+          rm -rf "$ROUNDTRIP_DIR"
+
+      - name: Upload Unlatch.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: unlatch-zip
+          path: dist/Unlatch.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish
+    needs: build-and-package
+    # Only a real tag push publishes. A workflow_dispatch run never has a
+    # tag to attach a release to, so it always stops after verification.
+    if: github.event_name == 'push'
+    # No Swift/Xcode toolchain needed here - just downloading an artifact
+    # and calling gh - so this runs on a Linux runner rather than the
+    # macOS/Xcode runner build-and-package needs, which costs 10x the
+    # Actions minutes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download Unlatch.zip
+        uses: actions/download-artifact@v4
+        with:
+          name: unlatch-zip
+          path: dist
+
+      # No checkout in this job, so gh has no local git repository to infer
+      # the target repo from: GH_REPO makes that explicit rather than
+      # relying on gh failing to resolve it. --generate-notes still works
+      # with no checkout - it reads .github/release.yml and the merged PRs
+      # to build notes entirely through the GitHub API, keyed off GH_REPO
+      # and the tag, not off a local working tree. Prerelease status is
+      # derived from the tag per RELEASING.md's versioning rules:
+      # vX.Y.Z-beta.N tags publish as prereleases, plain vX.Y.Z tags do not.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          ARGS=(--title "Unlatch $TAG" --generate-notes)
+          if [[ "$TAG" == *-beta.* ]]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "$TAG" dist/Unlatch.zip "${ARGS[@]}"
