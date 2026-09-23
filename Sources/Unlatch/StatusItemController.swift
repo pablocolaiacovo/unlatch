@@ -2,9 +2,9 @@ import AppKit
 import Observation
 
 /// Owns the `NSStatusItem` and the `NSPopover` that hosts `PopoverView`.
-/// Replaces `MenuBarExtra`, which gave no control over dismissal and no
-/// access to the underlying status item. There is exactly one instance,
-/// created by `AppDelegate` and living for the whole process.
+/// Replaces the previous SwiftUI menu bar scene, which gave no control over
+/// dismissal and no access to the underlying status item. There is exactly
+/// one instance, created by `AppDelegate` and living for the whole process.
 @MainActor
 final class StatusItemController: NSObject, NSPopoverDelegate {
     private let model: AppModel
@@ -14,6 +14,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         isModalPanelOpen: { NSApp.modalWindow != nil },
         close: { [weak self] in self?.closePopover() }
     )
+    private var mouseUpHighlightMonitor: Any?
 
     init(model: AppModel) {
         self.model = model
@@ -26,6 +27,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         configureStatusItem()
         configurePopover()
         observeModel()
+        installHighlightMonitor()
     }
 
     private func configureStatusItem() {
@@ -39,9 +41,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private func configurePopover() {
         popover.behavior = .applicationDefined
         popover.animates = true
-        popover.contentViewController = PopoverHostingController(model: model) { [weak self] in
-            self?.closePopover()
-        }
+        popover.contentViewController = PopoverHostingController(model: model)
         popover.delegate = self
     }
 
@@ -97,6 +97,30 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     private func updateHighlight() {
         statusItem.button?.highlight(popover.isShown)
+    }
+
+    /// `sendAction(on: [.leftMouseDown])` fires `togglePopover` — and thus
+    /// `updateHighlight()` — on mouse-down, before the button's own
+    /// mouseDown/mouseUp tracking loop (which drives its native pressed
+    /// look) has finished. That loop can un-highlight the button on
+    /// mouse-up afterwards, undoing our call. A local monitor reasserts the
+    /// highlight after every left mouse-up, deferred one main-actor turn so
+    /// it lands after AppKit's own tracking has settled — this covers both
+    /// a quick click and a slow press, since it fires exactly when the
+    /// button is released rather than on a fixed delay.
+    private func installHighlightMonitor() {
+        mouseUpHighlightMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+            MainActor.assumeIsolated {
+                self?.reassertHighlightAfterTracking()
+            }
+            return event
+        }
+    }
+
+    private func reassertHighlightAfterTracking() {
+        Task { @MainActor [weak self] in
+            self?.updateHighlight()
+        }
     }
 
     /// `withObservationTracking` is one-shot, so it's re-armed from

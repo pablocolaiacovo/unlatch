@@ -82,7 +82,7 @@ without the first-launch steps above.
 
 ### Requirements
 
-- macOS 14 or later — the menu bar app's `MenuBarExtra` window style and `@Observable` need it, and `UnlatchCore` declares the same platform floor (Apple platforms only; it will not build on Linux).
+- macOS 14 or later — the menu bar app's `@Observable` and `NSApp.activate(ignoringOtherApps:)` need it, and `UnlatchCore` declares the same platform floor (Apple platforms only; it will not build on Linux).
 - Swift 6.3 or later, built in Swift 6 language mode
 
 ### Installation
