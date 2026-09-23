@@ -1,18 +1,88 @@
 # Unlatch
 
-A small Swift package for inspecting how a PDF is protected and writing a decrypted copy of it, built on PDFKit.
+Unlatch is a macOS menu bar app for inspecting how a PDF is protected and saving a decrypted copy.
+Click the lock icon, drop in one or more PDFs, and it tells you which ones need a password, which
+are only owner-restricted (so they open freely but PDFKit and other readers honor a printing or
+copying lock), and which are unreadable — then writes unlocked copies wherever you choose.
+
+The app is built on **`UnlatchCore`**, a small Swift package that does the underlying work and can
+also be used on its own as a library. See [Using UnlatchCore as a library](#using-unlatchcore-as-a-library)
+below.
+
+## Install
+
+1. Download `Unlatch.zip` from the [Releases page](https://github.com/pablocolaiacovo/unlatch/releases).
+2. Unzip it and drag `Unlatch.app` to `/Applications`.
+3. Click the lock icon that appears in the menu bar.
+
+Requires macOS 14 or later.
+
+### First launch
+
+Unlatch v1.0 is **ad-hoc signed, not notarized by Apple** — it's a free, single-maintainer project
+without a paid Apple Developer membership. Because of that, every copy downloaded from a browser is
+quarantined, and macOS Gatekeeper blocks the very first launch. This is expected, not a sign of a
+broken or malicious download, and it only needs to be dealt with once per install.
+
+The fastest way past it, in Terminal:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Unlatch.app
+```
+
+Then open the app normally. This works on every supported version of macOS.
+
+If you'd rather not use Terminal:
+
+1. Try to open Unlatch once (double-click it, or launch it from Spotlight) and dismiss the block.
+2. Open **System Settings > Privacy & Security**, scroll to the Security section, and click
+   **Open Anyway** next to the mention of Unlatch.
+3. Confirm in the dialog that appears. You only need to do this once.
+
+**Right-click (Control-click) > Open no longer bypasses Gatekeeper.** That trick still works on
+macOS 14, but Apple removed it starting with macOS 15 Sequoia — use one of the two steps above
+instead.
+
+If macOS instead says Unlatch **"is damaged and can't be opened"**, that's the same Gatekeeper
+block wearing different wording, not a corrupt download. The `xattr` command above resolves it the
+same way.
+
+## Using the app
+
+Click the lock icon in the menu bar to open the popover, then choose PDFs (via the file picker) or
+drop them onto the window that opens. Unlatch classifies each file — not encrypted, password
+protected, owner-restricted, or unreadable — prompts for a password only where one is actually
+needed, and lets you pick a destination for the unlocked copies.
+
+## Building from source
+
+You don't need an Apple Developer account to build or run Unlatch locally.
+
+```sh
+swift build
+swift run Unlatch
+```
+
+To produce a standalone, ad-hoc signed `Unlatch.app` you can drag into `/Applications` or hand to
+someone else, use `Scripts/package-app.sh`. A locally built app isn't quarantined, so it launches
+without the first-launch steps above.
+
+> `Scripts/package-app.sh` is being added in [#7](https://github.com/pablocolaiacovo/unlatch/issues/7);
+> once it lands, run it from the repository root and see its `--help` output for options.
+
+## Using UnlatchCore as a library
 
 `UnlatchCore` does two things:
 
 - **`classify(_:)`** — reports how a file is protected, separating the case where a PDF cannot be opened at all from the case where it opens freely but declares restrictions.
 - **`unlock(_:password:destination:)`** — writes a copy with the encryption removed.
 
-## Requirements
+### Requirements
 
-- macOS 11 or later (the package depends on `PDFKit`, so Apple platforms only — it will not build on Linux)
+- macOS 14 or later — the menu bar app's `MenuBarExtra` window style and `@Observable` need it, and `UnlatchCore` declares the same platform floor (Apple platforms only; it will not build on Linux).
 - Swift 6.3 or later, built in Swift 6 language mode
 
-## Installation
+### Installation
 
 Add the package to your `Package.swift`:
 
@@ -24,9 +94,9 @@ dependencies: [
 
 Then add `UnlatchCore` to your target's dependencies.
 
-## Usage
+### Usage
 
-### Classifying
+#### Classifying
 
 ```swift
 import UnlatchCore
@@ -50,7 +120,7 @@ The four cases map to PDFKit as follows:
 
 The middle two are the distinction worth having. An owner-restricted file looks unprotected to a reader and is the case a naive implementation quietly does nothing about.
 
-### Unlocking
+#### Unlocking
 
 ```swift
 import UnlatchCore
@@ -68,7 +138,7 @@ do {
 
 Pass `password: nil` for owner-restricted files — they need no password to open, only re-serializing. The output is written to a temporary file and swapped into place, so `destination` is never left half-written. It does not need to exist beforehand, though its parent directory does.
 
-## Implementation notes
+### Implementation notes
 
 Two things about this problem are easy to get wrong, and both are why the code looks the way it does.
 
@@ -76,7 +146,7 @@ Two things about this problem are easy to get wrong, and both are why the code l
 
 **Rebuilding costs fidelity, and the bill is not obvious.** Page copies bring their own annotations, so form field values and links survive. The outline does not: bookmarks live on the document rather than on any page, and a page-by-page rebuild silently discards them. `unlock` therefore remaps the outline onto the new pages explicitly. Anything else stored at the document level — a document-wide `/AcroForm` dictionary with JavaScript or a calculation order, for instance — is not covered by the current tests and should be assumed lost until proven otherwise.
 
-## Tests
+### Tests
 
 ```sh
 swift test
@@ -84,7 +154,7 @@ swift test
 
 The fixtures are committed, so running the tests needs nothing beyond a Swift toolchain.
 
-### The fixture corpus
+#### The fixture corpus
 
 The encrypted fixtures come from **two different producers on purpose**. Encrypting the test files with PDFKit would only test PDFKit against itself, and — per the note above — an implementation that strips qpdf's encryption but not PDFKit's passes a qpdf-only corpus while failing on real input. Both are represented, and `bothProducersClassifyAndUnlockAlike` holds them to identical expectations.
 
@@ -107,6 +177,11 @@ brew install qpdf
 ```
 
 CoreGraphics and PDFKit author the base documents; qpdf applies all the encryption.
+
+## Contributing
+
+See [RELEASING.md](RELEASING.md) for how work lands on `main`, how versions are decided, and how a
+release is cut.
 
 ## License
 
