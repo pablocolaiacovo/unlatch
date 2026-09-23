@@ -5,10 +5,14 @@ import AppKit
 /// `chooseOtherFolder()` — is running.
 ///
 /// Every outside mouse-down, app resign-active, Escape key-down, or Space
-/// change closes the popover immediately, matching the previous SwiftUI menu
-/// bar scene's behaviour (dragging a file in from Finder still closes it —
-/// see Design/status-item-popover.md §2.4, "Chosen mechanism", for the
-/// reducer that keeps the popover open during a drag).
+/// change closes the popover immediately. This is v1.0's dismissal
+/// behaviour, not an interim step: dragging a file in from Finder still
+/// closes the popover before it reaches the in-popover drop zone — dropping
+/// the file directly on the menu bar icon is v1.0's supported way to bring
+/// files in from Finder instead. A reducer that would keep the popover open
+/// during such a drag is designed in Design/status-item-popover.md §2.4,
+/// "Chosen mechanism", but the maintainer deferred it to the `Backlog`
+/// milestone; see §5 there for why.
 ///
 /// Escape is handled with a local `.keyDown` monitor rather than
 /// `NSViewController.cancelOperation(_:)` on the hosting controller: AppKit

@@ -56,7 +56,7 @@ Everything is in the `Unlatch` target. `UnlatchCore` and `Tests/UnlatchCoreTests
 
 | File | Change | Task |
 | --- | --- | --- |
-| `Sources/Unlatch/UnlatchApp.swift` | Drop `MenuBarExtra`. `body` becomes a `Settings` scene with its menu item removed. `AppDelegate` owns `AppModel` and `StatusItemController`. | 1 |
+| `Sources/Unlatch/AppDelegate.swift` (was `UnlatchApp.swift`) | Drop `MenuBarExtra`. Plain AppKit `@main` entry point with a hand-built main menu — no SwiftUI `App`/`Settings` scene; see §2.2 for why. `AppDelegate` owns `AppModel` and `StatusItemController`. | 1 |
 | `Sources/Unlatch/StatusItemController.swift` (new) | `NSStatusItem`, `NSPopover`, icon rendering via `withObservationTracking`, toggle, present-and-focus, `NSPopoverDelegate`. | 1, 2, 3 |
 | `Sources/Unlatch/PopoverHostingController.swift` (new) | `NSHostingController<PopoverView>` subclass: `sizingOptions`, closes on Esc through `cancelOperation(_:)`. | 1 |
 | `Sources/Unlatch/PopoverDismissalMonitor.swift` (new) | Global and local event monitors plus notifications that feed the dismissal reducer, and the mouse-up watcher. | 1 (simple), 2 (reducer) |
@@ -72,6 +72,56 @@ Note on tests: the app's pure logic is already tested in `Tests/UnlatchTests/Log
 fixtures are needed and `Scripts/generate-fixtures.sh` does not change.
 
 ### 2.2 App structure (`@main`)
+
+**Revised after Task 1 shipped.** The Task 1 PR (#27) originally built this section as written
+below the line, with a SwiftUI `App` shell. On macOS 27, the maintainer found that clicking the
+status item — which calls `NSApp.activate(ignoringOtherApps: true)` in
+`StatusItemController.presentAndFocus()` — opened an empty, large "Unlatch Settings" window behind
+the popover every time. Activating an app with no visible window is, it turns out, exactly the
+trigger AppKit/SwiftUI uses to present a `Scene`-backed window, and a `Settings` scene is as much a
+`Scene` as any other — there is no supported way to have one that never opens. The fix, adopted in
+the same PR, drops the SwiftUI `App` shell entirely for a plain AppKit entry point:
+
+```swift
+@MainActor
+@main
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let model = AppModel()
+    private var statusItemController: StatusItemController?
+
+    static func main() {
+        let app = NSApplication.shared
+        app.delegate = AppDelegate()
+        app.mainMenu = makeMainMenu()  // app menu (Quit) + Edit menu, see below
+        app.run()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        statusItemController = StatusItemController(model: model)
+    }
+}
+```
+
+`makeMainMenu()` hand-builds an app menu (Quit, ⌘Q) and a standard Edit menu (Undo, Redo, Cut,
+Copy, Paste, Select All, with their usual key equivalents), every item's `target` left `nil` so it
+dispatches to whatever view is first responder — the same mechanism Interface Builder's First
+Responder actions use, and the same key equivalents a SwiftUI main menu would have installed. ⌘V,
+⌘C, ⌘X, and ⌘A reaching the password field is why a main menu is needed at all: with none, those key
+equivalents do nothing, and pasting a password is a core use. The Quit item also keeps ⌘Q working
+alongside `PopoverView`'s own `.keyboardShortcut("q")`. With `.accessory` the menu is never shown,
+but its key equivalents still fire while the app is active. With no SwiftUI `Scene` anywhere in the
+app, there is nothing left for `NSApp.activate` to open by accident — this fixes the bug at its
+root rather than trying to suppress a window SwiftUI decided to show.
+
+The model is a stored property of `AppDelegate`, not `@State` in a SwiftUI `App` (which no longer
+exists), because AppKit (the status item) needs it and there is exactly one owner for the whole
+process either way.
+
+---
+
+**Original text, kept for the record.** The design initially proposed a SwiftUI `App` shell purely
+to install the standard main menu:
 
 ```swift
 @main
@@ -98,16 +148,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 ```
 
-Why keep the SwiftUI `App` lifecycle instead of a hand-written `NSApplication.main`: the SwiftUI
-lifecycle installs the standard main menu. Its Edit items are how ⌘V, ⌘C, ⌘X, and ⌘A reach the
-password field. In an app with no main menu those key equivalents do nothing, and pasting a
-password is a core use. The Quit item also keeps ⌘Q working alongside `PopoverView`'s own
-`.keyboardShortcut("q")`. With `.accessory` the menu is never shown, but its key equivalents still
-fire while the app is active. The model moves from `@State` in `UnlatchApp` to `AppDelegate`
-because AppKit (the status item) now needs it too.
-
-If Swift 6 rejects the `AppModel()` stored-property initializer in the delegate's isolation, create
-the model in `applicationDidFinishLaunching` instead. Both run on the main actor.
+The reasoning at the time: "the SwiftUI lifecycle installs the standard main menu... a hand-written
+`NSApplication.main` would need to build that menu itself." That trade-off was real, but the design
+underestimated how easy it is to hand-build a minimal main menu (see above), and did not anticipate
+`Settings` being reachable through `NSApp.activate` with no window open, only through its removed
+⌘, item and Dock/menu-bar affordances the app doesn't have.
 
 ### 2.3 `StatusItemController`
 
@@ -663,16 +708,19 @@ That file belongs to `project-owner`, so this design does not change it.
 
 ## 5. Implementation plan
 
-Three PRs on `fix/` or `feature/` branches off `main`. Each leaves the app working and ends with a
-clean `swift build` and a passing `swift test`. Suggested PR titles follow the changelog convention.
-Type labels are `project-owner`'s call. Tasks 1 and 2 say `Part of #15`; task 3 says `Closes #15`.
+Originally three PRs on `fix/` or `feature/` branches off `main`, one per task below. The maintainer
+has since deferred Task 2 to the `Backlog` milestone (see that section), so v1.0 ships as two PRs:
+Task 1 (`Part of #15`) and Task 3 (`Closes #15`). Each leaves the app working and ends with a clean
+`swift build` and a passing `swift test`. Suggested PR titles follow the changelog convention. Type
+labels are `project-owner`'s call.
 
 ### Task 1: Host the popover in AppKit, at parity
 
 Suggested title: "Show the menu bar panel as a native popover".
 
-- `UnlatchApp.swift`: remove `MenuBarExtra`, add the `Settings` scene without its menu item, and
-  move the model into `AppDelegate`.
+- `AppDelegate.swift` (renamed from `UnlatchApp.swift`): remove `MenuBarExtra` and, after the
+  macOS 27 empty-Settings-window bug found post-merge (§2.2), the SwiftUI `App` shell entirely, for
+  a plain AppKit `@main` entry point with a hand-built main menu. `AppDelegate` owns the model.
 - Add `StatusItemController`, `PopoverHostingController`, and `PopoverDismissalMonitor` in its
   simple form: any outside mouse-down, resign-active, or Space change closes the popover.
 - Add `AppModel.hasLockedWork` and `onLoad`, and the `Logic.swift` helpers `hasLockedWork(_:)` and
@@ -687,9 +735,20 @@ Acceptance criteria:
 - Grepping `Sources/` for `MenuBarExtra` returns nothing.
 - No new warnings.
 
-### Task 2: Keep the popover open while a file drag is in progress
+### Task 2: Keep the popover open while a file drag is in progress — deferred to Backlog
 
-Depends on task 1. Suggested title: "Keep the popover open while dragging PDFs in from Finder".
+**Not part of v1.0.** The maintainer deferred this task to the `Backlog` milestone after Task 1
+shipped: the mechanism in §2.4 — a global mouse monitor, a deferred-close state machine, three
+separate release sources, and a 50 ms polling watcher as a last resort — is real fragility to carry
+for a gap that Task 3 already closes a different way. A PDF dragged from Finder can be dropped
+directly on the menu bar icon instead of needing the in-popover zone to survive the drag. §2.4's
+analysis and the reducer design below are kept as reference for whoever picks this up from Backlog,
+not as an interim step Task 1 was building toward — `PopoverDismissalMonitor` as shipped in Task 1
+(§2.3, and §2.4's "Chosen mechanism" without the reducer) is v1.0's final dismissal behaviour.
+Task 3 updates `IdleStepView`'s copy so it stops promising a working Finder-drag-to-zone flow.
+
+What follows was Task 2's plan, depending on Task 1, suggested title "Keep the popover open while
+dragging PDFs in from Finder":
 
 - Add `OutsidePress`, `DismissalEvent`, `DismissalDecision`, and `dismissalDecision(for:press:modalPanelOpen:)`
   to `Logic.swift`, with the table tests.
@@ -697,7 +756,7 @@ Depends on task 1. Suggested title: "Keep the popover open while dragging PDFs i
   panel guard.
 - The controller's observation loop feeds `dropTargetEntered()` from `model.dragging`.
 
-Acceptance criteria:
+Acceptance criteria (as originally planned):
 
 - Manual checks 1 to 6 and 12 pass.
 - Every row of the reducer table has a test.
@@ -708,12 +767,16 @@ flow, record the flow in the PR and stop. Do not switch to `.transient` without 
 
 ### Task 3: Accept PDFs dropped onto the menu bar icon
 
-Depends on task 2 for the latch; the drop itself only depends on task 1.
+Depends on task 1 only. Task 2 is deferred (above), so this task does not need a dismissal latch —
+`PopoverDismissalMonitor` has no reducer to feed in v1.0.
 
 - Add `StatusItemDropView`.
 - Add `isDroppablePDF`, `acceptedPDFDrop`, and `statusItemAcceptsDrop(during:)` with tests.
-- Controller wiring: `isDropHovering` drives the highlight, a hover calls `dropTargetEntered()`, and
-  a drop calls `model.load(urls)` followed by `presentAndFocus()`.
+- Controller wiring: `isDropHovering` drives the highlight; a drop calls `model.load(urls)` followed
+  by `presentAndFocus()`.
+- Update `IdleStepView`'s privacy caption / drop-zone copy so it no longer promises a working
+  Finder-drag-to-zone flow (Task 2's gap) — dropping on the menu bar icon is v1.0's supported way to
+  bring files in from Finder.
 - Verify the `hitTest` question from 2.7 first thing in the session. If the overlay gets no
   drags, apply the documented fallback.
 
