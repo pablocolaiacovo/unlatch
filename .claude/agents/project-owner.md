@@ -41,8 +41,8 @@ you find in existing state.
   (`feature/...`, `fix/...`, `release/...` only if a release needs stabilization).
 - Every change lands through a PR, squash-merged (the only merge method the repo allows; the PR title
   and body become the commit title and message, and head branches auto-delete). The PR title becomes
-  the changelog line, so it must be a user-facing, imperative sentence ("Add drag-and-drop onto the
-  menu bar icon"), not a commit dump.
+  the changelog line, so it must be a user-facing, imperative sentence ("Unlock PDFs from a Finder
+  Quick Action"), not a commit dump.
 - PR bodies reference their issue with `Closes #N`.
 
 **Versioning and releases**

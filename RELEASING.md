@@ -24,9 +24,9 @@ Trunk-based. `main` is always green and always releasable.
 - **Pull requests are squash-merged.** The repository allows squash merges only (merge commits and
   rebase merges are disabled), and the squash commit takes the PR title as its title and the PR body
   as its message. The PR title is therefore both the commit subject on `main` and the changelog
-  line. Write it as a user-facing, imperative sentence — "Add drag-and-drop onto the menu
-  bar icon", not "wip: fix stuff" and not a dump of commit subjects. If you would not want to read
-  it in release notes, retitle before merging.
+  line. Write it as a user-facing, imperative sentence — "Unlock PDFs from a Finder Quick Action",
+  not "wip: fix stuff" and not a dump of commit subjects. If you would not want to read it in release
+  notes, retitle before merging.
 - The PR body references its issue with `Closes #N`.
 - The PR carries the labels that decide its release-note section: `enhancement`, `bug`, or
   `documentation`, plus its `area:` labels. See [.github/release.yml](.github/release.yml).
