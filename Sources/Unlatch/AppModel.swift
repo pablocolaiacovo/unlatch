@@ -162,15 +162,22 @@ final class AppModel {
                     }
                 }
             }.value
-            let failures = Dictionary(uniqueKeysWithValues: outcomes.compactMap { outcome in
-                outcome.failure.map { (outcome.source, $0) }
-            })
+            // Duplicate source URLs shouldn't happen — load(_:) doesn't dedupe
+            // today, but nothing guarantees a future caller won't feed the
+            // same file in twice — so uniqueKeysWithValues (which traps on a
+            // collision) isn't safe here. Keep the first failure: outcomes
+            // are in job order, so "first" is deterministic and matches what
+            // the row would have shown had only one job run for that file.
+            let failures = Dictionary(
+                outcomes.compactMap { outcome in outcome.failure.map { (outcome.source, $0) } },
+                uniquingKeysWith: { first, _ in first })
             let succeeded = outcomes.filter { $0.failure == nil }
+            let succeededSources = Set(succeeded.map(\.source))
             for index in files.indices {
                 let url = files[index].url
                 if let failure = failures[url] {
                     files[index].failure = failure
-                } else if succeeded.contains(where: { $0.source == url }) {
+                } else if succeededSources.contains(url) {
                     files[index].unlocked = true
                 }
             }
