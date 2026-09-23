@@ -17,8 +17,9 @@ process document: branching, versioning, labels, milestones, and the release che
 
 ## Agents and who does what
 
-Route work to the agent that owns it. Each one is defined in `.claude/agents/` with its own rules; the
-table is the map.
+Route work to the agent that owns it. `architect`, `macos-developer`, `project-owner`, `reviewer`, and
+`release-manager` are defined in `.claude/agents/`; `devops`, `triage`, and `quick-fix` are the
+maintainer's user-level agents and are not in this repository. The table is the map.
 
 | Task | Agent |
 | --- | --- |

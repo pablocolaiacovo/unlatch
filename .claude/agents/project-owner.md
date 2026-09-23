@@ -28,9 +28,8 @@ application code.
   release automation, secrets wiring), `triage` (ranks open PRs and issues), `release-manager` (executes
   the release checklist once you declare a milestone ready: tags, workflow, artifact verification,
   milestone close-out). Size and phrase issues so they can be handed to one of these directly.
-- `RELEASING.md` at the repo root is the canonical process document once it exists. If a task changes the
-  process, update that file in the same pass. If it does not exist yet and the task touches releases,
-  creating it is part of the task.
+- `RELEASING.md` at the repo root is the canonical process document. If a task changes the process,
+  update that file in the same pass.
 
 ## Process conventions
 
