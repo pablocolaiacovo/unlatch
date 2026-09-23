@@ -1,9 +1,11 @@
+import AppKit
 import SwiftUI
 
 /// The 372 pt popover panel: header, current step, and the persistent file
 /// rows section.
 struct PopoverView: View {
     @Bindable var model: AppModel
+    @State private var quitHovering = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,9 +33,10 @@ struct PopoverView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 6) {
             Text("Unlatch")
                 .font(.system(size: 13, weight: .semibold))
+            quitButton
             Spacer()
             Text(model.headerText)
                 .font(.system(size: 11))
@@ -42,6 +45,31 @@ struct PopoverView: View {
         .padding(.top, 11)
         .padding(.horizontal, 14)
         .padding(.bottom, 9)
+    }
+
+    /// Unobtrusive quit affordance next to the title, reachable from every
+    /// step. `.accessory` apps have no Dock icon and no application menu, so
+    /// this is the only way to quit besides Force Quit.
+    private var quitButton: some View {
+        Button {
+            NSApplication.shared.terminate(nil)
+        } label: {
+            Image(systemName: "power")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(quitHovering ? .primary : .secondary)
+                .frame(width: 20, height: 20)
+                .background(
+                    Circle().fill(Color.primary.opacity(quitHovering ? 0.08 : 0))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("q", modifiers: .command)
+        .help("Quit Unlatch")
+        .accessibilityLabel("Quit Unlatch")
+        .onHover { hovering in
+            quitHovering = hovering
+        }
     }
 
     private var workingView: some View {
