@@ -288,3 +288,26 @@ private func file(
         chosenFolder: URL(fileURLWithPath: "/tmp/Unlocked", isDirectory: true)
     ) == "/tmp/Unlocked/")
 }
+
+// MARK: - Version label
+
+@Test func versionLabelForRelease() {
+    #expect(versionLabel(version: "1.0.0", build: "42") == "Version 1.0.0 (42)")
+}
+
+@Test func versionLabelPassesDescribeStringsThrough() {
+    #expect(versionLabel(version: "0.0.0-abc1234", build: "7") == "Version 0.0.0-abc1234 (7)")
+    #expect(
+        versionLabel(version: "1.0.0-3-gabc1234-dirty", build: "45")
+            == "Version 1.0.0-3-gabc1234-dirty (45)")
+}
+
+@Test func versionLabelFallsBackToDevWhenBothMissing() {
+    #expect(versionLabel(version: nil, build: nil) == "Version dev")
+    #expect(versionLabel(version: "", build: "") == "Version dev")
+}
+
+@Test func versionLabelWithOnlyOneValue() {
+    #expect(versionLabel(version: "1.0.0", build: nil) == "Version 1.0.0")
+    #expect(versionLabel(version: nil, build: "42") == "Version dev (42)")
+}
