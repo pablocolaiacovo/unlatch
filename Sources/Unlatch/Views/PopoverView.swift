@@ -28,6 +28,9 @@ struct PopoverView: View {
             if model.showsFileRows {
                 FileRowList(files: model.files, done: model.step == .done)
             }
+
+            Divider()
+            footer
         }
         .frame(width: 372)
     }
@@ -36,7 +39,6 @@ struct PopoverView: View {
         HStack(spacing: 6) {
             Text("Unlatch")
                 .font(.system(size: 13, weight: .semibold))
-            quitButton
             Spacer()
             Text(model.headerText)
                 .font(.system(size: 11))
@@ -47,21 +49,45 @@ struct PopoverView: View {
         .padding(.bottom, 9)
     }
 
-    /// Unobtrusive quit affordance next to the title, reachable from every
+    /// Single line with a fixed height so it never clips under the hosting
+    /// controller's preferred-content-size sizing.
+    private var footer: some View {
+        HStack(spacing: 6) {
+            Text(versionLabel(
+                version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+            quitButton
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 26)
+    }
+
+    /// Unobtrusive quit affordance in the footer, reachable from every
     /// step. `.accessory` apps have no Dock icon and no application menu, so
     /// this is the only way to quit besides Force Quit.
     private var quitButton: some View {
         Button {
             NSApplication.shared.terminate(nil)
         } label: {
-            Image(systemName: "power")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(quitHovering ? .primary : .secondary)
-                .frame(width: 20, height: 20)
-                .background(
-                    Circle().fill(Color.primary.opacity(quitHovering ? 0.08 : 0))
-                )
-                .contentShape(Rectangle())
+            HStack(spacing: 4) {
+                Text("Quit")
+                    .font(.system(size: 11))
+                Image(systemName: "power")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(quitHovering ? .primary : .secondary)
+            .padding(.horizontal, 6)
+            .frame(height: 20)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.primary.opacity(quitHovering ? 0.08 : 0))
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .keyboardShortcut("q", modifiers: .command)

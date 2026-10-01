@@ -269,6 +269,18 @@ func destinationHint(
     }
 }
 
+/// Footer left side: "Version 1.0.0 (42)". Takes the raw Info.plist values
+/// (`CFBundleShortVersionString`, `CFBundleVersion`) and passes them through
+/// untouched, so `git describe` forms like `1.0.0-3-gabc1234-dirty` survive.
+/// Missing or empty values (no Info.plist under `swift run`) read as "dev".
+func versionLabel(version: String?, build: String?) -> String {
+    let version = version.flatMap { $0.isEmpty ? nil : $0 }
+    let build = build.flatMap { $0.isEmpty ? nil : $0 }
+    let base = "Version " + (version ?? "dev")
+    guard let build else { return base }
+    return base + " (\(build))"
+}
+
 // MARK: - File rows
 
 /// Semantic badge tone; the view maps tones to the design's exact colors.
