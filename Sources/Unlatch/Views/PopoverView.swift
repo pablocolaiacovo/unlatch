@@ -1,11 +1,16 @@
 import AppKit
 import SwiftUI
 
-/// The 372 pt popover panel: header, current step, and the persistent file
-/// rows section.
+/// The 372 pt popover panel: header, current step, the persistent file rows
+/// section, and a footer with the installed version and the Quit control.
 struct PopoverView: View {
     @Bindable var model: AppModel
     @State private var quitHovering = false
+
+    /// The bundle's version never changes while running, so build it once.
+    private static let versionText = versionLabel(
+        version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+        build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,9 +58,7 @@ struct PopoverView: View {
     /// controller's preferred-content-size sizing.
     private var footer: some View {
         HStack(spacing: 6) {
-            Text(versionLabel(
-                version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-                build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String))
+            Text(Self.versionText)
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
