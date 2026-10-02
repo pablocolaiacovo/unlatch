@@ -5,6 +5,17 @@ Click the lock icon, choose one or more PDFs, and it tells you which ones need a
 are only owner-restricted (so they open freely but PDFKit and other readers honor a printing or
 copying lock), and which are unreadable — then writes unlocked copies wherever you choose.
 
+Unlatch is local and private. Your files never leave the Mac and nothing is uploaded: there is no
+server, no account, and no network access involved in classifying or unlocking a PDF.
+
+## Why this exists
+
+You have a PDF you own, and it won't let you copy text out of it, print it, or merge it with another
+file. The usual ways around that are both bad: upload a private document (a contract, a tax form, a
+medical record) to an online unlocker and trust a stranger's server with it, or pay for a desktop app
+to do something that is a few lines of PDFKit. Unlatch does it on your Mac, for free, and tells you
+what kind of lock it found before it touches anything.
+
 The app is built on **`UnlatchCore`**, a small Swift package that does the underlying work and can
 also be used on its own as a library. See [Using UnlatchCore as a library](#using-unlatchcore-as-a-library)
 below.
@@ -70,8 +81,30 @@ To produce a standalone, ad-hoc signed `Unlatch.app` you can drag into `/Applica
 someone else, use `Scripts/package-app.sh`. A locally built app isn't quarantined, so it launches
 without the first-launch steps above.
 
-> `Scripts/package-app.sh` is being added in [#7](https://github.com/pablocolaiacovo/unlatch/issues/7);
-> once it lands, run it from the repository root and see its `--help` output for options.
+Run it from the repository root (it also locates the root itself, so any directory works):
+
+```sh
+Scripts/package-app.sh
+```
+
+It builds a universal (arm64 + x86_64) release binary, assembles `dist/Unlatch.app`, ad-hoc signs
+it, and writes `dist/Unlatch.zip`. The version comes from the latest tag in the repository history (an
+untagged tree gets a `0.0.0-<shortsha>` dev version). The script takes no command-line arguments, so
+it has no `--help` flag; its usage notes and its one option, the `SIGN_IDENTITY` environment
+variable, are documented in the comment block at the top of
+[`Scripts/package-app.sh`](Scripts/package-app.sh).
+
+## FAQ
+
+**Is this legal?**
+Use Unlatch on documents you own or have the right to access. This is not legal advice; if you are
+unsure whether you may remove a restriction from a particular file, check with whoever has the
+authority to say.
+
+**Does it crack passwords?**
+No. Owner-restricted files open without a password, so Unlatch only has to write a copy without the
+restrictions. Password-protected files need the real password, which you type in; Unlatch does not
+guess or brute-force anything.
 
 ## Using UnlatchCore as a library
 
