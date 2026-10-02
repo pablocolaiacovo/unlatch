@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        The sections below match the structure every issue in this repo uses. A proposal that
-        fills them in can be handed to an implementer directly.
+        Thanks for the suggestion. Filling in the sections below makes it clear what the change is
+        for and when it is done, so it can be scheduled and picked up without a round trip.
 
   - type: dropdown
     id: area
@@ -63,7 +63,7 @@ body:
     attributes:
       label: Notes for implementer
       description: >
-        Optional. Real gotchas only, naming actual files and types — for example that
-        MenuBarExtra does not expose its NSStatusItem. Leave blank if there is nothing to add.
+        Optional. Anything you already know about how to build it, such as a relevant file, type,
+        or macOS API limitation. Leave blank if there is nothing to add.
     validations:
       required: false

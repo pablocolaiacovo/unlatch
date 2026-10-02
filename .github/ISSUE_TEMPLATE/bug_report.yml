@@ -5,8 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report. The sections below match the structure every issue in this
-        repo uses, so a maintainer or an agent can pick it up without a round trip.
+        Thanks for the report. Filling in the sections below lets someone start on a fix without
+        coming back to you with questions. Security vulnerabilities do not belong here: report them
+        privately as described in [SECURITY.md](https://github.com/pablocolaiacovo/unlatch/blob/main/SECURITY.md).
 
   - type: dropdown
     id: area
@@ -77,7 +78,9 @@ body:
     attributes:
       label: About the PDF, if one is involved
       description: >
-        Do not attach a confidential document. What matters is how it is protected (open password,
-        permissions only, neither) and what produced it (Acrobat, Word, a scanner, another tool).
+        Do not attach a real document, even one you think is harmless. Describe how it is protected
+        (open password, permissions only, neither) and what produced it (Acrobat, Word, a scanner,
+        another tool). If you can, reproduce the bug with a synthetic PDF instead; see
+        [Reproducing with a synthetic PDF](https://github.com/pablocolaiacovo/unlatch/blob/main/CONTRIBUTING.md#reproducing-with-a-synthetic-pdf).
     validations:
       required: false

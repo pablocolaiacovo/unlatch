@@ -223,8 +223,13 @@ CoreGraphics and PDFKit author the base documents; qpdf applies all the encrypti
 
 ## Contributing
 
-See [RELEASING.md](RELEASING.md) for how work lands on `main`, how versions are decided, and how a
-release is cut.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test, file a
+good issue, and open a pull request, and the [Code of Conduct](CODE_OF_CONDUCT.md) for how we work
+together. To report a security vulnerability, follow [SECURITY.md](SECURITY.md) instead of opening a
+public issue.
+
+The maintainer-side process, covering how work lands on `main`, how versions are decided, and how a
+release is cut, is in [RELEASING.md](RELEASING.md).
 
 ## License
 
