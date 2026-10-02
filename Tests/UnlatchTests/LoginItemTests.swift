@@ -1,9 +1,23 @@
 import Foundation
+import Observation
+import ServiceManagement
 import Testing
 @testable import Unlatch
 
 // Launch at Login (issue #16): the pure status-to-UI mapping, and AppModel
 // driving a fake login item so no test touches the real SMAppService.
+
+// MARK: - SMAppService.Status mapping
+
+@Test func smAppServiceStatusMapsToLoginItemStatus() {
+    #expect(LoginItemStatus(.enabled) == .enabled)
+    #expect(LoginItemStatus(.notRegistered) == .disabled)
+    #expect(LoginItemStatus(.requiresApproval) == .requiresApproval)
+}
+
+@Test func neverRegisteredBundleIsDisabledNotUnavailable() {
+    #expect(LoginItemStatus(.notFound) == .disabled)
+}
 
 // MARK: - loginItemControl
 
@@ -113,4 +127,42 @@ private final class FakeLoginItem: LoginItemService {
     #expect(model.loginItem.isOn == true)
     model.refreshLoginItem()
     #expect(model.loginItem.isOn == false)
+}
+
+/// `onChange` is `@Sendable`; the observation fires synchronously on the main
+/// actor here, so an unchecked box is safe.
+private final class FiredFlag: @unchecked Sendable {
+    var value = false
+}
+
+/// True when `body` makes an observer of `loginItemRevision` fire.
+@MainActor private func revisionChanges(_ model: AppModel, during body: () -> Void) -> Bool {
+    let fired = FiredFlag()
+    withObservationTracking {
+        _ = model.loginItemRevision
+    } onChange: {
+        fired.value = true
+    }
+    body()
+    return fired.value
+}
+
+@MainActor @Test func failedRegisterStillNotifiesObservers() {
+    let fake = FakeLoginItem(status: .disabled)
+    fake.fails = true
+    let model = AppModel(loginItemService: fake)
+    #expect(revisionChanges(model) { model.setLaunchAtLogin(true) })
+    #expect(model.loginItemStatus == .disabled)
+}
+
+@MainActor @Test func openingSystemSettingsStillNotifiesObservers() {
+    let fake = FakeLoginItem(status: .requiresApproval)
+    let model = AppModel(loginItemService: fake)
+    #expect(revisionChanges(model) { model.setLaunchAtLogin(true) })
+    #expect(model.loginItemStatus == .requiresApproval)
+}
+
+@MainActor @Test func refreshWithAnUnchangedStatusNotifiesObservers() {
+    let model = AppModel(loginItemService: FakeLoginItem(status: .enabled))
+    #expect(revisionChanges(model) { model.refreshLoginItem() })
 }

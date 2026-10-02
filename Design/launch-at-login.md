@@ -24,9 +24,12 @@ every toggle.
 | `SMAppService.Status` | `LoginItemStatus` | Checkbox | Checking it | Unchecking it |
 | --- | --- | --- | --- | --- |
 | `.enabled` | `.enabled` | on | — | `unregister()` |
-| `.notRegistered` | `.disabled` | off | `register()` | — |
+| `.notRegistered`, `.notFound` | `.disabled` | off | `register()` | — |
 | `.requiresApproval` | `.requiresApproval` | off, help text points to Login Items | opens Login Items | `unregister()` |
-| `.notFound`, unknown, or no bundle identifier | `.unavailable` | off, disabled | — | — |
+| unknown, or no bundle identifier | `.unavailable` | off, disabled | — | — |
+
+`.notFound` is what a bundle that has never been registered reports; `register()` works from
+there, including for an ad-hoc signed bundle, so it is not treated as unavailable.
 
 `.requiresApproval` means the item is registered but switched off in System Settings. The app cannot
 turn it back on; only the user can, so checking the box opens Login Items with
@@ -34,7 +37,11 @@ turn it back on; only the user can, so checking the box opens Login Items with
 "off" because Unlatch will not open at login in that state.
 
 **Failures snap back.** `register()` and `unregister()` errors are logged with `NSLog`, and the
-status is re-read, so the checkbox always ends on what the system reports.
+status is re-read, so the checkbox always ends on what the system reports. The status is often
+unchanged (a failed `register()`, or opening Login Items without approving), and `@Observable` does
+not notify on an equal assignment, so `AppModel.loginItemRevision` is bumped on every refresh and the
+toggle is keyed on it with `.id`. That recreates the checkbox's NSButton, which has already flipped
+itself, from the system state.
 
 **`swift run` is `.unavailable`.** `SMAppService.mainApp` needs a real bundle. Without a bundle
 identifier the checkbox is disabled with a help tooltip, instead of offering something that fails.
@@ -54,8 +61,10 @@ from `dist/`, and not translocated).
 1. Check "Open at Login". macOS shows its "Login Item Added" notification, and Unlatch is listed in
    System Settings > General > Login Items.
 2. Log out and log back in. The lock icon appears in the menu bar without launching Unlatch by hand.
-3. Switch Unlatch off in Login Items, then open the popover. The checkbox is unchecked. Checking it
-   opens Login Items.
+3. Switch Unlatch off in Login Items (or remove it), then open the popover. The checkbox is
+   unchecked. Checking it either opens Login Items (`.requiresApproval`) or registers again
+   (`.notRegistered`); both are correct. If it opens Login Items and you leave Unlatch off, the
+   checkbox must snap back to unchecked.
 4. Uncheck "Open at Login". Unlatch disappears from Login Items, and after logging out and in it does
    not start.
 5. Under `swift run`, the checkbox is disabled.

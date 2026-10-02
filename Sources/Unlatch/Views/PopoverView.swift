@@ -73,7 +73,9 @@ struct PopoverView: View {
     }
 
     /// Shows the system's login item state, not a stored preference; see
-    /// `loginItemControl(for:)`.
+    /// `loginItemControl(for:)`. The checkbox is an NSButton that flips itself
+    /// on click, so `.id` on the revision recreates it after every attempt and
+    /// refresh, even when the status did not change.
     private var loginItemToggle: some View {
         let control = model.loginItem
         return Toggle(
@@ -86,6 +88,7 @@ struct PopoverView: View {
         .foregroundStyle(.secondary)
         .disabled(!control.isEnabled)
         .help(control.help)
+        .id(model.loginItemRevision)
     }
 
     /// Unobtrusive quit affordance in the footer, reachable from every

@@ -36,6 +36,12 @@ final class AppModel {
     /// Read from the system at launch and every time the popover opens,
     /// since the user can change it in System Settings at any time.
     private(set) var loginItemStatus: LoginItemStatus = .unavailable
+    /// Bumped on every refresh. `@Observable` skips notifying when an
+    /// Equatable property is assigned an equal value, so an unchanged
+    /// `loginItemStatus` would leave the checkbox showing what the user just
+    /// clicked. The view keys the toggle on this to redraw from the system
+    /// state.
+    private(set) var loginItemRevision = 0
 
     init(loginItemService: any LoginItemService = SystemLoginItem()) {
         self.loginItemService = loginItemService
@@ -211,13 +217,14 @@ final class AppModel {
 
     func refreshLoginItem() {
         loginItemStatus = loginItemService.status
+        loginItemRevision += 1
     }
 
     /// Whatever happens, the checkbox ends up showing the status the system
     /// reports afterwards, so a failed register or unregister snaps it back.
-    /// `refreshLoginItem()` assigns even when the status is unchanged (for
-    /// example after opening System Settings), which still invalidates the
-    /// view, so a checkbox the user just clicked redraws to the real state.
+    /// The status often ends up unchanged (a failed register, or opening
+    /// System Settings), so `refreshLoginItem()` bumps `loginItemRevision` to
+    /// make the view redraw the checkbox the user just clicked.
     func setLaunchAtLogin(_ on: Bool) {
         do {
             switch loginItemAction(from: loginItemStatus, turningOn: on) {

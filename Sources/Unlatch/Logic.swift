@@ -341,13 +341,15 @@ func statusSymbolName(hasLockedWork: Bool) -> String {
 enum LoginItemStatus: Equatable, Sendable {
     /// Registered and allowed: Unlatch opens at login.
     case enabled
-    /// Not registered.
+    /// Not registered, including a bundle that has never been registered
+    /// (`SMAppService.Status.notFound`). Checking the box registers it.
     case disabled
     /// Registered, but switched off in System Settings > General > Login
     /// Items. Unlatch does not open at login, and only the user can allow it
     /// again from there.
     case requiresApproval
-    /// No login item is possible, e.g. under `swift run` with no app bundle.
+    /// No login item is possible: no bundle identifier (e.g. `swift run`), or
+    /// a status this build does not know.
     case unavailable
 }
 

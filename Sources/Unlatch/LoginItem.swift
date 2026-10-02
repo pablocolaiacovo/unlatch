@@ -15,7 +15,8 @@ protocol LoginItemService {
 
 /// `SMAppService.mainApp`: registers the running app bundle itself, with no
 /// helper app or launch agent plist. Needs a real bundle with a bundle
-/// identifier; a bare SwiftPM binary reports `.unavailable`.
+/// identifier; a bare SwiftPM binary (no bundle identifier) reports
+/// `.unavailable`.
 @MainActor
 struct SystemLoginItem: LoginItemService {
     var status: LoginItemStatus {
@@ -42,7 +43,9 @@ extension LoginItemStatus {
         case .enabled: self = .enabled
         case .notRegistered: self = .disabled
         case .requiresApproval: self = .requiresApproval
-        case .notFound: self = .unavailable
+        // A bundle that has never been registered reports `.notFound`, and
+        // `register()` is what turns it into `.enabled`.
+        case .notFound: self = .disabled
         @unknown default: self = .unavailable
         }
     }
