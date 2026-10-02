@@ -92,6 +92,55 @@ jobs:
             exit 1
           fi
 
+      # Sparkle bundle checks (issue #13, Design/sparkle-updates.md section
+      # 2.8). Conditional on the framework being embedded, which package-app.sh
+      # does only when the binary links it, so this passes on a build without
+      # Sparkle. `--deep --strict` alone would accept Sparkle's own vendor
+      # signatures (adhoc + runtime), so each nested item is checked on its own:
+      # ad-hoc, no Authority, and no `runtime` flag, which would turn on library
+      # validation and stop dyld from loading the framework. Issue #8 flips the
+      # Authority and runtime assertions here.
+      - name: Verify Sparkle bundle
+        run: |
+          set -euo pipefail
+          APP=dist/Unlatch.app
+          FW="$APP/Contents/Frameworks/Sparkle.framework"
+          if [[ ! -d "$FW" ]]; then
+            echo "Sparkle.framework not embedded; skipping Sparkle checks"
+            exit 0
+          fi
+          if [[ -e "$FW/XPCServices" || -e "$FW/Versions/B/XPCServices" ]]; then
+            echo "::error::Sparkle XPCServices must be removed from the bundle" >&2
+            exit 1
+          fi
+          for ITEM in "$FW" "$FW/Versions/B/Autoupdate" "$FW/Versions/B/Updater.app"; do
+            echo "--- $ITEM"
+            codesign --verify --strict "$ITEM"
+            DV="$(codesign -dv "$ITEM" 2>&1)"
+            echo "$DV"
+            if ! grep -q '^Signature=adhoc$' <<<"$DV"; then
+              echo "::error::$ITEM is not ad-hoc signed" >&2
+              exit 1
+            fi
+            if grep -q '^Authority=' <<<"$DV"; then
+              echo "::error::$ITEM has an Authority= line on an ad-hoc build" >&2
+              exit 1
+            fi
+            if grep -E '^CodeDirectory .*flags=' <<<"$DV" | grep -q 'runtime'; then
+              echo "::error::$ITEM carries the hardened runtime flag; a vendor signature was not replaced" >&2
+              exit 1
+            fi
+          done
+          PLIST="$APP/Contents/Info.plist"
+          FEED="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$PLIST")"
+          KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$PLIST")"
+          [[ "$FEED" == https://* ]] || { echo "::error::SUFeedURL is not an https URL: '$FEED'" >&2; exit 1; }
+          [[ -n "$KEY" ]] || { echo "::error::SUPublicEDKey is empty" >&2; exit 1; }
+          if /usr/libexec/PlistBuddy -c 'Print :SUEnableInstallerLauncherService' "$PLIST" >/dev/null 2>&1; then
+            echo "::error::SUEnableInstallerLauncherService must not be set (app is not sandboxed)" >&2
+            exit 1
+          fi
+
       # Only meaningful for a real tag push: workflow_dispatch runs against
       # a branch, which has no tag, so package-app.sh falls back to its
       # 0.0.0-<sha> dev version and there is nothing to compare it against.
@@ -109,7 +158,7 @@ jobs:
           fi
 
       # dist/Unlatch.zip is what package-app.sh produced with `ditto -c -k
-      # --keepParent`. Confirm the signature actually survives an unzip
+      # --sequesterRsrc --keepParent`. Confirm the signature actually survives an unzip
       # round-trip - the same check anyone downloading the release will
       # implicitly rely on - rather than only trusting the pre-zip bundle.
       - name: Verify zip round-trip
@@ -118,6 +167,25 @@ jobs:
           ROUNDTRIP_DIR="$(mktemp -d)"
           ditto -x -k dist/Unlatch.zip "$ROUNDTRIP_DIR"
           codesign --verify --deep --strict --verbose=2 "$ROUNDTRIP_DIR/Unlatch.app"
+
+          # Launch check on the round-tripped copy, which is what users get.
+          # A missing or unloadable embedded framework makes dyld abort at
+          # once ("Library not loaded: @rpath/Sparkle.framework/..."), so a
+          # process still alive after 5 s means the app loaded. Sparkle makes
+          # no network request on a first launch. If hosted runners cannot
+          # sustain a GUI process, replace this with a static check (otool -l
+          # shows the @executable_path/../Frameworks rpath and
+          # Versions/B/Sparkle exists) and record the reason here.
+          "$ROUNDTRIP_DIR/Unlatch.app/Contents/MacOS/Unlatch" &
+          APP_PID=$!
+          sleep 5
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            wait "$APP_PID" || echo "exit status: $?"
+            echo "::error::Unlatch exited within 5 seconds of launch (dyld failure?)" >&2
+            exit 1
+          fi
+          kill "$APP_PID"
+          wait "$APP_PID" 2>/dev/null || true
           rm -rf "$ROUNDTRIP_DIR"
 
       - name: Upload Unlatch.zip
