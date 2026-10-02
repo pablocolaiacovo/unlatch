@@ -36,7 +36,9 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement, the repository maintainer [@pablocolaiacovo](https://github.com/pablocolaiacovo), privately through GitHub: use **Report content** on the issue, pull request, or comment concerned and choose to report it to the repository maintainers. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to GitHub: open the **...** menu on the issue, pull request, or comment concerned, choose **Report content**, and report it to GitHub Support. To report an account rather than a single post, use **Block or report** on that user's profile. These reports are reviewed by GitHub staff under the [GitHub Community Guidelines](https://docs.github.com/en/site-policy/github-terms/github-community-guidelines). This repository is owned by a personal account, so GitHub does not pass the reports on to the maintainer, and there is currently no private channel for reaching the maintainer about conduct.
+
+The repository maintainer, [@pablocolaiacovo](https://github.com/pablocolaiacovo), is the community leader responsible for enforcement, and will act under the guidelines below on unacceptable behavior they see in the repository's issues, pull requests, and comments.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
