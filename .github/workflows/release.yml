@@ -121,7 +121,7 @@ jobs:
           rm -rf "$ROUNDTRIP_DIR"
 
       - name: Upload Unlatch.zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unlatch-zip
           path: dist/Unlatch.zip
@@ -138,13 +138,25 @@ jobs:
     # and calling gh - so this runs on a Linux runner rather than the
     # macOS/Xcode runner build-and-package needs, which costs 10x the
     # Actions minutes.
-    runs-on: ubuntu-latest
+    #
+    # Pinned to ubuntu-24.04 rather than ubuntu-latest (issue #37):
+    # ubuntu-latest migrates to Ubuntu 26.04 in a rollout from 2026-10-19 to
+    # about 2026-11-19, so a release in that window could land on either
+    # image, and this job is the irreversible last step of a release.
+    # Nothing here needs a newer image
+    # (it only downloads an artifact and runs the preinstalled gh), so the
+    # pin trades nothing for protection against an image change landing on
+    # release day. Revisit before ubuntu-24.04 itself is deprecated.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      # upload-artifact@v7 and download-artifact@v8 are bumped together and
+      # keep the default zipped archive, so v8 still unzips it and the file
+      # lands at dist/Unlatch.zip. v8 fails on a digest mismatch by default.
       - name: Download Unlatch.zip
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: unlatch-zip
           path: dist
