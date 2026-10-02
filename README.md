@@ -8,6 +8,8 @@ copying lock), and which are unreadable — then writes unlocked copies wherever
 Unlatch is local and private. Your files never leave the Mac and nothing is uploaded: there is no
 server, no account, and no network access involved in classifying or unlocking a PDF.
 
+![Unlatch classifying three PDFs](docs/screenshot.png)
+
 ## Why this exists
 
 You have a PDF you own, and it won't let you copy text out of it, print it, or merge it with another
