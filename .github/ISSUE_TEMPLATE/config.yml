@@ -5,3 +5,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/pablocolaiacovo/unlatch/security/advisories/new
     about: Report a vulnerability privately. Please do not open a public issue.
+  - name: Contributing guidelines
+    url: https://github.com/pablocolaiacovo/unlatch/blob/main/CONTRIBUTING.md
+    about: How to build, test, reproduce bugs with a synthetic PDF, and open a pull request.
