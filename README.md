@@ -74,6 +74,9 @@ Unlatch classifies each file — not encrypted, password protected, owner-restri
 prompts for a password only where one is actually needed, and lets you pick a destination for the
 results: an unlocked copy for password-protected files, an unchanged copy for the rest.
 
+To have Unlatch start with your Mac, check **Open at Login** at the bottom of the popover. It
+follows System Settings > General > Login Items, so turning Unlatch off there unchecks it too.
+
 ## Building from source
 
 You don't need an Apple Developer account to build or run Unlatch locally.

@@ -59,6 +59,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// status item click or `AppModel.onLoad`.
     func presentAndFocus() {
         if !popover.isShown, let button = statusItem.button {
+            model.refreshLoginItem()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
         focusPopover()

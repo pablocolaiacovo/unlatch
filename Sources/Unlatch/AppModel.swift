@@ -32,6 +32,16 @@ final class AppModel {
     var savedURLs: [URL] = []
     var savedTo = ""
 
+    private let loginItemService: any LoginItemService
+    /// Read from the system at launch and every time the popover opens,
+    /// since the user can change it in System Settings at any time.
+    private(set) var loginItemStatus: LoginItemStatus = .unavailable
+
+    init(loginItemService: any LoginItemService = SystemLoginItem()) {
+        self.loginItemService = loginItemService
+        loginItemStatus = loginItemService.status
+    }
+
     var desktopFolder: URL {
         FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
@@ -58,6 +68,7 @@ final class AppModel {
     var headerText: String { headerNote(fileCount: files.count) }
     /// Sample file for the destination hints: the first usable one.
     var sampleFile: URL? { usableFiles.first?.url }
+    var loginItem: LoginItemControl { loginItemControl(for: loginItemStatus) }
 
     // MARK: Loading
 
@@ -194,6 +205,31 @@ final class AppModel {
             savedTo = doneSummary(destinations: savedURLs, option: option)
             step = .done
         }
+    }
+
+    // MARK: Launch at Login
+
+    func refreshLoginItem() {
+        loginItemStatus = loginItemService.status
+    }
+
+    /// Whatever happens, the checkbox ends up showing the status the system
+    /// reports afterwards, so a failed register or unregister snaps it back.
+    /// `refreshLoginItem()` assigns even when the status is unchanged (for
+    /// example after opening System Settings), which still invalidates the
+    /// view, so a checkbox the user just clicked redraws to the real state.
+    func setLaunchAtLogin(_ on: Bool) {
+        do {
+            switch loginItemAction(from: loginItemStatus, turningOn: on) {
+            case .register: try loginItemService.register()
+            case .unregister: try loginItemService.unregister()
+            case .openSystemSettings: loginItemService.openSystemSettings()
+            case .noChange: break
+            }
+        } catch {
+            NSLog("Unlatch: changing the login item failed: %@", String(describing: error))
+        }
+        refreshLoginItem()
     }
 
     // MARK: Done

@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// The 372 pt popover panel: header, current step, the persistent file rows
-/// section, and a footer with the installed version and the Quit control.
+/// section, and a footer with the installed version, the Open at Login
+/// checkbox, and the Quit control.
 struct PopoverView: View {
     @Bindable var model: AppModel
     @State private var quitHovering = false
@@ -64,10 +65,27 @@ struct PopoverView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
+            loginItemToggle
             quitButton
         }
         .padding(.horizontal, 14)
         .frame(height: 26)
+    }
+
+    /// Shows the system's login item state, not a stored preference; see
+    /// `loginItemControl(for:)`.
+    private var loginItemToggle: some View {
+        let control = model.loginItem
+        return Toggle(
+            "Open at Login",
+            isOn: Binding(get: { model.loginItem.isOn }, set: { model.setLaunchAtLogin($0) })
+        )
+        .toggleStyle(.checkbox)
+        .controlSize(.small)
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .disabled(!control.isEnabled)
+        .help(control.help)
     }
 
     /// Unobtrusive quit affordance in the footer, reachable from every
