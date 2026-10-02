@@ -140,8 +140,10 @@ jobs:
     # Actions minutes.
     #
     # Pinned to ubuntu-24.04 rather than ubuntu-latest (issue #37):
-    # ubuntu-latest moves to Ubuntu 26 on 2026-10-19, and this job is the
-    # irreversible last step of a release. Nothing here needs a newer image
+    # ubuntu-latest migrates to Ubuntu 26.04 in a rollout from 2026-10-19 to
+    # about 2026-11-19, so a release in that window could land on either
+    # image, and this job is the irreversible last step of a release.
+    # Nothing here needs a newer image
     # (it only downloads an artifact and runs the preinstalled gh), so the
     # pin trades nothing for protection against an image change landing on
     # release day. Revisit before ubuntu-24.04 itself is deprecated.
