@@ -1,9 +1,26 @@
 # Unlatch
 
-Unlatch is a macOS menu bar app for inspecting how a PDF is protected and saving a decrypted copy.
-Click the lock icon, choose one or more PDFs, and it tells you which ones need a password, which
-are only owner-restricted (so they open freely but PDFKit and other readers honor a printing or
-copying lock), and which are unreadable — then writes unlocked copies wherever you choose.
+Unlatch is a macOS menu bar app for inspecting how a PDF is protected and removing its open
+password. Click the lock icon, choose one or more PDFs, and it tells you which ones need a password,
+which are only owner-restricted (so they open freely but PDFKit and other readers honor a printing
+or copying lock), and which are unreadable. Password-protected files get an unlocked copy, with the
+open password removed, wherever you choose. Files that already open without a password
+(owner-restricted or not encrypted) are copied as-is, restrictions intact.
+
+Unlatch is local and private. Your files never leave the Mac and nothing is uploaded: there is no
+server, no account, and no network access involved in classifying or unlocking a PDF.
+
+![Unlatch unlocking a password-protected PDF, step by step](docs/demo.gif)
+
+![Unlatch classifying three PDFs as password protected, owner-restricted, and unreadable](docs/screenshot.png)
+
+## Why this exists
+
+You have a PDF you own, and it asks for its password every time you open it, or you need to share or
+archive it without the password. The usual ways around that are both bad: upload a private document
+(a contract, a tax form, a medical record) to an online unlocker and trust a stranger's server with
+it, or pay for a desktop app to do something that is a few lines of PDFKit. Unlatch does it on your
+Mac, for free, and tells you what kind of lock it found before it touches anything.
 
 The app is built on **`UnlatchCore`**, a small Swift package that does the underlying work and can
 also be used on its own as a library. See [Using UnlatchCore as a library](#using-unlatchcore-as-a-library)
@@ -55,7 +72,7 @@ be opened."** That's not a corrupt download — the `xattr` command above resolv
 Click the lock icon in the menu bar to open the popover, then choose PDFs via the file picker.
 Unlatch classifies each file — not encrypted, password protected, owner-restricted, or unreadable —
 prompts for a password only where one is actually needed, and lets you pick a destination for the
-unlocked copies.
+results: an unlocked copy for password-protected files, an unchanged copy for the rest.
 
 ## Building from source
 
@@ -70,8 +87,31 @@ To produce a standalone, ad-hoc signed `Unlatch.app` you can drag into `/Applica
 someone else, use `Scripts/package-app.sh`. A locally built app isn't quarantined, so it launches
 without the first-launch steps above.
 
-> `Scripts/package-app.sh` is being added in [#7](https://github.com/pablocolaiacovo/unlatch/issues/7);
-> once it lands, run it from the repository root and see its `--help` output for options.
+Run it from the repository root (it also locates the root itself, so any directory works):
+
+```sh
+Scripts/package-app.sh
+```
+
+It builds a universal (arm64 + x86_64) release binary, assembles `dist/Unlatch.app`, ad-hoc signs
+it, and writes `dist/Unlatch.zip`. The version comes from the latest tag in the repository history (an
+untagged tree gets a `0.0.0-<shortsha>` dev version). The script takes no command-line arguments, so
+it has no `--help` flag; its usage notes and its one option, the `SIGN_IDENTITY` environment
+variable, are documented in the comment block at the top of
+[`Scripts/package-app.sh`](Scripts/package-app.sh).
+
+## FAQ
+
+**Is this legal?**
+Use Unlatch on documents you own or have the right to access. This is not legal advice; if you are
+unsure whether you may remove a restriction from a particular file, check with whoever has the
+authority to say.
+
+**Does it crack passwords?**
+No. Password-protected files need the real password, which you type in; Unlatch does not guess or
+brute-force anything. Owner-restricted files open without a password, so Unlatch detects and reports
+them and copies them as-is. It does not remove their printing or copying restrictions (`UnlatchCore`
+as a library can, see [Unlocking](#unlocking)).
 
 ## Using UnlatchCore as a library
 
