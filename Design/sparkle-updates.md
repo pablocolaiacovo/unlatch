@@ -974,3 +974,9 @@ This depends on T4.
    password manager the maintainer already uses for credentials, as a secure note titled
    "Unlatch Sparkle EdDSA private key (account: unlatch)". Never in the repository, and never in
    iCloud Drive as a plain file.
+
+**Resolved by the maintainer on 2026-10-09:** questions 1 to 3 are accepted as recommended.
+Automatic install stays off (`SUAllowsAutomaticUpdates = false`), `v1.1.0-beta.1` and
+`v1.1.0-beta.2` are approved as mid-milestone betas for the upgrade test (M5), and the App
+Management fallback stands: ship with a documented one-time grant, or make #8 a prerequisite if the
+install fails outright. Question 4 is still open.
