@@ -93,9 +93,9 @@ jobs:
           fi
 
       # Sparkle bundle checks (issue #13, Design/sparkle-updates.md section
-      # 2.8). Conditional on the framework being embedded, which package-app.sh
-      # does only when the binary links it, so this passes on a build without
-      # Sparkle. `--deep --strict` alone would accept Sparkle's own vendor
+      # 2.8). Conditional on the binary linking Sparkle (package-app.sh embeds the
+      # framework exactly then), so this passes on a build without Sparkle but
+      # fails if the binary links it and the framework is missing. `--deep --strict` alone would accept Sparkle's own vendor
       # signatures (adhoc + runtime), so each nested item is checked on its own:
       # ad-hoc, no Authority, and no `runtime` flag, which would turn on library
       # validation and stop dyld from loading the framework. Issue #8 flips the
@@ -105,11 +105,19 @@ jobs:
           set -euo pipefail
           APP=dist/Unlatch.app
           FW="$APP/Contents/Frameworks/Sparkle.framework"
-          if [[ ! -d "$FW" ]]; then
-            echo "Sparkle.framework not embedded; skipping Sparkle checks"
+          # Skip only when the binary does not link Sparkle. Capture the output
+          # first: `otool | grep -q` under pipefail fails intermittently.
+          LINKED_LIBS="$(otool -L "$APP/Contents/MacOS/Unlatch")"
+          if ! grep -q '@rpath/Sparkle.framework/' <<<"$LINKED_LIBS"; then
+            echo "Binary does not link Sparkle; skipping Sparkle checks"
             exit 0
           fi
-          if [[ -e "$FW/XPCServices" || -e "$FW/Versions/B/XPCServices" ]]; then
+          if [[ ! -d "$FW" ]]; then
+            echo "::error::Unlatch links Sparkle.framework but it is not embedded at $FW" >&2
+            exit 1
+          fi
+          # -L as well as -e: a dangling symlink counts as present.
+          if [[ -e "$FW/XPCServices" || -L "$FW/XPCServices" || -e "$FW/Versions/B/XPCServices" || -L "$FW/Versions/B/XPCServices" ]]; then
             echo "::error::Sparkle XPCServices must be removed from the bundle" >&2
             exit 1
           fi
@@ -126,16 +134,18 @@ jobs:
               echo "::error::$ITEM has an Authority= line on an ad-hoc build" >&2
               exit 1
             fi
-            if grep -E '^CodeDirectory .*flags=' <<<"$DV" | grep -q 'runtime'; then
+            FLAGS_LINE="$(grep -E '^CodeDirectory .*flags=' <<<"$DV" || true)"
+            if grep -q 'runtime' <<<"$FLAGS_LINE"; then
               echo "::error::$ITEM carries the hardened runtime flag; a vendor signature was not replaced" >&2
               exit 1
             fi
           done
           PLIST="$APP/Contents/Info.plist"
-          FEED="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$PLIST")"
-          KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$PLIST")"
+          FEED="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$PLIST" 2>/dev/null || true)"
+          KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$PLIST" 2>/dev/null || true)"
+          [[ -n "$FEED" ]] || { echo "::error::SUFeedURL is missing from Info.plist" >&2; exit 1; }
+          [[ -n "$KEY" ]] || { echo "::error::SUPublicEDKey is missing or empty in Info.plist" >&2; exit 1; }
           [[ "$FEED" == https://* ]] || { echo "::error::SUFeedURL is not an https URL: '$FEED'" >&2; exit 1; }
-          [[ -n "$KEY" ]] || { echo "::error::SUPublicEDKey is empty" >&2; exit 1; }
           if /usr/libexec/PlistBuddy -c 'Print :SUEnableInstallerLauncherService' "$PLIST" >/dev/null 2>&1; then
             echo "::error::SUEnableInstallerLauncherService must not be set (app is not sandboxed)" >&2
             exit 1

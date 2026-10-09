@@ -158,11 +158,15 @@ CODESIGN_ARGS=(--force --sign "$SIGN_IDENTITY")
 sign() { codesign "${CODESIGN_ARGS[@]}" "$@"; }
 
 BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
-if otool -L "$BINARY" | grep -q '@rpath/Sparkle.framework/'; then
+# Capture otool output and grep the variable: `otool | grep -q` under
+# pipefail fails intermittently (grep exits early, otool dies of SIGPIPE).
+LINKED_LIBS="$(otool -L "$BINARY")"
+if grep -q '@rpath/Sparkle.framework/' <<<"$LINKED_LIBS"; then
     echo "==> Embedding Sparkle.framework"
     SPARKLE_SRC="$REPO_ROOT/.build/release/Sparkle.framework"
     [[ -d "$SPARKLE_SRC" ]] || { echo "error: binary links Sparkle but $SPARKLE_SRC is missing" >&2; exit 1; }
-    otool -l "$BINARY" | grep -q '@executable_path/../Frameworks' \
+    LOAD_COMMANDS="$(otool -l "$BINARY")"
+    grep -q '@executable_path/../Frameworks' <<<"$LOAD_COMMANDS" \
         || { echo "error: binary has no @executable_path/../Frameworks rpath (Package.swift linkerSettings)" >&2; exit 1; }
 
     FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
@@ -979,4 +983,4 @@ This depends on T4.
 Automatic install stays off (`SUAllowsAutomaticUpdates = false`), `v1.1.0-beta.1` and
 `v1.1.0-beta.2` are approved as mid-milestone betas for the upgrade test (M5), and the App
 Management fallback stands: ship with a documented one-time grant, or make #8 a prerequisite if the
-install fails outright. Question 4 is still open.
+install fails outright. Question 4: the private key is backed up in the maintainer's 1Password.
