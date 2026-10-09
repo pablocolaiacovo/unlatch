@@ -17,12 +17,21 @@
 #                   or keychain needed). Issue #8 will pass a
 #                   "Developer ID Application: Name (TEAMID)" identity here
 #                   instead to switch to real signing; at that point also add
-#                   `--options runtime` to the codesign invocation below by
-#                   hand; it is deliberately not inferred from SIGN_IDENTITY
+#                   `--options runtime --timestamp` to CODESIGN_ARGS below,
+#                   and only there: it is the one argument list used for
+#                   every signature in the bundle, nested code included. It
+#                   is deliberately not inferred from SIGN_IDENTITY
 #                   automatically. Do not add it while ad-hoc signing: under
 #                   an ad-hoc signature the hardened runtime turns on library
 #                   validation, which breaks loading embedded frameworks such
 #                   as Sparkle (#13).
+#
+# Sparkle:
+#   If the built binary links @rpath/Sparkle.framework, the script embeds
+#   .build/release/Sparkle.framework in Contents/Frameworks, removes its
+#   unused XPC services, and signs it inside-out. A binary that does not link
+#   Sparkle skips all of that, so this script works before and after the
+#   dependency lands. See Design/sparkle-updates.md, section 2.3.
 #
 # Version:
 #   CFBundleShortVersionString comes from `git describe --tags`, leading "v"
@@ -105,14 +114,55 @@ else
     echo "warning: $ICONSET not found (issue #6 not yet merged) - packaging without an app icon" >&2
 fi
 
-echo "==> Ad-hoc signing (SIGN_IDENTITY=$SIGN_IDENTITY)"
-codesign --force --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+# One argument list for every signature in the bundle, nested code included.
+# Issue #8: append `--options runtime --timestamp` HERE, and only here, when
+# SIGN_IDENTITY becomes a Developer ID identity. Never while ad-hoc: under an
+# ad-hoc signature, hardened runtime turns on library validation, and dyld
+# then refuses to load the embedded Sparkle.framework.
+CODESIGN_ARGS=(--force --sign "$SIGN_IDENTITY")
+sign() { codesign "${CODESIGN_ARGS[@]}" "$@"; }
+
+BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+# Capture otool output and grep the variable: `otool | grep -q` under
+# pipefail fails intermittently (grep exits early, otool dies of SIGPIPE).
+LINKED_LIBS="$(otool -L "$BINARY")"
+if grep -q '@rpath/Sparkle.framework/' <<<"$LINKED_LIBS"; then
+    echo "==> Embedding Sparkle.framework"
+    SPARKLE_SRC="$REPO_ROOT/.build/release/Sparkle.framework"
+    [[ -d "$SPARKLE_SRC" ]] || { echo "error: binary links Sparkle but $SPARKLE_SRC is missing" >&2; exit 1; }
+    LOAD_COMMANDS="$(otool -l "$BINARY")"
+    grep -q '@executable_path/../Frameworks' <<<"$LOAD_COMMANDS" \
+        || { echo "error: binary has no @executable_path/../Frameworks rpath (Package.swift linkerSettings)" >&2; exit 1; }
+
+    FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+    mkdir -p "$APP_BUNDLE/Contents/Frameworks"
+    ditto "$SPARKLE_SRC" "$FW"                       # ditto, not cp: keeps the Versions/ symlinks
+    [[ -d "$FW/Versions/B" ]] || { echo "error: Sparkle layout changed (no Versions/B); revisit #13's design" >&2; exit 1; }
+    # One -verify_arch call per architecture: this lipo rejects several at once.
+    for ARCH in arm64 x86_64; do
+        lipo "$FW/Versions/B/Sparkle" -verify_arch "$ARCH" \
+            || { echo "error: embedded Sparkle is missing the $ARCH slice" >&2; exit 1; }
+    done
+
+    # Not sandboxed: Sparkle's XPC services are unused. Sparkle's sandboxing
+    # guide allows removing them. Remove the versioned directory AND the
+    # top-level symlink; a dangling symlink fails --strict verification.
+    rm -rf "$FW/Versions/B/XPCServices" "$FW/XPCServices"
+
+    echo "==> Signing Sparkle inside-out (SIGN_IDENTITY=$SIGN_IDENTITY)"
+    sign "$FW/Versions/B/Autoupdate"
+    sign "$FW/Versions/B/Updater.app"
+    sign "$FW"
+fi
+
+echo "==> Signing app (SIGN_IDENTITY=$SIGN_IDENTITY)"
+sign "$APP_BUNDLE"
 
 echo "==> Verifying signature"
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
 echo "==> Zipping"
-ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
 echo "==> Done"
 echo "    $APP_BUNDLE"
