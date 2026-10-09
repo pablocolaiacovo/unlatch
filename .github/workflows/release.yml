@@ -194,7 +194,7 @@ jobs:
             echo "::error::Unlatch exited within 5 seconds of launch (dyld failure?)" >&2
             exit 1
           fi
-          kill "$APP_PID"
+          kill "$APP_PID" 2>/dev/null || true
           wait "$APP_PID" 2>/dev/null || true
           rm -rf "$ROUNDTRIP_DIR"
 

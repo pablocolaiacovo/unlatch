@@ -61,7 +61,7 @@ follow.
 
 | File | Change | Owner |
 | --- | --- | --- |
-| `Package.swift` | Add the Sparkle package dependency, the `Sparkle` product on the `Unlatch` target, and rpath linker flags | `macos-developer` |
+| `Package.swift` | Add the Sparkle package dependency, the `Sparkle` product on the `Unlatch` target, and the `@executable_path/../Frameworks` rpath linker flag | `macos-developer` |
 | `Package.resolved` | New file, committed (the existing `.gitignore` comment already expects it) | `macos-developer` |
 | `Resources/Info.plist.template` | Add `SUFeedURL`, `SUPublicEDKey`, and `SUAllowsAutomaticUpdates` | `macos-developer` |
 | `Sources/Unlatch/Logic.swift` | Add `UpdaterAvailability`, `updaterAvailability(...)`, `allowedUpdateChannels(forVersion:)`, `UpdateButtonState`, and `updateButtonState(...)` | `macos-developer` |
@@ -100,10 +100,11 @@ targets: [
         linkerSettings: [
             // Inside Unlatch.app the framework lives in Contents/Frameworks.
             .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
-            // `swift run Unlatch` and the test runner: the framework sits next
-            // to the binary in .build/<config>/. This toolchain does not add
-            // @loader_path on its own (verified, see §2.10).
-            .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@loader_path"]),
+            // No `@loader_path` flag: SwiftPM already adds it to every
+            // executable, so `swift run Unlatch` and the test runner find the
+            // framework next to the binary in .build/<config>/ (verified, see
+            // §2.10). Adding it again only produces
+            // `ld: warning: duplicate -rpath '@loader_path' ignored`.
         ]
     ),
 ]
@@ -124,9 +125,14 @@ Why these choices:
   the tools (`generate_appcast`, `sign_update`, `generate_keys`) in
   `.build/artifacts/sparkle/Sparkle/bin/`. Because CI gets its tools this way, they always match
   the embedded framework.
-- **Rpath.** This needs two entries, and `Package.swift` is the place for both. Patching the
-  binary with `install_name_tool` in the script would only cover the bundle, and `swift run Unlatch`
-  is documented in the README, so it has to keep working.
+- **Rpath.** Only one flag is needed: `@executable_path/../Frameworks`, which is what the bundle
+  relies on and what `package-app.sh` checks for. SwiftPM on the pinned toolchain (Xcode 27.0,
+  27A266a, Swift 6.4) already adds `@loader_path` to every executable's `LC_RPATH`, in debug and
+  universal release builds, and even on `main` without Sparkle. That keeps `swift run Unlatch`
+  working, which the README documents. An explicit `-rpath @loader_path` is therefore omitted (PR
+  #54 does the same): it only triggers `ld: warning: duplicate -rpath '@loader_path' ignored`.
+  Re-add it only if a future toolchain stops adding it. `Package.swift` is the place for the flag,
+  because patching the binary with `install_name_tool` in the script would only cover the bundle.
 - **`unsafeFlags` and library consumers.** SwiftPM only rejects `unsafeFlags` in a dependency when
   the target is in the build graph of the product being consumed. The flags sit on the `Unlatch`
   executable target, which is not part of the `UnlatchCore` library product, so remote consumers
@@ -586,9 +592,12 @@ I checked these with throwaway packages in `/tmp`. The repository was not touche
 
 - The universal release build leaves `.build/release/Sparkle.framework` as a universal (arm64 and
   x86_64) framework, linked as `@rpath/Sparkle.framework/Versions/B/Sparkle`.
-- **No `@loader_path` rpath is added by default.** Without the linker flags in §2.2, both
-  `.build/release/<exe>` and `swift run` abort with `Library not loaded`. With them, both run, and
-  `swift test` passes either way.
+- **SwiftPM adds `@loader_path` to every executable's rpath by itself.** This corrects an earlier
+  claim in this document. Verified on Xcode 27.0 (27A266a) and Swift 6.4, the toolchain CI pins, for
+  debug and universal release builds, and on `main` with no Sparkle. An explicit
+  `-Xlinker -rpath -Xlinker @loader_path` produces `ld: warning: duplicate -rpath '@loader_path'
+  ignored`, so only `@executable_path/../Frameworks` is added. Re-add the `@loader_path` flag only
+  if a future toolchain stops adding it.
 - A remote (`file://` git) consumer of a library product builds even though the package's
   executable target has `unsafeFlags`. Sparkle is still cloned and its artifact downloaded.
 - Inside-out ad-hoc signing (`Autoupdate`, `Updater.app`, framework, app) with the XPC services
@@ -833,8 +842,8 @@ Suggested title: "Embed and sign Sparkle in the app bundle when the app links it
   - Add `CODESIGN_ARGS`, `sign()`, and the conditional embed, trim, and inside-out signing from
     §2.3. Rewrite the header comment's #8 note so it points at `CODESIGN_ARGS`.
   - Add `--sequesterRsrc` to the zip.
-- `release.yml` `build-and-package`: add the §2.8 checks, each conditional on the framework being
-  present, so they pass on today's `main`, plus the launch check, which runs unconditionally.
+- `release.yml` `build-and-package`: add the §2.8 checks, each conditional on the binary linking
+  Sparkle, so they pass on today's `main`, plus the launch check, which runs unconditionally.
 
 Acceptance criteria:
 
@@ -852,7 +861,8 @@ Suggested title: "Add Sparkle and the update feed configuration".
 This depends on T1 being merged and on the public key from M1.
 
 - `Package.swift`: add the dependency, the product, and `linkerSettings` from §2.2, with the
-  comments. Commit `Package.resolved`.
+  comments. Only the `@executable_path/../Frameworks` rpath goes in; do not add `@loader_path`
+  (SwiftPM already does, see §2.2 and §2.10). Commit `Package.resolved`.
 - `Resources/Info.plist.template`:
   - Add `SUFeedURL`, `SUPublicEDKey` (the literal from M1), and `SUAllowsAutomaticUpdates`
     (`<false/>`), each with a one-line comment.
