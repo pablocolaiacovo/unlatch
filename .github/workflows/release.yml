@@ -1,7 +1,16 @@
 name: Release
 
-# Publishes a downloadable Unlatch.zip to GitHub Releases. See issue #9 and
-# RELEASING.md's "Distribution and signing" section.
+# Publishes a downloadable Unlatch.zip to GitHub Releases, then signs it into
+# the Sparkle update feed on GitHub Pages. See issue #9, issue #13,
+# Design/sparkle-updates.md, and RELEASING.md's "Distribution and signing"
+# section.
+#
+# Job chain on a tag push:
+#   build-and-package -> publish -> appcast -> deploy-feed
+# `appcast` (macOS, holds the Sparkle signing key) and `deploy-feed` (Pages)
+# run after `publish` so the feed never points at an asset that does not exist
+# yet. If either fails, the release exists but is not announced in the app;
+# re-running the failed jobs is safe.
 #
 # Triggers:
 #   - A pushed `v*` tag (the real release path). Only this path publishes.
@@ -211,6 +220,8 @@ jobs:
     needs: build-and-package
     # Only a real tag push publishes. A workflow_dispatch run never has a
     # tag to attach a release to, so it always stops after verification.
+    # `appcast` and `deploy-feed` below are gated the same way and run only
+    # after this job succeeds.
     if: github.event_name == 'push'
     # No Swift/Xcode toolchain needed here - just downloading an artifact
     # and calling gh - so this runs on a Linux runner rather than the
@@ -259,3 +270,131 @@ jobs:
             ARGS+=(--prerelease)
           fi
           gh release create "$TAG" dist/Unlatch.zip "${ARGS[@]}"
+
+  # Signs the published zip and adds it to the update feed (issue #13). Kept
+  # out of build-and-package on purpose: that job runs `swift build` and so
+  # third-party package manifests, and the private key must only be exposed to
+  # a job that runs no such code. macOS because Sparkle's tools are macOS-only.
+  appcast:
+    name: appcast
+    needs: publish
+    if: github.event_name == 'push'
+    runs-on: xcode-27
+    timeout-minutes: 15
+    # The secret SPARKLE_ED_PRIVATE_KEY lives in this environment, which is
+    # restricted to v* tags.
+    environment: sparkle-signing
+    permissions:
+      contents: read
+    # Serializes feed updates across tags (the workflow-level group is per
+    # ref and does not).
+    concurrency:
+      group: appcast
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Sparkle's generate_appcast comes from the SwiftPM binary artifact
+      # pinned in Package.resolved; no second version pin lives here.
+      - name: Resolve packages
+        run: swift package resolve
+
+      - name: Download Unlatch.zip
+        uses: actions/download-artifact@v8
+        with:
+          name: unlatch-zip
+          path: dist
+
+      # Same notes as the release page, so there is one source of truth.
+      # generate_appcast pairs Unlatch.md with Unlatch.zip by base name.
+      - name: Fetch release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release view "$TAG" --json body --jq .body > notes.raw
+          grep -v '^<!-- Release notes generated' notes.raw > notes.md || true
+          mkdir -p dist
+          cp notes.md dist/Unlatch.md
+
+      # A Pages deploy replaces the whole site, so start from the live feed.
+      # 200: use it. 404: first release, start a new feed. Anything else
+      # fails the job: a transient error must never quietly reset the feed.
+      - name: Fetch current feed
+        run: |
+          set -euo pipefail
+          # The feed URL the shipped app polls, read from the built bundle.
+          UNZIP_DIR="$(mktemp -d)"
+          ditto -x -k dist/Unlatch.zip "$UNZIP_DIR"
+          FEED_URL="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$UNZIP_DIR/Unlatch.app/Contents/Info.plist")"
+          rm -rf "$UNZIP_DIR"
+          STATUS="$(curl -sS -o current-appcast.xml -w '%{http_code}' "$FEED_URL?cb=$(date +%s)")"
+          echo "GET $FEED_URL -> $STATUS"
+          case "$STATUS" in
+            200) echo "CURRENT_FEED=current-appcast.xml" >> "$GITHUB_ENV" ;;
+            404)
+              echo "::warning::No published feed at $FEED_URL (404); starting a new one. Expected on the first Sparkle release."
+              echo "CURRENT_FEED=" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "::error::Unexpected HTTP status $STATUS fetching $FEED_URL" >&2
+              exit 1
+              ;;
+          esac
+
+      # The key is passed through the environment and piped to the tools on
+      # stdin by the script. Never add `set -x` or echo it here.
+      - name: Update appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          Scripts/update-appcast.sh \
+            --zip dist/Unlatch.zip \
+            --notes dist/Unlatch.md \
+            --tag "$TAG" \
+            --current-feed "$CURRENT_FEED" \
+            --out appcast-out
+
+      - name: Upload appcast
+        uses: actions/upload-artifact@v7
+        with:
+          name: appcast
+          path: appcast-out/appcast.xml
+          if-no-files-found: error
+          retention-days: 7
+
+  # Deploys the feed with GitHub Pages (Actions-based, not a gh-pages
+  # branch). Separate Linux job because upload-pages-artifact tars with GNU
+  # tar flags.
+  deploy-feed:
+    name: deploy-feed
+    needs: appcast
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Download appcast
+        uses: actions/download-artifact@v8
+        with:
+          name: appcast
+          path: site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5
