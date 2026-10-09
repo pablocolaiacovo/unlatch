@@ -768,7 +768,7 @@ and `Scripts/generate-fixtures.sh` doesn't change. `UnlatchCoreTests` is untouch
 This runs on two betas, which needs a maintainer-approved mid-milestone beta (RELEASING.md step 1
 exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
 
-1. Tag `v1.1.0-beta.1`. Confirm the release, the `appcast` job, and the `deploy-feed` job are green,
+1. Tag `v1.1.0-beta.2`. Confirm the release, the `appcast` job, and the `deploy-feed` job are green,
    and that `curl -s https://pablocolaiacovo.github.io/unlatch/appcast.xml` shows a `beta`-channel
    item.
 2. On the clean machine:
@@ -778,11 +778,11 @@ exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
    - Quit and relaunch. Sparkle's "Check for updates automatically?" prompt appears on this second
      launch. Answer it and note the answer.
    - Note the output of `codesign -dv --verbose=4 /Applications/Unlatch.app 2>&1 | grep CDHash`.
-3. Tag `v1.1.0-beta.2` with at least one user-facing PR in between, so the notes aren't empty.
-4. In beta.1, open the popover and click "Check for Updates…":
+3. Tag `v1.1.0-beta.3` with at least one user-facing PR in between, so the notes aren't empty.
+4. In beta.2, open the popover and click "Check for Updates…":
    - The popover closes.
-   - Sparkle's window lists 1.1.0-beta.2, with the Markdown notes rendered.
-   - "Install and Relaunch" completes, and the footer reads `Version 1.1.0-beta.2 (…)`.
+   - Sparkle's window lists 1.1.0-beta.3, with the Markdown notes rendered.
+   - "Install and Relaunch" completes, and the footer reads `Version 1.1.0-beta.3 (…)`.
 5. Record each of these in a comment on #13. The README task depends on the answers.
    - **Gatekeeper.** Does the relaunched app, or its next manual launch, show a Gatekeeper block?
      Check `xattr -l /Applications/Unlatch.app` for `com.apple.quarantine`.
@@ -793,7 +793,7 @@ exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
      ask for App Management permission, during install? Ad-hoc code has no team ID, and the macOS
      rule is "same team ID may update". How ad-hoc-to-ad-hoc is treated is the open risk.
    - **The new CDHash.** It must differ from the old one.
-6. Scheduled path: run `defaults delete com.pablocolaiacovo.unlatch SULastCheckTime` on a beta.1
+6. Scheduled path: run `defaults delete com.pablocolaiacovo.unlatch SULastCheckTime` on a beta.2
    install where automatic checks are on, then relaunch.
    - The update window appears, because a just-launched app gets immediate focus.
    - Choose "Remind Me Later", reopen the popover, and the footer shows "Update Available".
@@ -822,7 +822,7 @@ own and probably carry `skip-changelog`. T3 is the user-facing line.
 ### Maintainer steps M1 to M5 (human-only)
 
 M1 to M4 are §2.9 steps 1 to 5. Step 5 there is the github-pages tag rule, so these steps don't
-map one-to-one. M5 is approving two mid-milestone betas, `v1.1.0-beta.1` and `v1.1.0-beta.2`, for
+map one-to-one. M5 is approving two mid-milestone betas, `v1.1.0-beta.2` and `v1.1.0-beta.3`, for
 the upgrade test. Flag the issue `needs-decision` until M1 to M4 are done.
 
 ### T1 (`devops`): Embed and sign Sparkle inside-out when the binary links it
@@ -914,7 +914,7 @@ Acceptance criteria:
 
 This depends on T1 to T4 and M5.
 
-- `release-manager` tags `v1.1.0-beta.1` and later `v1.1.0-beta.2`, each only with the
+- `release-manager` tags `v1.1.0-beta.2` and later `v1.1.0-beta.3`, each only with the
   maintainer's approval of that exact version.
 - The maintainer runs §4 "Manual" steps 1 to 6 on a clean machine and posts the findings on #13.
 
@@ -965,7 +965,7 @@ This depends on T4.
    This is product scope. Recommendation: keep it off for v1.1. That matches the issue's non-goal
    and the "local and private" positioning. Scheduled *checks* still need the user's consent
    through Sparkle's second-launch prompt.
-2. **Approve two mid-milestone betas (`v1.1.0-beta.1`, `v1.1.0-beta.2`) for the upgrade test (M5).**
+2. **Approve two mid-milestone betas (`v1.1.0-beta.2`, `v1.1.0-beta.3`) for the upgrade test (M5).**
    RELEASING.md requires the maintainer to approve each exact version. Recommendation: approve
    them. An in-app upgrade can only be tested between two published Sparkle-enabled builds, and
    doing it on betas keeps stable users out of the experiment.
@@ -980,7 +980,8 @@ This depends on T4.
    iCloud Drive as a plain file.
 
 **Resolved by the maintainer on 2026-10-09:** questions 1 to 3 are accepted as recommended.
-Automatic install stays off (`SUAllowsAutomaticUpdates = false`), `v1.1.0-beta.1` and
-`v1.1.0-beta.2` are approved as mid-milestone betas for the upgrade test (M5), and the App
-Management fallback stands: ship with a documented one-time grant, or make #8 a prerequisite if the
-install fails outright. Question 4: the private key is backed up in the maintainer's 1Password.
+Automatic install stays off (`SUAllowsAutomaticUpdates = false`), `v1.1.0-beta.2` and
+`v1.1.0-beta.3` are approved as mid-milestone betas for the upgrade test (M5). They replace the
+originally proposed beta.1 and beta.2, because `v1.1.0-beta.1` was already published on 2026-10-01
+as the release-workflow dry run, without Sparkle. The App Management fallback stands: ship with a
+documented one-time grant, or make #8 a prerequisite if the install fails outright. Question 4: the private key is backed up in the maintainer's 1Password.
