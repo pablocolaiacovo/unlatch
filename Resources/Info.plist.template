@@ -26,10 +26,19 @@
     <string>14.0</string>
     <!-- Menu-bar-only: no Dock icon, no app switcher entry. Belt-and-braces
          with the runtime NSApp.setActivationPolicy(.accessory) call in
-         UnlatchApp.swift's AppDelegate, since the two are not always
+         AppDelegate.swift, since the two are not always
          equivalent inside a real bundle. -->
     <key>LSUIElement</key>
     <true/>
+    <!-- Sparkle appcast, served over https from GitHub Pages. -->
+    <key>SUFeedURL</key>
+    <string>https://pablocolaiacovo.github.io/unlatch/appcast.xml</string>
+    <!-- Public EdDSA key; the private half lives only in the release secret. -->
+    <key>SUPublicEDKey</key>
+    <string>c1nkY1mfZROc+woQU0n8BKTxwcySykispaZaMbshWy0=</string>
+    <!-- Updates are offered, never installed without the user accepting. -->
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Pablo Colaiacovo</string>
     <key>NSHighResolutionCapable</key>

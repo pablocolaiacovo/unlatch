@@ -21,6 +21,13 @@ let package = Package(
             targets: ["Unlatch"]
         ),
     ],
+    dependencies: [
+        // Exact pin: Scripts/package-app.sh relies on this release's bundle layout
+        // (Versions/B, Autoupdate, Updater.app, XPCServices). Bump deliberately,
+        // in its own PR, and re-run the release workflow's dry run.
+        // 2.9.2 or later is mandatory: CVE-2026-47122 affects <= 2.9.1.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+    ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
@@ -29,7 +36,17 @@ let package = Package(
         ),
         .executableTarget(
             name: "Unlatch",
-            dependencies: ["UnlatchCore"]
+            dependencies: ["UnlatchCore", .product(name: "Sparkle", package: "Sparkle")],
+            linkerSettings: [
+                // Inside Unlatch.app the framework lives in Contents/Frameworks.
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
+                // No @loader_path entry here: for `swift run Unlatch` and the test
+                // runner (framework next to the binary in .build/<config>/), SwiftPM
+                // on Xcode 27 / Swift 6.4 already adds `@loader_path` to every
+                // executable. Adding it again only produces a "duplicate -rpath" linker warning. If a future
+                // toolchain drops it, `swift run Unlatch` fails with "Library not
+                // loaded"; re-add it then.
+            ]
         ),
         .testTarget(
             name: "UnlatchCoreTests",

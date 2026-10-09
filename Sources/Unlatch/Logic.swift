@@ -397,6 +397,63 @@ func loginItemAction(from status: LoginItemStatus, turningOn: Bool) -> LoginItem
     }
 }
 
+// MARK: - Updates (Sparkle)
+
+/// Whether this process can run Sparkle at all.
+enum UpdaterAvailability: Equatable, Sendable {
+    case enabled
+    case disabled(UpdaterDisabledReason)
+}
+
+enum UpdaterDisabledReason: Equatable, Sendable {
+    /// `swift run`, the test runner: Bundle.main is not an .app, so there is
+    /// no Info.plist and Sparkle would fail to start ("does not have a valid
+    /// bundle identifier") and show an error alert on every launch.
+    case notAnAppBundle
+    case missingFeedURL
+    /// Anything other than an https URL.
+    case insecureFeedURL
+    case missingPublicKey
+}
+
+/// Checks run in order. Empty strings count as missing.
+func updaterAvailability(
+    bundleURL: URL, feedURL: String?, publicEDKey: String?
+) -> UpdaterAvailability {
+    guard bundleURL.pathExtension == "app" else { return .disabled(.notAnAppBundle) }
+    guard let feedURL, !feedURL.isEmpty else { return .disabled(.missingFeedURL) }
+    guard let url = URL(string: feedURL), url.scheme?.lowercased() == "https",
+        url.host?.isEmpty == false
+    else { return .disabled(.insecureFeedURL) }
+    guard let publicEDKey, !publicEDKey.isEmpty else { return .disabled(.missingPublicKey) }
+    return .enabled
+}
+
+/// `["beta"]` when the running build is itself a beta (its
+/// CFBundleShortVersionString contains "-beta.", including `git describe`
+/// forms such as "1.1.0-beta.2-3-gabc1234"). Otherwise `[]`, meaning the
+/// default channel only. Sparkle always includes the default channel, so
+/// beta builds see stable releases too.
+func allowedUpdateChannels(forVersion shortVersion: String?) -> Set<String> {
+    guard let shortVersion, shortVersion.contains("-beta.") else { return [] }
+    return ["beta"]
+}
+
+enum UpdateButtonState: Equatable, Sendable {
+    case hidden, checkDisabled, check, updateAvailable
+}
+
+/// `.hidden` unless availability is `.enabled`. With `canCheck` false, the
+/// result is `.checkDisabled`, even when `updateAvailable` is true. Otherwise
+/// `updateAvailable` selects `.updateAvailable` and anything else gives `.check`.
+func updateButtonState(
+    availability: UpdaterAvailability, canCheck: Bool, updateAvailable: Bool
+) -> UpdateButtonState {
+    guard availability == .enabled else { return .hidden }
+    guard canCheck else { return .checkDisabled }
+    return updateAvailable ? .updateAvailable : .check
+}
+
 // MARK: - PDF helpers (blocking; call off the main actor)
 
 /// True when `password` opens the document (or it needs no password at all).
