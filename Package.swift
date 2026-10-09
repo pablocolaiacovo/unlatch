@@ -42,9 +42,8 @@ let package = Package(
                 .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
                 // No @loader_path entry here: for `swift run Unlatch` and the test
                 // runner (framework next to the binary in .build/<config>/), SwiftPM
-                // on Xcode 27 / Swift 6.4 already adds `@loader_path` when an
-                // executable links a binary framework. Adding it again only
-                // produces a "duplicate -rpath" linker warning. If a future
+                // on Xcode 27 / Swift 6.4 already adds `@loader_path` to every
+                // executable. Adding it again only produces a "duplicate -rpath" linker warning. If a future
                 // toolchain drops it, `swift run Unlatch` fails with "Library not
                 // loaded"; re-add it then.
             ]

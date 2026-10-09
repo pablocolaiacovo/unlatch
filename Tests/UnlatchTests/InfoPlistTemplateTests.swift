@@ -20,15 +20,14 @@ private func loadTemplate() throws -> [String: Any] {
 @Test func templateFeedURLIsTheHTTPSPagesURL() throws {
     let plist = try loadTemplate()
     let feed = try #require(plist["SUFeedURL"] as? String)
-    let url = try #require(URL(string: feed))
-    #expect(url.scheme == "https")
-    #expect(url.host == "pablocolaiacovo.github.io")
-    #expect(url.lastPathComponent == "appcast.xml")
+    #expect(feed == "https://pablocolaiacovo.github.io/unlatch/appcast.xml")
 }
 
 @Test func templatePublicKeyIsA32ByteEd25519Key() throws {
     let plist = try loadTemplate()
     let key = try #require(plist["SUPublicEDKey"] as? String)
+    // A swapped key would permanently break updates for every build shipped with it.
+    #expect(key == "c1nkY1mfZROc+woQU0n8BKTxwcySykispaZaMbshWy0=")
     let data = try #require(Data(base64Encoded: key))
     #expect(data.count == 32)
 }
