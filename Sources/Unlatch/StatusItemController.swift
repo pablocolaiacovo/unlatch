@@ -41,6 +41,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private func configurePopover() {
         popover.behavior = .applicationDefined
         popover.animates = true
+        popover.appearance = ExplorationConfig.appearance  // EXPLORATION
         popover.contentViewController = PopoverHostingController(model: model)
         popover.delegate = self
     }

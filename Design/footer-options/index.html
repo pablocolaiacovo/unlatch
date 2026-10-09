@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Unlatch popover footer: four options</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light; --ink:#1d1d1f; --mute:#6e6e73; --line:#d2d2d7; --bg:#f5f5f7; --good:#1a7f37; --bad:#b42318; --accent:#0a60ff; }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color: var(--ink); background: var(--bg); margin: 0; padding: 32px 24px 80px; }
+  main { max-width: 1240px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 8px; }
+  h3 { font-size: 16px; margin: 20px 0 6px; }
+  p { margin: 6px 0; max-width: 78ch; }
+  .sub { color: var(--mute); }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin: 16px 0; }
+  .rec { border: 2px solid var(--accent); }
+  .tag { display:inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent); color:#fff; vertical-align: middle; margin-left: 8px; }
+  .tag.grey { background: #8e8e93; }
+
+  /* the at-a-glance matrix */
+  .matrix { display: grid; grid-template-columns: 150px repeat(4, minmax(0, 1fr)); gap: 10px 12px; align-items: center; }
+  .matrix .colhead { font-size: 12px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: .04em; }
+  .matrix .rowhead { font-weight: 600; }
+  .matrix .rowhead small { display:block; font-weight: 400; color: var(--mute); }
+  .shot { display:block; width: 100%; max-width: 398px; border-radius: 8px; border: 1px solid var(--line); background-repeat: no-repeat; background-position: bottom center; background-size: 100% auto; aspect-ratio: 398 / 66; }
+  .shot.tall { aspect-ratio: 398 / 94; }
+  a.shotlink { text-decoration: none; }
+  .cap { font-size: 12px; color: var(--mute); margin-top: 2px; }
+
+  .full { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; margin-top: 8px; }
+  .full figure { margin: 0; }
+  .full img { display:block; border-radius: 8px; border: 1px solid var(--line); height: auto; }
+  figcaption { font-size: 12px; color: var(--mute); margin-top: 4px; max-width: 398px; }
+
+  .proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; margin-top: 10px; }
+  @media (max-width: 800px) { .proscons { grid-template-columns: 1fr; } .matrix { grid-template-columns: 1fr; } }
+  ul { margin: 4px 0; padding-left: 20px; }
+  li.p::marker { content: "+  "; color: var(--good); font-weight: 700; }
+  li.c::marker { content: "\2212  "; color: var(--bad); font-weight: 700; }
+
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.cmp th, table.cmp td { border-top: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }
+  table.cmp th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--mute); border-top: 0; }
+  td.g { background: #e9f7ec; } td.y { background: #fff6dd; } td.r { background: #fdeceb; }
+  code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Unlatch popover footer: four options</h1>
+<p class="sub">Exploration for issue #13 task T3. Four things now compete for one 372 pt wide footer: the version, Open at Login (#51), Check for Updates / Update Available (T3), and Quit.
+All screenshots are real captures of the running app (<code>swift run</code> build on macOS 27, real popover, real vibrancy) with a stubbed updater and a faked login item. Light and dark, normal and "update available". Click any strip to see the full popover.</p>
+
+<div class="card rec">
+  <h2 style="margin-top:0">Recommendation: Option C, the "&hellip;" menu <span class="tag">recommended</span></h2>
+  <p>Put the version, Check for Updates&hellip; and Open at Login in a small ellipsis menu next to Quit. When an update is waiting, the footer shows a blue "Update Available" button on the left <em>and</em> a blue dot on the ellipsis, so the one thing that needs attention is impossible to miss, and the footer is otherwise nearly empty.</p>
+  <p>Why: it is the only option that does not get more crowded when the next item arrives (it just becomes one more menu row), it has no width problems in other languages, it matches how Itsycal, Maccy and Dropbox-style menu bar apps handle app-level housekeeping, and the menu is a standard AppKit pop-up that VoiceOver and the keyboard already handle. The cost is that Open at Login is now two clicks away; it is a set-once preference, so that is acceptable.</p>
+  <p><strong>Runner-up: Option B (two rows)</strong> if you want every control visible with no menu. It is the safest "nothing hidden" choice and handles long languages, at the price of 26 pt more height on every step.
+  <strong>Avoid A</strong> (single row): the stress test shows the update button and the version both truncate with an ellipsis, and German or French strings will be worse.
+  <strong>D</strong> (version as the update link) is the cheapest to build but hides "Check for Updates" behind a label that does not look clickable.</p>
+</div>
+
+<h2>At a glance</h2>
+<p class="sub">Rows are options; each cell shows no update on top and Update Available below. Normal state has Open at Login off; update state has it on. (In option C the checkbox lives inside the menu, see the open-menu shots below.)</p>
+<div class="card">
+  <div class="matrix" id="matrix"></div>
+</div>
+
+<h2>The options</h2>
+<div id="options"></div>
+
+<h2>Side by side</h2>
+<div class="card">
+<table class="cmp">
+  <tr><th></th><th>A. One row, compact</th><th>B. Two rows</th><th>C. "&hellip;" menu</th><th>D. Version is the link</th></tr>
+  <tr><td><strong>Discoverability</strong> of Check for Updates</td><td class="g">Visible always</td><td class="g">Visible always</td><td class="y">One click away; becomes visible (text and dot) when an update exists</td><td class="r">Poor: a version label does not look clickable (it only highlights on hover)</td></tr>
+  <tr><td><strong>Discoverability</strong> of Open at Login</td><td class="g">Visible</td><td class="g">Visible</td><td class="y">One click away, inside the menu</td><td class="g">Visible</td></tr>
+  <tr><td><strong>Clutter</strong></td><td class="r">Four controls in 344 pt</td><td class="y">Two rows of small text</td><td class="g">Lowest: Quit and one icon</td><td class="g">Low, same as today</td></tr>
+  <tr><td><strong>Keyboard / VoiceOver</strong></td><td class="y">Fine, but truncated labels hurt reading</td><td class="g">Fine, plain controls</td><td class="g">Standard pop-up menu, arrow keys work; the dot needs the extra accessibility label (included)</td><td class="y">Fine if labelled "Check for Updates"; the visible text says Version, which must not be what VoiceOver reads</td></tr>
+  <tr><td><strong>A fifth item later</strong></td><td class="r">Does not fit</td><td class="y">Fits, third row or a crowded row</td><td class="g">One more menu row</td><td class="r">Nowhere to put it</td></tr>
+  <tr><td><strong>Localisation width</strong></td><td class="r">Breaks first (see stress shot)</td><td class="g">344 pt per row, room for 2x text</td><td class="g">Menu items size themselves</td><td class="y">"Version 1.2.0 verfügbar" fits; longer languages may truncate</td></tr>
+  <tr><td><strong>Popover height</strong></td><td class="g">No change</td><td class="r">+26 pt on every step</td><td class="g">No change</td><td class="g">No change</td></tr>
+  <tr><td><strong>Cost for T3</strong></td><td class="g">Low. But must shorten labels or drop the version to avoid truncation</td><td class="g">Low</td><td class="y">Medium. Reworks #51's checkbox into a menu toggle, adds the badge, changes T3's acceptance text. ~100 lines, already prototyped here</td><td class="g">Low</td></tr>
+  <tr><td><strong>Under <code>swift run</code> (updater hidden)</strong></td><td class="g">Button just disappears</td><td class="g">Button disappears, row 1 holds only the checkbox</td><td class="g">Menu item disappears, menu still has version and login</td><td class="y">Version stays plain text</td></tr>
+</table>
+</div>
+
+<h2>How well-known menu bar apps do it</h2>
+<div class="card">
+  <ul>
+    <li><strong>Apple HIG, menu bar extras:</strong> keep the extra's own UI minimal, and put infrequent items in a menu. Quit and settings belong in a menu or at the bottom edge; avoid dense multi-control toolbars in a popover.</li>
+    <li><strong>Itsycal, Maccy, Rectangle, Tailscale:</strong> a gear or ellipsis at the bottom of the popover opens a menu containing Preferences, Check for Updates, About and Quit.</li>
+    <li><strong>Dropbox, 1Password mini:</strong> a bottom bar with one icon-only overflow control; update availability shown by a badge or a banner above it, not by relabeling a footer link.</li>
+    <li><strong>Stats, iStat Menus:</strong> a small gear in the corner plus a version/update banner only when relevant.</li>
+  </ul>
+  <p class="sub">From general familiarity with these apps; not re-verified against their current builds.</p>
+</div>
+
+<h2>How these were made</h2>
+<div class="card">
+  <p>Live captures, not renders. Each image is <code>screencapture -R</code> of the popover window rect from <code>CGWindowListCopyWindowInfo</code> filtered by the process id, of the real <code>Unlatch</code> binary built on branch <code>explore/footer-options</code>. A solid colour window behind the popover keeps the backdrop identical in every shot. Dark mode is forced on the app and popover only (system setting untouched). No keystrokes and no clicks were sent: the open menu shots call <code>performClick</code> on the menu button from inside the app. The version is forced to <code>Version 1.1.0 (128)</code>, and the stress shots use <code>0.0.0-abc1234-dirty (999)</code>, the long string from T3's acceptance criteria.</p>
+  <p>The code is exploration only: <code>Sources/Unlatch/Views/FooterVariants.swift</code> (style switch via <code>UNLATCH_FOOTER_STYLE</code>, stub updater, fake login item, capture hooks).</p>
+</div>
+
+</main>
+
+<script>
+const options = [
+  { key: "compact", name: "A. One row, compact", pick: false,
+    blurb: "Everything stays in the existing single 26 pt row: version, update button, Open at Login, and Quit reduced to its power icon.",
+    pros: ["Nothing hidden: every control is visible and one click away", "No height change; closest to what ships today", "Update state is obvious (blue dot and text)"],
+    cons: ["Tightest option: 344 pt for four controls. Even with a normal version the button already reads \"Check f…dates…\" (truncated) in the normal state. With a long dev version the version shortens to \"Version…irty (999)\" and the update button itself becomes \"Updat…ailable\" (see stress shot)", "Quit loses its label (icon only) and its hover text becomes the only explanation", "German/French/Spanish strings will truncate even with a normal version", "No room for a fifth item"],
+    extra: [["compact-light-stress", "Stress: long dev version, update available. Both the version and the update button truncate."]] },
+  { key: "twoRow", name: "B. Two rows", pick: false, runner: true,
+    blurb: "Row 1: Open at Login on the left, update button on the right. Row 2: version on the left, Quit on the right.",
+    pros: ["Nothing hidden, labels never truncate (long version still fits)", "Room for longer translations", "Easy to explain: settings row above, status row below", "Lowest implementation risk"],
+    cons: ["+26 pt popover height on every step, and the footer starts to compete with the content", "Two rows of tiny controls is heavier than the rest of the popover", "A fifth item needs a third row or crowds one of these", "When the update button is hidden (<code>swift run</code>) row 1 holds a lone checkbox"],
+    extra: [["twoRow-light-stress", "Stress: long dev version, update available. Everything still fits."]] },
+  { key: "menu", name: "C. “…” menu (recommended)", pick: true,
+    blurb: "A single ellipsis button next to Quit opens a menu: version (disabled header), Check for Updates… / Update Available…, Open at Login (a checkmark item). When an update is waiting, a blue “Update Available” button appears on the left and the ellipsis gets a blue dot.",
+    pros: ["Cleanest footer; scales: a future item is one more menu row", "Immune to translation width and long version strings (see stress shot)", "Matches the pattern users know from other menu bar apps", "Standard pop-up menu: keyboard, VoiceOver and Full Keyboard Access for free", "Update prompt is the only coloured thing in the footer, so it gets noticed"],
+    cons: ["Open at Login and Check for Updates are one click deeper", "The checkbox from #51 becomes a menu toggle (a small rework and its acceptance text changes)", "The badge dot must be drawn outside the menu label (AppKit flattens the label to a template image); it is, and it carries an extra accessibility label", "Slightly more code than A, B or D"],
+    extra: [["menu-light-normal-open", "Menu open, normal state, light (Open at Login off)."], ["menu-light-update-open", "Menu open, update available, light (Open at Login on)."], ["menu-dark-normal-open", "Menu open, normal state, dark."], ["menu-dark-update-open", "Menu open, update available, dark."], ["menu-light-stress", "Stress: long dev version. The version only appears inside the menu, so the footer is unaffected."]] },
+  { key: "versionLink", name: "D. The version label is the update entry point", pick: false,
+    blurb: "The version text becomes a button. Click it to check for updates. When an update exists it turns into a blue dot and “Version 1.2.0 available”. Open at Login and Quit stay as they are today.",
+    pros: ["Cheapest: same layout as today, no new control", "Update state tells you which version is waiting", "No height change, Open at Login stays visible"],
+    cons: ["Poor discoverability: grey 11 pt version text does not look clickable; users will not find “Check for Updates”", "Non-standard: nothing else on the Mac works this way, and VoiceOver must read “Check for Updates”, not “Version”", "Dead end for a fifth item", "A long version string still truncates (see stress shot)"],
+    extra: [["versionLink-light-stress", "Stress: long dev version, normal state. The version truncates in the middle but stays readable."]] }
+];
+
+const states = [
+  ["light", "normal", "Light, no update"],
+  ["light", "update", "Light, Update Available"],
+  ["dark", "normal", "Dark, no update"],
+  ["dark", "update", "Dark, Update Available"]
+];
+
+const matrix = document.getElementById("matrix");
+matrix.style.gridTemplateColumns = "170px 1fr 1fr";
+matrix.innerHTML = `<div></div><div class="colhead">Light</div><div class="colhead">Dark</div>`;
+for (const o of options) {
+  const tall = o.key === "twoRow" ? " tall" : "";
+  const cell = mode => ["normal", "update"].map(st => {
+    const f = `${o.key}-${mode}-${st}.png`;
+    const label = st === "normal" ? "no update" : "Update Available";
+    return `<a class="shotlink" href="${f}"><span class="shot${tall}" style="background-image:url(${f}); max-width:none; margin-bottom:6px" role="img" aria-label="${o.name}, ${mode}, ${label}"></span></a>`;
+  }).join("");
+  matrix.insertAdjacentHTML("beforeend",
+    `<div class="rowhead">${o.name}${o.pick ? ' <span class="tag">pick</span>' : ''}<small>top: no update<br>bottom: Update Available${o.key === "menu" ? "<br>(checkbox is inside the menu)" : ""}</small></div><div>${cell("light")}</div><div>${cell("dark")}</div>`);
+}
+
+const host = document.getElementById("options");
+for (const o of options) {
+  const sec = document.createElement("div");
+  sec.className = "card" + (o.pick ? " rec" : "");
+  const full = states.map(s => `<figure><a href="${o.key}-${s[0]}-${s[1]}.png"><img src="${o.key}-${s[0]}-${s[1]}.png" width="398" alt=""></a><figcaption>${s[2]}</figcaption></figure>`).join("");
+  const extra = o.extra.map(e => `<figure><a href="${e[0]}.png"><img src="${e[0]}.png" width="${e[0].includes('open') ? 598 : 398}" alt=""></a><figcaption>${e[1]}</figcaption></figure>`).join("");
+  sec.innerHTML = `<h2 style="margin-top:0">${o.name}${o.pick ? '<span class="tag">recommended</span>' : ''}${o.runner ? '<span class="tag grey">runner-up</span>' : ''}</h2>
+    <p>${o.blurb}</p>
+    <div class="proscons"><div><h3>Pros</h3><ul>${o.pros.map(x => `<li class="p">${x}</li>`).join("")}</ul></div>
+    <div><h3>Cons</h3><ul>${o.cons.map(x => `<li class="c">${x}</li>`).join("")}</ul></div></div>
+    <h3>Full popover, all four states</h3><div class="full">${full}</div>
+    <h3>Extra shots</h3><div class="full">${extra}</div>`;
+  host.appendChild(sec);
+}
+</script>
+</body>
+</html>

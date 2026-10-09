@@ -19,7 +19,7 @@ import AppKit
 @MainActor
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let model = AppModel()
+    private let model = ExplorationConfig.makeModel()
     private var statusItemController: StatusItemController?
 
     static func main() {
@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         statusItemController = StatusItemController(model: model)
+        ExplorationConfig.applyLaunchOptions(statusItemController)
     }
 
     /// A minimal main menu: an app menu with Quit, and a standard Edit menu

@@ -6,10 +6,10 @@ import SwiftUI
 /// checkbox, and the Quit control.
 struct PopoverView: View {
     @Bindable var model: AppModel
-    @State private var quitHovering = false
+    @State var quitHovering = false
 
     /// The bundle's version never changes while running, so build it once.
-    private static let versionText = versionLabel(
+    static let versionText = ExplorationConfig.versionOverride ?? versionLabel(
         version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
         build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String)
 
@@ -58,25 +58,15 @@ struct PopoverView: View {
     /// Single line with a fixed height so it never clips under the hosting
     /// controller's preferred-content-size sizing.
     private var footer: some View {
-        HStack(spacing: 6) {
-            Text(Self.versionText)
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer()
-            loginItemToggle
-            quitButton
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 26)
+        // EXPLORATION: see FooterVariants.swift.
+        FooterVariants(view: self, style: ExplorationConfig.style, updater: ExplorationConfig.updater)
     }
 
     /// Shows the system's login item state, not a stored preference; see
     /// `loginItemControl(for:)`. The checkbox is an NSButton that flips itself
     /// on click, so `.id` on the revision recreates it after every attempt and
     /// refresh, even when the status did not change.
-    private var loginItemToggle: some View {
+    var loginItemToggle: some View {
         let control = model.loginItem
         return Toggle(
             "Open at Login",
@@ -94,7 +84,7 @@ struct PopoverView: View {
     /// Unobtrusive quit affordance in the footer, reachable from every
     /// step. `.accessory` apps have no Dock icon and no application menu, so
     /// this is the only way to quit besides Force Quit.
-    private var quitButton: some View {
+    var quitButton: some View {
         Button {
             NSApplication.shared.terminate(nil)
         } label: {
