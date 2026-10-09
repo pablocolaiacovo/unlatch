@@ -333,6 +333,70 @@ func statusSymbolName(hasLockedWork: Bool) -> String {
     hasLockedWork ? "lock" : "lock.open"
 }
 
+// MARK: - Launch at Login
+
+/// The login item's state as the system reports it, folded down from
+/// `SMAppService.Status` (see `LoginItem.swift`) so the mapping to the UI is
+/// testable without ServiceManagement.
+enum LoginItemStatus: Equatable, Sendable {
+    /// Registered and allowed: Unlatch opens at login.
+    case enabled
+    /// Not registered, including a bundle that has never been registered
+    /// (`SMAppService.Status.notFound`). Checking the box registers it.
+    case disabled
+    /// Registered, but switched off in System Settings > General > Login
+    /// Items. Unlatch does not open at login, and only the user can allow it
+    /// again from there.
+    case requiresApproval
+    /// No login item is possible: no bundle identifier (e.g. `swift run`), or
+    /// a status this build does not know.
+    case unavailable
+}
+
+/// What the footer's "Open at Login" checkbox shows. `isOn` follows the
+/// system state, never a stored preference, so the checkbox cannot claim
+/// Unlatch opens at login when System Settings says otherwise.
+struct LoginItemControl: Equatable, Sendable {
+    let isOn: Bool
+    let isEnabled: Bool
+    let help: String
+}
+
+func loginItemControl(for status: LoginItemStatus) -> LoginItemControl {
+    switch status {
+    case .enabled:
+        LoginItemControl(isOn: true, isEnabled: true, help: "Unlatch opens when you log in")
+    case .disabled:
+        LoginItemControl(isOn: false, isEnabled: true, help: "Open Unlatch when you log in")
+    case .requiresApproval:
+        LoginItemControl(
+            isOn: false, isEnabled: true,
+            help: "Turned off in System Settings > General > Login Items. Check to open Login Items and allow Unlatch.")
+    case .unavailable:
+        LoginItemControl(
+            isOn: false, isEnabled: false,
+            help: "Available when Unlatch runs from an app bundle")
+    }
+}
+
+/// What toggling the checkbox does from a given status.
+enum LoginItemAction: Equatable, Sendable {
+    case register, unregister, openSystemSettings, noChange
+}
+
+/// A login item the user switched off in System Settings cannot be switched
+/// back on by the app; `register()` leaves it waiting for approval. So
+/// checking the box in that state opens Login Items instead. Unchecking it
+/// unregisters, which clears the pending entry.
+func loginItemAction(from status: LoginItemStatus, turningOn: Bool) -> LoginItemAction {
+    switch (status, turningOn) {
+    case (.disabled, true): .register
+    case (.requiresApproval, true): .openSystemSettings
+    case (.enabled, false), (.requiresApproval, false): .unregister
+    case (.enabled, true), (.disabled, false), (.unavailable, _): .noChange
+    }
+}
+
 // MARK: - PDF helpers (blocking; call off the main actor)
 
 /// True when `password` opens the document (or it needs no password at all).
