@@ -111,3 +111,45 @@ func betaVersionsFollowTheBetaChannel(version: String) {
         updateButtonState(availability: .enabled, canCheck: true, updateAvailable: true)
             == .updateAvailable)
 }
+
+// MARK: - updateFooterPresentation
+
+@Test func hiddenUpdaterLeavesTheMenuItemAndIndicatorOut() {
+    let presentation = updateFooterPresentation(for: .hidden)
+    #expect(presentation.menuItemTitle == nil)
+    #expect(presentation.showsUpdateIndicator == false)
+}
+
+@Test func disabledCheckShowsADisabledItemWithoutIndicator() {
+    let presentation = updateFooterPresentation(for: .checkDisabled)
+    #expect(presentation.menuItemTitle == "Check for Updates…")
+    #expect(presentation.menuItemEnabled == false)
+    #expect(presentation.showsUpdateIndicator == false)
+}
+
+@Test func enabledCheckShowsAnEnabledItemWithoutIndicator() {
+    let presentation = updateFooterPresentation(for: .check)
+    #expect(presentation.menuItemTitle == "Check for Updates…")
+    #expect(presentation.menuItemEnabled == true)
+    #expect(presentation.showsUpdateIndicator == false)
+}
+
+@Test func waitingUpdateShowsTheIndicatorAndTheUpdateTitle() {
+    let presentation = updateFooterPresentation(for: .updateAvailable)
+    #expect(presentation.menuItemTitle == UpdateFooterPresentation.updateAvailableTitle)
+    #expect(presentation.menuItemEnabled == true)
+    #expect(presentation.showsUpdateIndicator == true)
+}
+
+@Test func footerCopyEndsInASingleEllipsisCharacter() {
+    #expect(UpdateFooterPresentation.checkTitle == "Check for Updates\u{2026}")
+    #expect(UpdateFooterPresentation.updateAvailableTitle == "Update Available\u{2026}")
+}
+
+@Test func swiftRunShowsNoUpdateUIEndToEnd() {
+    let state = updateButtonState(
+        availability: .disabled(.notAnAppBundle), canCheck: true, updateAvailable: true)
+    let presentation = updateFooterPresentation(for: state)
+    #expect(presentation.menuItemTitle == nil)
+    #expect(presentation.showsUpdateIndicator == false)
+}

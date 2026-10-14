@@ -21,6 +21,9 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
     private var statusItemController: StatusItemController?
+    /// Assigned once at launch and never cleared: it owns Sparkle's controller,
+    /// which nothing else retains.
+    private var updater: AppUpdater?
 
     static func main() {
         let app = NSApplication.shared
@@ -32,7 +35,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        statusItemController = StatusItemController(model: model)
+        let info = Bundle.main.infoDictionary
+        let updater = AppUpdater(
+            availability: updaterAvailability(
+                bundleURL: Bundle.main.bundleURL,
+                feedURL: info?["SUFeedURL"] as? String,
+                publicEDKey: info?["SUPublicEDKey"] as? String),
+            shortVersion: info?["CFBundleShortVersionString"] as? String)
+        self.updater = updater
+        statusItemController = StatusItemController(model: model, updater: updater)
     }
 
     /// A minimal main menu: an app menu with Quit, and a standard Edit menu

@@ -43,6 +43,9 @@ not notify on an equal assignment, so `AppModel.loginItemRevision` is bumped on 
 toggle is keyed on it with `.id`. That recreates the checkbox's NSButton, which has already flipped
 itself, from the system state.
 
+> Update: `loginItemRevision` and the `.id` trick were removed by the update-menu change (T3 of
+> `Design/sparkle-updates.md`, see §2.4.2): Open at Login is now a menu item, which does not flip itself.
+
 **`swift run` is `.unavailable`.** `SMAppService.mainApp` needs a real bundle. Without a bundle
 identifier the checkbox is disabled with a help tooltip, instead of offering something that fails.
 

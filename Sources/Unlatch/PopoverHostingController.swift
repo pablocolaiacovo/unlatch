@@ -7,8 +7,8 @@ import SwiftUI
 /// overriding `cancelOperation(_:)` here — see that type's doc comment for
 /// why a first-responder-based override isn't reliable on every step.
 final class PopoverHostingController: NSHostingController<PopoverView> {
-    init(model: AppModel) {
-        super.init(rootView: PopoverView(model: model))
+    init(model: AppModel, updater: AppUpdater) {
+        super.init(rootView: PopoverView(model: model, updater: updater))
         // Below the macOS 14 target (13.3 on the controller, 13.0 on the
         // option set), so NSPopover follows the SwiftUI content height as
         // steps change. The width stays 372 pt from PopoverView's own frame.

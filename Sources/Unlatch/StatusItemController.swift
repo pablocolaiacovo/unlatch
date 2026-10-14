@@ -8,6 +8,7 @@ import Observation
 @MainActor
 final class StatusItemController: NSObject, NSPopoverDelegate {
     private let model: AppModel
+    private let updater: AppUpdater
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private lazy var dismissalMonitor = PopoverDismissalMonitor(
@@ -16,13 +17,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     )
     private var mouseUpHighlightMonitor: Any?
 
-    init(model: AppModel) {
+    init(model: AppModel, updater: AppUpdater) {
         self.model = model
+        self.updater = updater
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         popover = NSPopover()
         super.init()
 
         model.onLoad = { [weak self] in self?.presentAndFocus() }
+        updater.onWillPresent = { [weak self] in self?.closePopover() }
 
         configureStatusItem()
         configurePopover()
@@ -41,7 +44,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private func configurePopover() {
         popover.behavior = .applicationDefined
         popover.animates = true
-        popover.contentViewController = PopoverHostingController(model: model)
+        popover.contentViewController = PopoverHostingController(model: model, updater: updater)
         popover.delegate = self
     }
 
