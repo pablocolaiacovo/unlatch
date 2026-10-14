@@ -75,8 +75,8 @@ prompts for a password only where one is actually needed, and lets you pick a de
 results: an unlocked copy for password-protected files, an unchanged copy for the rest.
 
 To have Unlatch start with your Mac, open the **ellipsis (…) menu** at the bottom of the popover
-and check **Open at Login**. The same menu shows the installed version. It
-follows System Settings > General > Login Items, so turning Unlatch off there unchecks it too.
+and check **Open at Login**. It follows System Settings > General > Login Items, so turning
+Unlatch off there unchecks it too. The same menu shows the installed version.
 
 ## Building from source
 

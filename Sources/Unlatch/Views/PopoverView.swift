@@ -80,9 +80,10 @@ struct PopoverView: View {
     /// Login shows the system's login item state, not a stored preference; see
     /// `loginItemControl(for:)`. A menu item does not flip itself on click, so
     /// the checkmark always reads `model.loginItem.isOn`.
+    @ViewBuilder
     private func moreMenu(_ update: UpdateFooterPresentation) -> some View {
         let control = model.loginItem
-        return Menu {
+        let menu = Menu {
             Text(Self.versionText)
             Divider()
             if let title = update.menuItemTitle {
@@ -108,7 +109,13 @@ struct PopoverView: View {
         .fixedSize()
         .help("More")
         .accessibilityLabel("More")
-        .accessibilityValue(update.showsUpdateIndicator ? "Update available" : "")
+        // Only when there is something to announce: an empty string still
+        // exposes an AXValue (checked with the AX API), and the design wants none.
+        if update.showsUpdateIndicator {
+            menu.accessibilityValue("Update available")
+        } else {
+            menu
+        }
     }
 
     /// Drawn outside the menu label: the `NSPopUpButton` behind a `Menu`

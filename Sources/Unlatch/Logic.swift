@@ -353,8 +353,8 @@ enum LoginItemStatus: Equatable, Sendable {
     case unavailable
 }
 
-/// What the footer's "Open at Login" checkbox shows. `isOn` follows the
-/// system state, never a stored preference, so the checkbox cannot claim
+/// What the footer's "Open at Login" menu item shows. `isOn` follows the
+/// system state, never a stored preference, so the menu item cannot claim
 /// Unlatch opens at login when System Settings says otherwise.
 struct LoginItemControl: Equatable, Sendable {
     let isOn: Bool
@@ -379,7 +379,7 @@ func loginItemControl(for status: LoginItemStatus) -> LoginItemControl {
     }
 }
 
-/// What toggling the checkbox does from a given status.
+/// What choosing the menu item does from a given status.
 enum LoginItemAction: Equatable, Sendable {
     case register, unregister, openSystemSettings, noChange
 }
