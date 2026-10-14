@@ -454,6 +454,42 @@ func updateButtonState(
     return updateAvailable ? .updateAvailable : .check
 }
 
+/// What the popover footer shows for the updater (option C, #57).
+struct UpdateFooterPresentation: Equatable, Sendable {
+    /// The update item in the ellipsis menu. `nil` leaves it out of the menu.
+    let menuItemTitle: String?
+    let menuItemEnabled: Bool
+    /// The accent "Update Available" footer button and the dot on the ellipsis button.
+    let showsUpdateIndicator: Bool
+
+    static let checkTitle = "Check for Updates…"
+    /// Confirmed by the maintainer on 2026-10-14 (Design/sparkle-updates.md §6 question 5).
+    static let updateAvailableTitle = "Update Available…"
+}
+
+/// `.hidden`: no item, no indicator. `.checkDisabled`: `checkTitle`, disabled, no indicator.
+/// `.check`: `checkTitle`, enabled, no indicator. `.updateAvailable`: `updateAvailableTitle`,
+/// enabled, indicator shown.
+func updateFooterPresentation(for state: UpdateButtonState) -> UpdateFooterPresentation {
+    switch state {
+    case .hidden:
+        UpdateFooterPresentation(
+            menuItemTitle: nil, menuItemEnabled: false, showsUpdateIndicator: false)
+    case .checkDisabled:
+        UpdateFooterPresentation(
+            menuItemTitle: UpdateFooterPresentation.checkTitle, menuItemEnabled: false,
+            showsUpdateIndicator: false)
+    case .check:
+        UpdateFooterPresentation(
+            menuItemTitle: UpdateFooterPresentation.checkTitle, menuItemEnabled: true,
+            showsUpdateIndicator: false)
+    case .updateAvailable:
+        UpdateFooterPresentation(
+            menuItemTitle: UpdateFooterPresentation.updateAvailableTitle, menuItemEnabled: true,
+            showsUpdateIndicator: true)
+    }
+}
+
 // MARK: - PDF helpers (blocking; call off the main actor)
 
 /// True when `password` opens the document (or it needs no password at all).
