@@ -72,6 +72,13 @@ if [[ -n "$CURRENT" ]]; then
   [[ -s "$CURRENT" ]] || die "current feed '$CURRENT' is empty; refusing to start a new feed"
   xmllint --noout "$CURRENT" || die "current feed '$CURRENT' is not well-formed XML"
   [[ "$(xmllint --xpath 'count(/rss/channel)' "$CURRENT")" == "1" ]] || die "current feed '$CURRENT' is not an RSS feed"
+  # A beta must never replace a stable item for the same build: that would
+  # demote a live stable release to the beta channel (a stale beta re-run
+  # after the stable tag, which shares its commit and build number).
+  if [[ -n "$CHANNEL" ]]; then
+    STABLE_SAME_BUILD="$(xmllint --xpath "count(//item[*[local-name()='version'][.='$BUILD'] and not(*[local-name()='channel'])])" "$CURRENT")"
+    [[ "$STABLE_SAME_BUILD" == "0" ]] || die "the current feed already has a stable item for build $BUILD; refusing to replace it with beta $TAG"
+  fi
   xsltproc --stringparam build "$BUILD" "$ROOT/Scripts/appcast-drop-build.xsl" "$CURRENT" > "$WORK/appcast.xml.tmp"
   mv "$WORK/appcast.xml.tmp" "$WORK/appcast.xml"
   BEFORE_COUNT="$(xmllint --xpath 'count(//item)' "$WORK/appcast.xml")"
@@ -91,7 +98,7 @@ set +e
 GEN_OUTPUT="$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$SPARKLE_BIN/generate_appcast" --ed-key-file - \
   --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
   --link "https://github.com/$REPO/releases" \
-  --embed-release-notes --maximum-deltas 0 ${CHANNEL_ARGS[@]+"${CHANNEL_ARGS[@]}"} \
+  --embed-release-notes --maximum-deltas 0 --maximum-versions 0 ${CHANNEL_ARGS[@]+"${CHANNEL_ARGS[@]}"} \
   -o "$WORK/appcast.xml" "$WORK" 2>&1)"
 GEN_STATUS=$?
 set -e

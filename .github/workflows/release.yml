@@ -10,11 +10,13 @@ name: Release
 # `appcast` (macOS, holds the Sparkle signing key) and `deploy-feed` (Pages)
 # run after `publish` so the feed never points at an asset that does not exist
 # yet. If either fails, the release exists but is not announced in the app.
-# Recovery: use "Re-run failed jobs" (never "Re-run all jobs": `publish` fails
-# because the release already exists). Re-run `appcast` and `deploy-feed`
-# together, not `deploy-feed` alone: `appcast` takes the zip from the release
-# (not from the 7-day build artifact) and starts from the live feed, and
-# `deploy-feed` refuses to deploy a feed that would drop an item that is live.
+# Recovery: never use "Re-run all jobs" (`publish` fails because the release
+# already exists), and do not rely on "Re-run failed jobs" when only
+# `deploy-feed` failed (it would redeploy the same stale artifact). Use
+# "Re-run this job" on `appcast`, which also re-runs its dependent
+# `deploy-feed`. `appcast` takes the zip from the release (not from the 7-day
+# build artifact) and starts from the live feed; `deploy-feed` refuses to
+# deploy a feed that would drop or demote an item that is live.
 #
 # Triggers:
 #   - A pushed `v*` tag (the real release path). Only this path publishes.
@@ -396,6 +398,8 @@ jobs:
           name: appcast
           path: appcast-out/appcast.xml
           if-no-files-found: error
+          # A re-run of this job uploads the same artifact name again.
+          overwrite: true
           retention-days: 7
 
   # Deploys the feed with GitHub Pages (Actions-based, not a gh-pages
@@ -423,8 +427,8 @@ jobs:
       # The concurrency group serializes `appcast` but not this job, so a
       # re-run of an older tag's deploy could roll the live feed back. Right
       # before publishing, re-fetch the live feed and fail if it has an item
-      # (by sparkle:version) that the artifact lacks, except the build that
-      # `appcast` deliberately replaced. 404 means no feed yet (first release).
+      # (by sparkle:version and channel) that the artifact lacks. The only
+      # exception is the build `appcast` replaced moving from beta to stable. 404 means no feed yet (first release).
       - name: Check the deploy does not drop a live release
         env:
           FEED_URL: ${{ needs.appcast.outputs.feed_url }}
@@ -442,7 +446,7 @@ jobs:
           import sys
           import xml.etree.ElementTree as ET
           NS = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
-          def versions(path):
+          def items(path):
               out = set()
               for item in ET.parse(path).getroot().iter("item"):
                   v = item.findtext(NS + "version")
@@ -450,14 +454,20 @@ jobs:
                       enc = item.find("enclosure")
                       v = enc.get(NS + "version") if enc is not None else None
                   if v is not None:
-                      out.add(v.strip())
+                      out.add((v.strip(), (item.findtext(NS + "channel") or "").strip()))
               return out
-          new, live, replaced = versions(sys.argv[1]), versions(sys.argv[2]), sys.argv[3]
-          missing = sorted(live - new - {replaced})
-          print("artifact versions:", sorted(new))
-          print("live versions:", sorted(live))
+          new, live, replaced = items(sys.argv[1]), items(sys.argv[2]), sys.argv[3]
+          # Items are (version, channel). A live item may only be absent from
+          # the artifact if it is the replaced build moving beta -> stable
+          # (the same commit tagged stable after its beta). Never stable -> beta.
+          missing = sorted(
+              (v, c) for (v, c) in live - new
+              if not (v == replaced and c == "beta" and (v, "") in new)
+          )
+          print("artifact items:", sorted(new))
+          print("live items:", sorted(live))
           if missing:
-              print("::error::deploying would drop live feed items with sparkle:version " + ", ".join(missing) + ". Re-run the appcast job (and then deploy-feed) so the feed is rebuilt from the live one.")
+              print("::error::deploying would drop or demote live feed items (version, channel): " + ", ".join(map(str, missing)) + ". Re-run the appcast job (its dependents re-run too) so the feed is rebuilt from the live one.")
               sys.exit(1)
           PY
 
