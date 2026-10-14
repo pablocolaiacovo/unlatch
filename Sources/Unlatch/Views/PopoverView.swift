@@ -6,6 +6,7 @@ import SwiftUI
 /// checkbox, and the Quit control.
 struct PopoverView: View {
     @Bindable var model: AppModel
+    let updater: AppUpdater
     @State private var quitHovering = false
 
     /// The bundle's version never changes while running, so build it once.
