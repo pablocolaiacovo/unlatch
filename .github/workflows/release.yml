@@ -1,7 +1,22 @@
 name: Release
 
-# Publishes a downloadable Unlatch.zip to GitHub Releases. See issue #9 and
-# RELEASING.md's "Distribution and signing" section.
+# Publishes a downloadable Unlatch.zip to GitHub Releases, then signs it into
+# the Sparkle update feed on GitHub Pages. See issue #9, issue #13,
+# Design/sparkle-updates.md, and RELEASING.md's "Distribution and signing"
+# section.
+#
+# Job chain on a tag push:
+#   build-and-package -> publish -> appcast -> deploy-feed
+# `appcast` (macOS, holds the Sparkle signing key) and `deploy-feed` (Pages)
+# run after `publish` so the feed never points at an asset that does not exist
+# yet. If either fails, the release exists but is not announced in the app.
+# Recovery: never use "Re-run all jobs" (`publish` fails because the release
+# already exists), and do not rely on "Re-run failed jobs" when only
+# `deploy-feed` failed (it would redeploy the same stale artifact). Use
+# "Re-run this job" on `appcast`, which also re-runs its dependent
+# `deploy-feed`. `appcast` takes the zip from the release (not from the 7-day
+# build artifact) and starts from the live feed; `deploy-feed` refuses to
+# deploy a feed that would drop or demote an item that is live.
 #
 # Triggers:
 #   - A pushed `v*` tag (the real release path). Only this path publishes.
@@ -211,6 +226,8 @@ jobs:
     needs: build-and-package
     # Only a real tag push publishes. A workflow_dispatch run never has a
     # tag to attach a release to, so it always stops after verification.
+    # `appcast` and `deploy-feed` below are gated the same way and run only
+    # after this job succeeds.
     if: github.event_name == 'push'
     # No Swift/Xcode toolchain needed here - just downloading an artifact
     # and calling gh - so this runs on a Linux runner rather than the
@@ -259,3 +276,206 @@ jobs:
             ARGS+=(--prerelease)
           fi
           gh release create "$TAG" dist/Unlatch.zip "${ARGS[@]}"
+
+  # Signs the published zip and adds it to the update feed (issue #13). Kept
+  # out of build-and-package on purpose: that job runs `swift build` and so
+  # third-party package manifests, and the private key must only be exposed to
+  # a job that runs no such code. macOS because Sparkle's tools are macOS-only.
+  appcast:
+    name: appcast
+    needs: publish
+    if: github.event_name == 'push'
+    runs-on: xcode-27
+    timeout-minutes: 15
+    outputs:
+      feed_url: ${{ steps.feed.outputs.url }}
+      build: ${{ steps.feed.outputs.build }}
+    # The secret SPARKLE_ED_PRIVATE_KEY lives in this environment, which is
+    # restricted to v* tags.
+    environment: sparkle-signing
+    permissions:
+      contents: read
+    # Serializes feed updates across tags (the workflow-level group is per
+    # ref and does not).
+    concurrency:
+      group: appcast
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Sparkle's generate_appcast comes from the SwiftPM binary artifact
+      # pinned in Package.resolved; no second version pin lives here.
+      - name: Resolve packages
+        run: swift package resolve
+
+      # The zip comes from the published release, not the 7-day build
+      # artifact, so a late re-run still works. It is checked against the
+      # sha256 digest GitHub recorded for the asset.
+      - name: Download and verify Unlatch.zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          mkdir -p dist
+          gh release download "$TAG" -p Unlatch.zip -D dist --clobber
+          EXPECTED="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name == "Unlatch.zip") | .digest')"
+          if [[ "$EXPECTED" != sha256:* ]]; then
+            echo "::error::release asset Unlatch.zip has no sha256 digest (got '$EXPECTED')" >&2
+            exit 1
+          fi
+          ACTUAL="sha256:$(shasum -a 256 dist/Unlatch.zip | cut -d' ' -f1)"
+          echo "expected=$EXPECTED actual=$ACTUAL"
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo "::error::downloaded Unlatch.zip does not match the release asset digest" >&2
+            exit 1
+          fi
+
+      # Same notes as the release page, so there is one source of truth.
+      # generate_appcast pairs Unlatch.md with Unlatch.zip by base name.
+      - name: Fetch release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release view "$TAG" --json body --jq .body > notes.raw
+          grep -v '^<!-- Release notes generated' notes.raw > notes.md || true
+          mkdir -p dist
+          cp notes.md dist/Unlatch.md
+
+      # A Pages deploy replaces the whole site, so start from the live feed.
+      # 200: use it. 404: first release, start a new feed. Anything else
+      # fails the job: a transient error must never quietly reset the feed.
+      - name: Fetch current feed
+        id: feed
+        run: |
+          set -euo pipefail
+          # The feed URL the shipped app polls, read from the built bundle.
+          UNZIP_DIR="$(mktemp -d)"
+          ditto -x -k dist/Unlatch.zip "$UNZIP_DIR"
+          FEED_URL="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$UNZIP_DIR/Unlatch.app/Contents/Info.plist")"
+          BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$UNZIP_DIR/Unlatch.app/Contents/Info.plist")"
+          rm -rf "$UNZIP_DIR"
+          # Handed to deploy-feed for its rollback check.
+          echo "url=$FEED_URL" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          STATUS="$(curl -sS -o current-appcast.xml -w '%{http_code}' "$FEED_URL?cb=$(date +%s)")"
+          echo "GET $FEED_URL -> $STATUS"
+          case "$STATUS" in
+            200) echo "CURRENT_FEED=current-appcast.xml" >> "$GITHUB_ENV" ;;
+            404)
+              echo "::warning::No published feed at $FEED_URL (404); starting a new one. Expected on the first Sparkle release."
+              echo "CURRENT_FEED=" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "::error::Unexpected HTTP status $STATUS fetching $FEED_URL" >&2
+              exit 1
+              ;;
+          esac
+
+      # The key is passed through the environment and piped to the tools on
+      # stdin by the script. Never add `set -x` or echo it here.
+      - name: Update appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          Scripts/update-appcast.sh \
+            --zip dist/Unlatch.zip \
+            --notes dist/Unlatch.md \
+            --tag "$TAG" \
+            --current-feed "$CURRENT_FEED" \
+            --out appcast-out
+
+      - name: Upload appcast
+        uses: actions/upload-artifact@v7
+        with:
+          name: appcast
+          path: appcast-out/appcast.xml
+          if-no-files-found: error
+          # A re-run of this job uploads the same artifact name again.
+          overwrite: true
+          retention-days: 7
+
+  # Deploys the feed with GitHub Pages (Actions-based, not a gh-pages
+  # branch). Separate Linux job because upload-pages-artifact tars with GNU
+  # tar flags.
+  deploy-feed:
+    name: deploy-feed
+    needs: appcast
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Download appcast
+        uses: actions/download-artifact@v8
+        with:
+          name: appcast
+          path: site
+
+      # The concurrency group serializes `appcast` but not this job, so a
+      # re-run of an older tag's deploy could roll the live feed back. Right
+      # before publishing, re-fetch the live feed and fail if it has an item
+      # (by sparkle:version and channel) that the artifact lacks. The only
+      # exception is the build `appcast` replaced moving from beta to stable. 404 means no feed yet (first release).
+      - name: Check the deploy does not drop a live release
+        env:
+          FEED_URL: ${{ needs.appcast.outputs.feed_url }}
+          REPLACED_BUILD: ${{ needs.appcast.outputs.build }}
+        run: |
+          set -euo pipefail
+          STATUS="$(curl -sS -o live-appcast.xml -w '%{http_code}' "$FEED_URL?cb=$(date +%s)")"
+          echo "GET $FEED_URL -> $STATUS"
+          case "$STATUS" in
+            200) ;;
+            404) echo "No live feed; nothing to compare"; exit 0 ;;
+            *) echo "::error::Unexpected HTTP status $STATUS fetching $FEED_URL" >&2; exit 1 ;;
+          esac
+          python3 -I - site/appcast.xml live-appcast.xml "$REPLACED_BUILD" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          NS = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
+          def items(path):
+              out = set()
+              for item in ET.parse(path).getroot().iter("item"):
+                  v = item.findtext(NS + "version")
+                  if v is None:
+                      enc = item.find("enclosure")
+                      v = enc.get(NS + "version") if enc is not None else None
+                  if v is not None:
+                      out.add((v.strip(), (item.findtext(NS + "channel") or "").strip()))
+              return out
+          new, live, replaced = items(sys.argv[1]), items(sys.argv[2]), sys.argv[3]
+          # Items are (version, channel). A live item may only be absent from
+          # the artifact if it is the replaced build moving beta -> stable
+          # (the same commit tagged stable after its beta). Never stable -> beta.
+          missing = sorted(
+              (v, c) for (v, c) in live - new
+              if not (v == replaced and c == "beta" and (v, "") in new)
+          )
+          print("artifact items:", sorted(new))
+          print("live items:", sorted(live))
+          if missing:
+              print("::error::deploying would drop or demote live feed items (version, channel): " + ", ".join(map(str, missing)) + ". Re-run the appcast job (its dependents re-run too) so the feed is rebuilt from the live one.")
+              sys.exit(1)
+          PY
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5
