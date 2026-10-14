@@ -571,7 +571,7 @@ struct UpdateFooterPresentation: Equatable, Sendable {
     let showsUpdateIndicator: Bool
 
     static let checkTitle = "Check for Updates…"
-    /// Pending maintainer confirmation (§6 question 5): "Update Available…" or "Install Update…".
+    /// Confirmed by the maintainer on 2026-10-14 (§6 question 5).
     static let updateAvailableTitle = "Update Available…"
 }
 
@@ -973,7 +973,6 @@ Those three groups merged with T2 (#54). T3 adds, in the same file:
     indicator.
 - One test that pins the copy: `checkTitle == "Check for Updates…"` and `updateAvailableTitle ==
   "Update Available…"`, both ending in the single-character ellipsis "…" (U+2026), not three dots.
-  If the maintainer picks "Install Update…", this test changes with the constant.
 - One composed test: `updateFooterPresentation(for: updateButtonState(availability:
   .disabled(.notAnAppBundle), canCheck: true, updateAvailable: true))` has no menu item and no
   indicator. This is the `swift run` case end to end.
@@ -1328,12 +1327,12 @@ This depends on T4.
    "Unlatch Sparkle EdDSA private key (account: unlatch)". Never in the repository, and never in
    iCloud Drive as a plain file.
 
-5. **Wording of the menu item when an update is found (#57), pending maintainer confirmation.**
+5. **Wording of the menu item when an update is found (#57). Resolved 2026-10-14: "Update Available…".**
    "Update Available…" or "Install Update…". Recommendation: **"Update Available…"**, because it
    matches the footer's "Update Available" button, so the two controls read as the same action, and
    because clicking it shows Sparkle's alert with release notes and a choice rather than installing
-   straight away, which "Install Update…" would suggest. T3 builds with "Update Available…" unless
-   the maintainer says otherwise before the PR merges. The string is one constant
+   straight away, which "Install Update…" would suggest. The maintainer confirmed the
+   recommendation on 2026-10-14. The string is one constant
    (`UpdateFooterPresentation.updateAvailableTitle`) and one test.
 
 **Resolved by the maintainer on 2026-10-09:** questions 1 to 3 are accepted as recommended.
