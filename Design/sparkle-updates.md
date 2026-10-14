@@ -9,12 +9,19 @@ milestone v1.1). The maintainer's comment on the issue overrides the body in fou
 - Hardened runtime stays off in ad-hoc mode.
 - The real upgrade test records whether Gatekeeper or privacy (TCC) prompts come back.
 
+Issue #57 ("Move the version, update check, and Open at Login into an ellipsis menu in the popover
+footer", maintainer decision of 2026-10-09, option C) replaces the footer layout this design
+originally gave T3. §2.4, §2.5, §3.8, §4, and T3 in §5 follow #57. The exploration branch
+`explore/footer-options` (commit 5b650f3) is reference only and does not ship.
+
 ## 1. Summary
 
 Users who install from the zip can't currently find out that a newer version exists. This change
 embeds Sparkle 2. The app checks an EdDSA-signed appcast hosted on GitHub Pages and offers new
 versions with their release notes. When the user accepts, it installs the update in place and
-relaunches. A "Check for Updates…" control goes in the popover's footer, next to Quit. The release
+relaunches. The popover footer becomes an ellipsis ("…") menu next to Quit (#57): the menu holds
+the version, "Check for Updates…", and Open at Login. An accent "Update Available" button and a dot
+on the ellipsis appear only while a scheduled check has found an update. The release
 workflow signs every published `Unlatch.zip` with an ed25519 key held as a GitHub Actions secret,
 then updates and deploys the appcast. Beta tags go to a `beta` channel, which only beta builds
 follow.
@@ -26,9 +33,10 @@ follow.
 2. `Scripts/package-app.sh` embeds `Sparkle.framework` in `Contents/Frameworks` and signs it
    inside-out with the same `SIGN_IDENTITY` as the app. Hardened runtime stays off while the
    identity is ad-hoc. The signing code is laid out so that #8 only has to add flags in one place.
-3. The popover footer gets "Check for Updates…", which is disabled while Sparkle can't start a
-   check. When a scheduled check finds an update the user hasn't looked at yet, the footer shows
-   "Update Available".
+3. The popover footer's ellipsis menu gets "Check for Updates…", which is disabled while Sparkle
+   can't start a check. When a scheduled check finds an update the user hasn't looked at yet, the
+   footer shows an "Update Available" button, the ellipsis gets a dot, and the menu item reads
+   "Update Available…" (wording pending, §6 question 5).
 4. The release workflow generates and signs `appcast.xml` and deploys it to GitHub Pages. Stable
    tags go to the default channel and `-beta.N` tags go to the `beta` channel.
 5. Verification has three parts: unit tests for the pure decisions, CI checks on signatures,
@@ -51,7 +59,10 @@ follow.
   passes no `--entitlements`. Sparkle's XPC services are removed (§2.3).
   `SUEnableInstallerLauncherService` is not set.
 - A badge on the status item icon, Dock or notification reminders, or a settings window. The
-  popover footer is the only update UI besides Sparkle's own windows.
+  popover footer (its ellipsis menu item, the "Update Available" button, and the dot) is the only
+  update UI besides Sparkle's own windows.
+- Other menu items such as About, Settings, or Copy Version, and moving Quit into the menu. #57
+  rules these out.
 - Updating v1.0.0 installs. v1.0.0 doesn't contain Sparkle, so those users install v1.1.0 by hand
   once. The README says so.
 
@@ -64,23 +75,29 @@ follow.
 | `Package.swift` | Add the Sparkle package dependency, the `Sparkle` product on the `Unlatch` target, and the `@executable_path/../Frameworks` rpath linker flag | `macos-developer` |
 | `Package.resolved` | New file, committed (the existing `.gitignore` comment already expects it) | `macos-developer` |
 | `Resources/Info.plist.template` | Add `SUFeedURL`, `SUPublicEDKey`, and `SUAllowsAutomaticUpdates` | `macos-developer` |
-| `Sources/Unlatch/Logic.swift` | Add `UpdaterAvailability`, `updaterAvailability(...)`, `allowedUpdateChannels(forVersion:)`, `UpdateButtonState`, and `updateButtonState(...)` | `macos-developer` |
+| `Sources/Unlatch/Logic.swift` | T2 (merged in #54): `UpdaterAvailability`, `updaterAvailability(...)`, `allowedUpdateChannels(forVersion:)`, `UpdateButtonState`, and `updateButtonState(...)`. T3: `UpdateFooterPresentation` and `updateFooterPresentation(for:)` (§2.5) | `macos-developer` |
 | `Sources/Unlatch/AppUpdater.swift` | New: wraps `SPUStandardUpdaterController`, `@MainActor @Observable` | `macos-developer` |
 | `Sources/Unlatch/AppDelegate.swift` | Create and own an `AppUpdater`, then pass it to `StatusItemController` | `macos-developer` |
 | `Sources/Unlatch/StatusItemController.swift` | Pass the updater into the hosting controller. Close the popover before Sparkle presents a window | `macos-developer` |
 | `Sources/Unlatch/PopoverHostingController.swift` | `init(model:updater:)` | `macos-developer` |
-| `Sources/Unlatch/Views/PopoverView.swift` | Add the footer update button | `macos-developer` |
-| `Tests/UnlatchTests/UpdaterLogicTests.swift` | New: tests for the three pure helpers | `macos-developer` |
+| `Sources/Unlatch/Views/PopoverView.swift` | Replace the footer: ellipsis menu (version, Check for Updates…, Open at Login), the conditional "Update Available" button, the dot, and the unchanged Quit button (§2.4, #57) | `macos-developer` |
+| `Tests/UnlatchTests/UpdaterLogicTests.swift` | T2 (merged in #54): tests for the three pure helpers. T3: tests for `updateFooterPresentation(for:)` | `macos-developer` |
 | `Tests/UnlatchTests/InfoPlistTemplateTests.swift` | New: guards on the template's Sparkle keys | `macos-developer` |
-| `README.md` | Updates section, the privacy paragraph, and the findings from the upgrade test | `macos-developer` |
+| `README.md` | T3: the Open at Login paragraph describes the menu. T6: Updates section, the privacy paragraph, and the findings from the upgrade test | `macos-developer` |
+| `docs/screenshot.png` | T3: retake it with the new footer. It already predates #51 | `macos-developer` |
+| `Sources/Unlatch/AppModel.swift`, `Tests/UnlatchTests/LoginItemTests.swift` | T3: remove `loginItemRevision`, its bump in `refreshLoginItem()`, and the tests that only cover it (§2.4.2) | `macos-developer` |
 | `Scripts/package-app.sh` | Embed, trim, and sign Sparkle inside-out. Add `--sequesterRsrc` to the zip | `devops` |
 | `Scripts/update-appcast.sh` | New: strip, generate, and validate the appcast. Runnable locally with a throwaway key | `devops` |
 | `Scripts/appcast-drop-build.xsl` | New: removes items whose build number equals the new one (§2.6) | `devops` |
 | `.github/workflows/release.yml` | Extra verification in `build-and-package`, plus new `appcast` and `deploy-feed` jobs | `devops` |
 | `RELEASING.md` | Feed checks in the release checklist, key custody, and the #8 notes for Sparkle | `project-owner` |
 
-`Sources/UnlatchCore` and `Tests/UnlatchCoreTests` are not touched. `AppModel` is not touched
-either, because update state lives in its own object (§2.4).
+`Sources/UnlatchCore` and `Tests/UnlatchCoreTests` are not touched. No update state goes into
+`AppModel`; it lives in its own object (§2.4). T3's only `AppModel` change is removing
+`loginItemRevision`, which no view reads once the checkbox becomes a menu item (§2.4.2), together
+with its three observer tests in `Tests/UnlatchTests/LoginItemTests.swift`. `LoginItem.swift` and
+the login item logic in `Logic.swift` are not touched: Open at Login moves into the menu, but what
+it does underneath stays as #51 built it.
 
 ### 2.2 Dependency, version pin, and rpath
 
@@ -223,11 +240,14 @@ Decisions:
 
 ### 2.4 Updater wiring and the footer
 
+#### 2.4.1 `AppUpdater`
+
 Sparkle annotates `SPUStandardUpdaterController`, `SPUUpdater`, and `SPUUpdaterDelegate` as
 `NS_SWIFT_UI_ACTOR`, so they are main-actor types in Swift. `SPUStandardUserDriverDelegate` is not
 annotated, so the conformance is declared `@preconcurrency`. Swift then inserts a main-actor
-assertion at the boundary, and Sparkle calls its delegates on the main thread. The skeleton below
-compiles cleanly under Swift 6.4 in Swift 6 language mode against Sparkle 2.10.0 (§2.10).
+assertion at the boundary, and Sparkle calls its delegates on the main thread. `SPUUpdaterDelegate`
+needs no `@preconcurrency`. The skeleton below compiles cleanly under Swift 6.4 in Swift 6 language
+mode against Sparkle 2.10.0 (§2.10).
 
 ```swift
 // Sources/Unlatch/AppUpdater.swift
@@ -243,8 +263,14 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     let availability: UpdaterAvailability
     /// Mirrors SPUUpdater.canCheckForUpdates (KVO).
     private(set) var canCheckForUpdates = false
-    /// A scheduled check found an update the user hasn't attended to yet.
+    /// A scheduled update alert is on screen and hasn't had the user's attention yet.
     private(set) var updateAvailable = false
+
+    /// The footer's input: `updateButtonState(...)` over the three values above.
+    var buttonState: UpdateButtonState {
+        updateButtonState(
+            availability: availability, canCheck: canCheckForUpdates, updateAvailable: updateAvailable)
+    }
 
     /// Set by StatusItemController: close the popover before Sparkle shows a
     /// window, the same pattern as AppModel.onLoad.
@@ -271,61 +297,226 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
 
 Behaviour:
 
-- **`init`.** When `availability != .enabled`, it returns without creating a controller. Otherwise
-  it creates `SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self,
+- **`init`.** When `availability != .enabled`, it returns without creating a controller, so nothing
+  from Sparkle runs and no alert can appear. Otherwise it creates
+  `SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self,
   userDriverDelegate: self)` and starts observing
   `controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new])`. Sparkle mutates
-  that property on the main thread, so the change handler wraps its write in
-  `MainActor.assumeIsolated`, the pattern `PopoverDismissalMonitor` and `StatusItemController`
-  already use. Finally `init` calls `controller.startUpdater()`. Starting only after the observation
-  is in place means the initial value isn't missed, and `SPUStandardUpdaterController` shows its
-  own alert if starting fails.
+  that property on the main thread. The change handler reads `change.newValue ?? false` (a
+  `Sendable` `Bool`) and writes it inside `MainActor.assumeIsolated`, the pattern
+  `PopoverDismissalMonitor` and `StatusItemController` already use. It captures `self` weakly and
+  does not send the `SPUUpdater` argument anywhere. Finally `init` calls
+  `controller.startUpdater()`. Starting only after the observation is in place means the initial
+  value isn't missed, and `SPUStandardUpdaterController` shows its own alert if starting fails.
 - **`checkForUpdates()`.** Calls `onWillPresent?()` and then `controller?.checkForUpdates(nil)`.
   The popover has to close first. It's an `.applicationDefined` popover in a window level above
   normal windows, and `PopoverDismissalMonitor`'s global mouse monitor doesn't see clicks in
-  Unlatch's own windows. Left open, it would cover Sparkle's update window.
+  Unlatch's own windows. Left open, it would cover Sparkle's update window. Both footer entry
+  points, the menu item and the "Update Available" button, call this one method.
 - **`allowedChannels(for:)`** returns `allowedUpdateChannels(forVersion: shortVersion)`. See §2.5.
 - **Gentle reminders.** These are required for a dockless app, and Sparkle logs a warning without
-  them. `supportsGentleScheduledUpdateReminders` returns `true`. The `shouldHandleShowing…` method
-  is not overridden, so Sparkle still shows the scheduled-update window without taking focus.
+  them. `supportsGentleScheduledUpdateReminders` returns `true`.
+  `standardUserDriverShouldHandleShowingScheduledUpdate(_:andInImmediateFocus:)` is not
+  implemented, so Sparkle still shows the scheduled-update window itself.
   `standardUserDriverWillHandleShowingUpdate` sets `updateAvailable = true` when
   `!state.userInitiated`. `standardUserDriverDidReceiveUserAttention` and
-  `standardUserDriverWillFinishUpdateSession` reset it to `false`. If the window ends up behind
-  other apps, the footer shows "Update Available" and clicking it calls `checkForUpdates()`, which
-  brings the session to the front. This follows Sparkle's background-app sample without the
-  Dock-badge and notification parts (non-goals).
+  `standardUserDriverWillFinishUpdateSession` reset it to `false`. This follows Sparkle's
+  background-app sample without the Dock-badge and notification parts (non-goals).
+- **When the indicator is actually visible** (read from `SPUStandardUserDriver.m` in 2.10.0,
+  lines 198-286). Unlatch is a background (`.accessory`) app, so Sparkle always shows a scheduled
+  update at once. Where it puts the alert decides whether the indicator survives:
+  - **Within about 3 seconds of the updater starting** (the near-launch window), Sparkle activates
+    the app and shows the alert in front as key. That counts as attention right away, so the
+    indicator clears almost immediately.
+  - **Unlatch active with a key window, which in practice means the popover is open** (lines
+    263-268): `showingUpdateInBack = backgroundApp && [NSApp keyWindow] != nil`, so the alert is
+    ordered *behind* the app's windows and the popover stays key. The indicator appears live in the
+    open popover: "Update Available" on the left and the dot on the ellipsis. This is the case
+    Unlatch hits most often, because the popover is the app's only window.
+  - **Unlatch active without a key window** (popover closed, app not yet deactivated): the alert is
+    shown in front and normally becomes key, which counts as attention, so the indicator clears.
+  - **Unlatch inactive** (lines 270-283): the alert goes behind the frontmost app without focus.
+    The next time the user opens the popover, it shows the indicator. Activating Unlatch for the
+    popover may bring the alert forward too, but the popover is key, so attention is not recorded.
 
-Ownership and threading of state across isolation domains:
+  In every case where the indicator stays up, clicking "Update Available" or the menu item closes
+  the popover and `checkForUpdates()` brings the alert to the front as key, which clears the
+  indicator. "Remind Me Later", "Skip", and "Install" all count as attention and end the session,
+  so the indicator never outlives the alert, and nothing is persisted across launches.
+- **`canCheckForUpdates` and the indicator.** Per `SPUUpdater.h`, `canCheckForUpdates` stays `true`
+  while an update alert is shown, so `.updateAvailable` is reachable. It is `false` while a feed or
+  update downloads in the background, and `updateButtonState` then gives `.checkDisabled`, which
+  also hides the indicator for that moment.
 
-- **`AppDelegate`** gains `private var updater: AppUpdater?`. In `applicationDidFinishLaunching`
-  it builds `AppUpdater(availability: updaterAvailability(...from Bundle.main...), shortVersion:)`
-  before `StatusItemController(model:updater:)`. Everything here is on the main actor, and nothing
-  Sparkle-related enters a detached task.
-- **`StatusItemController`** sets `updater.onWillPresent = { [weak self] in self?.closePopover() }`
-  and passes the updater to `PopoverHostingController(model:updater:)`, which passes it on to
-  `PopoverView(model:updater:)` as a plain `let updater: AppUpdater`. SwiftUI tracks reads of an
-  `@Observable` class without `@Bindable`.
+Lifetime, ownership, and isolation:
+
+- **`AppDelegate`** gains `private var updater: AppUpdater?`, assigned once in
+  `applicationDidFinishLaunching` and never cleared. It builds `AppUpdater(availability:
+  updaterAvailability(bundleURL: Bundle.main.bundleURL, feedURL: info["SUFeedURL"] as? String,
+  publicEDKey: info["SUPublicEDKey"] as? String), shortVersion:
+  info["CFBundleShortVersionString"] as? String)` before `StatusItemController(model:updater:)`.
+  `NSApplication.delegate` is weak, but `AppDelegate.main()` keeps its local `delegate` alive
+  across `app.run()`, which never returns, so the delegate, the `AppUpdater`, and the
+  `SPUStandardUpdaterController` it owns all live for the process. Nothing else holds the
+  controller. Sparkle holds the `AppUpdater` only weakly, as both delegates.
+- **`StatusItemController`** takes `init(model: AppModel, updater: AppUpdater)`, sets
+  `updater.onWillPresent = { [weak self] in self?.closePopover() }`, and passes the updater to
+  `PopoverHostingController(model:updater:)`, which passes it on to `PopoverView(model:updater:)` as
+  a plain `let updater: AppUpdater`. SwiftUI tracks reads of an `@Observable` class without
+  `@Bindable`.
+- **Isolation.** Every type here is `@MainActor`: `AppDelegate`, `StatusItemController`,
+  `AppUpdater`, the Sparkle types, and the SwiftUI view. The only boundary crossings are the KVO
+  handler and Sparkle's calls into `SPUStandardUserDriverDelegate`, both on the main thread and
+  handled by `assumeIsolated` and the `@preconcurrency` assertion respectively. Nothing
+  Sparkle-related enters a detached task, and no `nonisolated(unsafe)` or `@unchecked Sendable` is
+  needed.
 - **`AppModel`, `UnlatchCore`, and the detached classify, verify, and save tasks** stay unchanged.
   Update state never mixes with flow state.
 
-The footer, from left to right: version text, `Spacer`, the update button, then Quit.
+#### 2.4.2 The footer (option C, #57)
 
 ```
-Version 1.1.0 (128)                      Check for Updates…   Quit ⏻
-Version 1.1.0 (128)                       ● Update Available   Quit ⏻
++--------------------------------------------+
+| ● Update Available             (…)•  Quit ⏻ |   .updateAvailable: accent button on the left, dot on the ellipsis
+|                                (…)   Quit ⏻ |   every other state: only the ellipsis and Quit
++--------------------------------------------+
+
+Ellipsis menu:
+  Version 1.1.0 (28)            disabled header item
+  ---------------------------
+  Check for Updates…            "Update Available…" when an update is found; hidden when the updater is unavailable
+  ✓ Open at Login               checkmark item, shows the system login item state
 ```
 
-- The update button reuses the Quit button's plain style: 11 pt text, a 20 pt high hover capsule,
-  and `.help` and `.accessibilityLabel`. It shows no icon in the `.check` state. In the
-  `.updateAvailable` state it shows a small accent-colored dot and the accent foreground. The
-  version text already truncates in the middle, so it gives up width first. The footer stays 26 pt
-  high.
-- Its state comes from the pure `updateButtonState(...)` (§2.5): `.hidden` renders nothing,
-  `.checkDisabled` renders the button with `.disabled(true)`, and `.check` and `.updateAvailable`
-  render it enabled.
-- It gets no keyboard shortcut. ⌘Q stays the footer's only shortcut.
+The row stays one 26 pt high `HStack(spacing: 6)` with 14 pt horizontal padding, as today. The
+version label and the Open at Login checkbox leave the row. Quit stays in the row, unchanged: the
+"Quit" label plus the `power` symbol, ⌘Q, `.help("Quit Unlatch")`, the "Quit Unlatch"
+accessibility label, and the hover highlight.
+
+The footer reads `updater.buttonState`, maps it through the pure `updateFooterPresentation(for:)`
+(§2.5), and renders:
+
+| `UpdateButtonState` | Menu update item | "Update Available" button and dot |
+| --- | --- | --- |
+| `.hidden` (`swift run`, missing feed or key) | Not in the menu | Hidden |
+| `.checkDisabled` | "Check for Updates…", disabled | Hidden |
+| `.check` | "Check for Updates…", enabled | Hidden |
+| `.updateAvailable` | "Update Available…" (pending, §6 question 5), enabled | Shown |
+
+Menu contents, in this order (#57). Nothing else goes in the menu:
+
+1. **Version.** `Text(Self.versionText)`, the existing `versionLabel(version:build:)` string. SwiftUI
+   renders a `Text` in a `Menu` as a disabled item.
+2. **Separator.** `Divider()`.
+3. **Update item.** `Button(title) { updater.checkForUpdates() }.disabled(!enabled)`, emitted only
+   when `menuItemTitle` is non-nil. Under `swift run` the menu is version, separator, Open at Login.
+4. **Open at Login.** `Toggle("Open at Login", isOn: Binding(get: { model.loginItem.isOn }, set:
+   { model.setLaunchAtLogin($0) }))` with `.disabled(!model.loginItem.isEnabled)` and
+   `.help(model.loginItem.help)`. A `Toggle` in a `Menu` is a checkmark item.
+
+Sketch of the view code (the implementer owns the details):
+
+```swift
+private var footer: some View {
+    let update = updateFooterPresentation(for: updater.buttonState)
+    return HStack(spacing: 6) {
+        if update.showsUpdateIndicator { updateAvailableButton }
+        Spacer()
+        moreMenu(update)
+            .overlay(alignment: .topTrailing) { if update.showsUpdateIndicator { updateDot } }
+        quitButton
+    }
+    .padding(.horizontal, 14)
+    .frame(height: 26)
+}
+```
+
+Details:
+
+- **The ellipsis button.** `Image(systemName: "ellipsis.circle")` at 13 pt as the `Menu` label,
+  padded with `.padding(.top, 4).padding(.trailing, 4)` as in the prototype
+  (`FooterVariants.swift`, lines 211-212), with `.menuIndicator(.hidden)` and `.fixedSize()`. The
+  padding gives the dot room at the top-trailing corner so it sits beside the glyph instead of on
+  top of it. Use `.menuStyle(.button)` with
+  `.buttonStyle(.borderless)`, the replacement Apple's interface names for `.borderlessButton`. If
+  that renders differently from the prototype's screenshots, `.menuStyle(.borderlessButton)` (what
+  the prototype used) is acceptable: it is soft-deprecated (`deprecated: 100000.0`) and produces no
+  warning.
+- **The dot.** A 7 pt accent `Circle` in an `.overlay(alignment: .topTrailing)` on the `Menu`, with
+  `.allowsHitTesting(false)` and `.accessibilityHidden(true)` (its meaning is announced through the
+  ellipsis button, see Accessibility below). It lands in the 4 pt padding of the label, so it must
+  not cover any part of the `ellipsis.circle` glyph. It has to be outside the `Menu` label, because the `NSPopUpButton`
+  behind the menu flattens its label to a template image and drops the colour (found by the
+  prototype).
+- **The "Update Available" button.** A plain button in the same style as Quit: 11 pt text, a 20 pt
+  high hover capsule, the accent colour as foreground, and a 6 pt accent dot before the text. It is
+  on the left of the row and calls `updater.checkForUpdates()`. Factor the shared hover-capsule
+  styling out of `quitButton` into one private `ButtonStyle` or view in `PopoverView.swift`, so the
+  two buttons can't drift. That is the only refactor of Quit.
+- **`loginItemRevision` goes away.** The checkbox needed `.id(model.loginItemRevision)` because an
+  `NSButton` checkbox flips itself on click, and `@Observable` doesn't notify when
+  `loginItemStatus` is assigned an equal value, so nothing redrew it after a failed attempt. A menu
+  item doesn't flip itself. **Verified during design** (macOS 27.0.1, throwaway SwiftUI package in
+  `/tmp`): choosing a `Toggle` menu item whose binding setter leaves the model unchanged calls the
+  setter with `true`, and the `NSMenuItem`'s state is still off right after the action and when
+  the menu opens again. So the checkmark always shows `model.loginItem.isOn`, the real system
+  state, and nothing needs to force a redraw. **Recommendation: T3 removes it.** Delete the
+  `loginItemRevision` property and its bump in `refreshLoginItem()`, reword the doc comments on
+  `refreshLoginItem()` and `setLaunchAtLogin(_:)` that mention the checkbox, and delete
+  `revisionChanges(_:during:)` and the three tests built on it
+  (`failedRegisterStillNotifiesObservers`, `openingSystemSettingsStillNotifiesObservers`,
+  `refreshWithAnUnchangedStatusNotifiesObservers`). `appModelSnapsBackWhenRegisterFails` and the
+  other state-based tests stay, and they still cover the snap-back. Keeping the property would
+  leave observable state that nothing reads and a doc comment describing a control that no longer
+  exists.
+- **Behaviour of Open at Login is unchanged** (#51): checking registers, unchecking unregisters,
+  checking in `.requiresApproval` opens System Settings > General > Login Items, a failure is
+  logged, and `StatusItemController.presentAndFocus()` still refreshes the state each time the
+  popover opens.
+- **Escape and outside clicks while the menu is open.** Menu tracking runs its own event loop, and
+  AppKit does not call local event monitors for events that menu tracking consumes, so Esc closes
+  only the menu and `PopoverDismissalMonitor`'s Esc monitor doesn't fire. Clicks on menu items are
+  in-process, so the global mouse-down monitor doesn't see them either. A T3 acceptance check
+  confirms both.
+- **Keyboard shortcuts.** None are added. ⌘Q stays the footer's only shortcut.
+
+Accessibility:
+
+| Element | VoiceOver label | Tooltip (`.help`) |
+| --- | --- | --- |
+| Ellipsis menu button | Label "More". Value "Update available" in `.updateAvailable`, otherwise no value | "More" |
+| Dot | Not an element (`.accessibilityHidden(true)`). Its meaning is the ellipsis button's value | None |
+| "Update Available" button | "Update Available" | "See the available update" |
+| Menu items | Their titles. Open at Login is read with its checked state, the version as dimmed | Open at Login: `model.loginItem.help` |
+| Quit | "Quit Unlatch", unchanged | "Quit Unlatch", unchanged |
+
+In `.updateAvailable` there are two things to announce: the "Update Available" button, which is
+the action, and the dot, which marks the ellipsis. The dot's VoiceOver label (#57) is carried as the
+ellipsis button's accessibility value, so the ellipsis and its dot are one element that announces
+the update once: "More, Update available, menu button". The "Update Available" button is the
+separate element that performs the action. The prototype instead labelled the ellipsis "More,
+update available". A separate overlay element for a 7 pt dot was rejected: whether SwiftUI exposes
+an overlay on an `NSPopUpButton`-backed `Menu` as its own element is not guaranteed, and an
+unreliable element is not testable. In every other state the ellipsis has no value and reads "More,
+menu button".
+
+With System Settings > Keyboard > Keyboard navigation on, Tab reaches "Update Available", the
+ellipsis, and Quit. Space opens the menu, and the arrow keys and Return choose items. This is
+standard `NSPopUpButton` behaviour and needs no code.
+
+**Verified during design** (macOS 27.0.1, Xcode 27 SDK, throwaway package in `/tmp`): a SwiftUI
+`Menu` with the content above produces these `NSMenuItem`s: the `Text` as a disabled item, the
+`Divider` as a separator, `.help` on a `Button` as the item's `toolTip`, and a disabled `Toggle` as
+a disabled item with `state == .on` that keeps its `toolTip`. So the explanation from
+`loginItemControl(for:)` stays available as a tooltip under `swift run`, as #57 asks. A second
+AppKit probe confirmed that macOS actually *shows* the tooltip on a disabled `NSMenuItem`: hovering
+the disabled, checked "Open at Login" item displayed its tooltip window. Neither probe was run on
+macOS 14; the T3 manual check covers the oldest macOS available to the maintainer.
 
 ### 2.5 Pure helpers (`Logic.swift`)
+
+Everything in the first block below is already on `main` (T2, #54) with its tests. T3 builds on it
+and doesn't change it. T3 adds only the second block.
 
 ```swift
 /// Whether this process can run Sparkle at all.
@@ -366,6 +557,32 @@ func updateButtonState(
     availability: UpdaterAvailability, canCheck: Bool, updateAvailable: Bool
 ) -> UpdateButtonState
 ```
+
+T3 adds the mapping from that state to the footer of #57, so the copy and the visibility rules are
+unit-tested instead of living only in the view:
+
+```swift
+/// What the popover footer shows for the updater (option C, #57).
+struct UpdateFooterPresentation: Equatable, Sendable {
+    /// The update item in the ellipsis menu. `nil` leaves it out of the menu.
+    let menuItemTitle: String?
+    let menuItemEnabled: Bool
+    /// The accent "Update Available" footer button and the dot on the ellipsis button.
+    let showsUpdateIndicator: Bool
+
+    static let checkTitle = "Check for Updates…"
+    /// Confirmed by the maintainer on 2026-10-14 (§6 question 5).
+    static let updateAvailableTitle = "Update Available…"
+}
+
+/// .hidden: no item, no indicator. .checkDisabled: checkTitle, disabled, no indicator.
+/// .check: checkTitle, enabled, no indicator. .updateAvailable: updateAvailableTitle, enabled,
+/// indicator shown.
+func updateFooterPresentation(for state: UpdateButtonState) -> UpdateFooterPresentation
+```
+
+The copy lives in the two `static let`s, so the pending wording decision changes one line and one
+test. The footer button's own title, "Update Available", is fixed by #57 and stays in the view.
 
 `AppDelegate` reads `Bundle.main.bundleURL`, `SUFeedURL`, `SUPublicEDKey`, and
 `CFBundleShortVersionString` from `Bundle.main.infoDictionary` and passes in plain values. That
@@ -614,14 +831,16 @@ I checked these with throwaway packages in `/tmp`. The repository was not touche
   - Old items are kept without their archives.
   - Same-build in-place update (the trap in §2.6), and the `xsltproc` fix for it.
   - Key mismatch: it warns and exits 0.
-- The `AppUpdater` skeleton in §2.4 builds without warnings in Swift 6 mode. Without
+- The `AppUpdater` skeleton in §2.4.1 builds without warnings in Swift 6 mode. Without
   `@preconcurrency`, the `SPUStandardUserDriverDelegate` conformance is an error ("crosses into
   main actor-isolated code").
 
 ### 2.11 Edge cases
 
-- **`swift run` and tests.** Availability is `.notAnAppBundle`, the button is hidden, no Sparkle
-  object is created, and no alert appears.
+- **`swift run` and tests.** Availability is `.notAnAppBundle`. The update menu item, the "Update
+  Available" button, and the dot are hidden, no Sparkle object is created, and no alert appears.
+  The ellipsis menu still shows the version, the separator, and Open at Login, which is disabled
+  and explains why in its tooltip.
 - **Locally packaged builds (`0.0.0-<sha>`).** They have the real feed and key, so they can be
   offered a stable release whose build number is higher. That's harmless.
 - **Feed unreachable or offline.** A manual check shows Sparkle's error alert. Scheduled checks fail
@@ -713,6 +932,16 @@ Keeping them gives future sandboxing for free, but costs two more bundles to sig
 dictionary to preserve, and about 400 KB. Sparkle explicitly allows removing them in
 non-sandboxed apps. **Remove them.**
 
+### 3.8 Footer layout for the update control (#57)
+
+Four layouts were prototyped with live screenshots on `explore/footer-options`. A single row with
+all four controls truncates the update button to "Updat…ailable" even before localisation. Two rows
+show everything but make every step 26 pt taller. Turning the version label into the update link
+is cheap but hard to discover and non-standard for VoiceOver. **The maintainer chose the ellipsis
+menu on 2026-10-09 (option C)**: the footer keeps one row, a future item is one more menu row, and
+the only coloured thing in the footer is the update prompt when there is one. The accepted costs
+are that the version is no longer visible at a glance and Open at Login is one click deeper.
+
 ## 4. Testing strategy
 
 ### Unit tests (`Tests/UnlatchTests`)
@@ -734,6 +963,23 @@ non-sandboxed apps. **Remove them.**
   `canCheck == false && updateAvailable == true` giving `.checkDisabled`, and `.disabled(_)` giving
   `.hidden` regardless of the other inputs.
 
+Those three groups merged with T2 (#54). T3 adds, in the same file:
+
+- `updateFooterPresentation(for:)`, one test per state:
+  - `.hidden` gives no menu item and no indicator.
+  - `.checkDisabled` gives "Check for Updates…", disabled, and no indicator.
+  - `.check` gives "Check for Updates…", enabled, and no indicator.
+  - `.updateAvailable` gives `UpdateFooterPresentation.updateAvailableTitle`, enabled, and the
+    indicator.
+- One test that pins the copy: `checkTitle == "Check for Updates…"` and `updateAvailableTitle ==
+  "Update Available…"`, both ending in the single-character ellipsis "…" (U+2026), not three dots.
+- One composed test: `updateFooterPresentation(for: updateButtonState(availability:
+  .disabled(.notAnAppBundle), canCheck: true, updateAvailable: true))` has no menu item and no
+  indicator. This is the `swift run` case end to end.
+
+No test for the view itself: the repository has no SwiftUI view tests, and the login item
+behaviour behind the menu toggle is already covered by `LoginItemTests.swift`.
+
 `InfoPlistTemplateTests.swift`:
 
 - Read `Resources/Info.plist.template` via `#filePath`, substitute the two version placeholders, and
@@ -745,7 +991,8 @@ non-sandboxed apps. **Remove them.**
   all absent.
 - `LSMinimumSystemVersion` is still `14.0`.
 
-Untestable in-process: `AppUpdater` itself, which needs a real bundle. No new fixtures are needed,
+Untestable in-process: `AppUpdater` itself, which needs a real bundle, and the footer's look,
+menu, and VoiceOver output, which T3 checks by hand. No new fixtures are needed,
 and `Scripts/generate-fixtures.sh` doesn't change. `UnlatchCoreTests` is untouched.
 
 ### Script-level checks (`devops`, local)
@@ -788,7 +1035,7 @@ exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
      launch. Answer it and note the answer.
    - Note the output of `codesign -dv --verbose=4 /Applications/Unlatch.app 2>&1 | grep CDHash`.
 3. Tag `v1.1.0-beta.3` with at least one user-facing PR in between, so the notes aren't empty.
-4. In beta.2, open the popover and click "Check for Updates…":
+4. In beta.2, open the popover, open the ellipsis menu, and choose "Check for Updates…":
    - The popover closes.
    - Sparkle's window lists 1.1.0-beta.3, with the Markdown notes rendered.
    - "Install and Relaunch" completes, and the footer reads `Version 1.1.0-beta.3 (…)`.
@@ -802,10 +1049,29 @@ exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
      ask for App Management permission, during install? Ad-hoc code has no team ID, and the macOS
      rule is "same team ID may update". How ad-hoc-to-ad-hoc is treated is the open risk.
    - **The new CDHash.** It must differ from the old one.
-6. Scheduled path: run `defaults delete com.pablocolaiacovo.unlatch SULastCheckTime` on a beta.2
-   install where automatic checks are on, then relaunch.
-   - The update window appears, because a just-launched app gets immediate focus.
-   - Choose "Remind Me Later", reopen the popover, and the footer shows "Update Available".
+6. Scheduled path. Step 4 left beta.3 installed, so first **reinstall `v1.1.0-beta.2` from its zip
+   into `/Applications`**, replacing beta.3, and follow the README's first-launch steps again if
+   Gatekeeper asks. Automatic checks must be on (the answer from step 2; the setting lives in the
+   `com.pablocolaiacovo.unlatch` defaults domain, which survives the reinstall). The `defaults`
+   values written below also live in that domain, not in the bundle, so they survive the reinstall
+   too, and they can be written before or after it. Sparkle leaves the indicator up only when the
+   scheduled alert appears while Unlatch is inactive or the popover is open, and not just launched
+   (§2.4.1). One hour is its minimum check interval in release builds, so:
+   ```sh
+   defaults write com.pablocolaiacovo.unlatch SUScheduledCheckInterval -int 3600
+   defaults write com.pablocolaiacovo.unlatch SULastCheckTime -date "$(date -u -v-58M '+%Y-%m-%d %H:%M:%S +0000')"
+   ```
+   - Relaunch Unlatch, switch to another app, and wait about two minutes without opening the
+     popover. Sparkle's update window appears behind the frontmost app.
+   - Open the popover. The footer shows "Update Available", the ellipsis has the dot, and the menu
+     item reads "Update Available…" (or the wording the maintainer chose).
+   - Click "Update Available". The popover closes and Sparkle's window comes to the front. Reopen
+     the popover: the button and the dot are gone.
+   - Repeat with the popover open: rewrite `SULastCheckTime` as above, relaunch, wait a few seconds,
+     open the popover, and leave it open for about two minutes. When the check fires, the alert is
+     ordered behind and "Update Available" and the dot appear in the open popover.
+   - Run `defaults delete com.pablocolaiacovo.unlatch SUScheduledCheckInterval` afterwards.
+   - "Remind Me Later" ends Sparkle's session, so the indicator correctly disappears after it too.
 7. Channel isolation, after `v1.1.0` ships: a v1.1.0 install isn't offered the next `-beta.N`.
 
 **Go or no-go.** If step 5 finds that the install *fails* without a manual App Management grant,
@@ -823,10 +1089,11 @@ M3–M4 (secret, Pages) ──► T4 (devops) ───┘                      
 ```
 
 T1 must merge before T2. Once T2 lands, the binary links Sparkle, and `main` must stay releasable.
-Every PR uses `Part of #13`, except T6, which uses `Closes #13`. Each one ends with a clean
+Status on 2026-10-14: T1 merged in #52, T2 merged in #54, and T4 merged in #55 (`c5ae4d7`). Every PR uses
+`Part of #13`, except T6, which uses `Closes #13`. The T3 PR also says `Closes #57`. Each one ends with a clean
 `swift build` and a passing `swift test`. Suggested titles follow the changelog convention.
 Labels are `project-owner`'s call. The T1, T2, T4, and T7 PRs have no user-facing effect on their
-own and probably carry `skip-changelog`. T3 is the user-facing line.
+own and probably carry `skip-changelog`. T3, together with #57, is the user-facing line.
 
 ### Maintainer steps M1 to M5 (human-only)
 
@@ -878,28 +1145,99 @@ Acceptance criteria:
 - `Scripts/package-app.sh` produces a bundle that passes T1's checks and launches.
 - `UnlatchCore` sources are unchanged: `git diff --stat Sources/UnlatchCore` is empty.
 
-### T3 (`macos-developer`): Check for updates from the popover
+### T3 (`macos-developer`): Check for updates from the popover's ellipsis menu
 
-Suggested title: "Check for updates from the menu bar popover".
+Suggested title: "Check for updates from a new menu in the popover footer, which now also holds the
+version and Open at Login". The title is the changelog line, and users of v1.0 need to know where
+the version and Open at Login went, so it names both. Labels: `enhancement` and `area:app`,
+without `skip-changelog`: this is the user-facing line for #13 and #57.
 
-This depends on T2.
+This depends on T2 (merged in #54). T4 is merged too (#55, `c5ae4d7`), but the feed only exists
+once a Sparkle-enabled tag runs the `appcast` and `deploy-feed` jobs, which first happens with
+`v1.1.0-beta.2` under M5. Until then, "Check for Updates…" ends in Sparkle's "update error" alert,
+which is expected and not a T3 defect.
 
-- Add `AppUpdater.swift` as in §2.4.
-- Change `AppDelegate`, `StatusItemController`, and `PopoverHostingController` to own and thread
-  the updater.
-- Add the footer button to `PopoverView`, driven by `updateButtonState`.
+**One PR for T3 and #57 (recommended).** The footer of #57 is the only consumer of `AppUpdater`, and
+T3's original footer button is exactly what #57 replaces. Two PRs would mean either an `AppUpdater`
+with no UI, or shipping and then deleting a footer button that doesn't fit (#57, option A). The
+whole change is about 250 lines plus tests and fits one session. The PR body says `Closes #57` and
+`Part of #13`. Commit in this order so each step builds and tests green on its own:
+
+1. **Helper and tests.** Add `UpdateFooterPresentation` and `updateFooterPresentation(for:)` to
+   `Logic.swift` (§2.5), and the T3 tests from §4 to `Tests/UnlatchTests/UpdaterLogicTests.swift`.
+   Leave the T2 helpers as they are.
+2. **`AppUpdater` and its wiring.** Add `Sources/Unlatch/AppUpdater.swift` as in §2.4.1. Change
+   `AppDelegate` to build and own it, `StatusItemController` to take it and set `onWillPresent`,
+   and `PopoverHostingController` and `PopoverView` to take it (§2.4.1, "Lifetime, ownership, and
+   isolation"). The footer doesn't read it yet.
+3. **The footer.** Replace `PopoverView.footer` with the layout, menu, dot, and accessibility of
+   §2.4.2. Remove `loginItemToggle`. Share the hover-capsule style between Quit and "Update
+   Available". Update `PopoverView`'s doc comment. Remove `loginItemRevision` from `AppModel` and
+   its three observer tests and helper from `LoginItemTests.swift` (§2.4.2).
+4. **Docs.** In `README.md`, rewrite "check **Open at Login** at the bottom of the popover" to point
+   at the ellipsis menu, and check every other place the README describes the footer. Retake
+   `docs/screenshot.png`, which still shows the pre-#51 footer, from a `Scripts/package-app.sh`
+   bundle so the new footer is in it. Check `docs/demo.gif`: if it shows the footer, say so in the
+   PR, and `project-owner` files a follow-up to re-record it rather than blocking this PR on it.
+
+Must not ship, from `explore/footer-options`: `FooterVariants.swift`, `FooterStyle`, `StubUpdater`,
+`FakeLoginItem`, `ExplorationConfig`, any `UNLATCH_FOOTER_*` environment variable, and that branch's
+edits to `AppDelegate.swift`, `StatusItemController.swift`, and `PopoverView.swift` (the
+`ExplorationConfig` hooks, the forced popover appearance, and the widened `versionText`,
+`loginItemToggle`, and `quitButton` access). Copy only the `menuFooter` layout idea, driven by the
+real `AppUpdater`.
 
 Acceptance criteria:
 
-- Build and tests pass with no new warnings under strict concurrency, and with no
-  `nonisolated(unsafe)` or `@unchecked Sendable` added.
-- Under `swift run Unlatch`, the footer has no update button and no Sparkle alert appears.
-- In a `package-app.sh` bundle, the button reads "Check for Updates…".
-  - Clicking it closes the popover and opens Sparkle's checking window. Until T4 deploys a feed,
-    that window ends in Sparkle's "update error" alert, which is expected.
-  - The button is disabled while that window is up.
-- The footer at 372 pt shows the version, the button, and Quit without clipping. Check this with a
-  long dev version string such as `0.0.0-abc1234-dirty (999)`. Attach a screenshot to the PR.
+- `swift build` is clean with no new warnings under strict concurrency, `swift test` passes, and
+  the new tests from §4 pass. No `nonisolated(unsafe)` or `@unchecked Sendable` is added.
+  `git diff --stat Sources/UnlatchCore Tests/UnlatchCoreTests` is empty.
+- None of the exploration names above appear: `git grep -n -E
+  'FooterVariants|FooterStyle|StubUpdater|FakeLoginItem|ExplorationConfig|UNLATCH_FOOTER'` on the
+  branch prints nothing.
+- Under `swift run Unlatch`:
+  - The footer shows only the ellipsis and Quit. No Sparkle alert appears.
+  - The menu shows the version, a separator, and Open at Login, disabled. Hovering Open at Login
+    shows the "Available when Unlatch runs from an app bundle" tooltip (verified to work on a
+    disabled menu item, §2.4.2).
+- In a `Scripts/package-app.sh` bundle:
+  - The menu shows, in order, `Version <short> (<build>)` (disabled), a separator, "Check for
+    Updates…", and Open at Login with a checkmark that matches System Settings > General > Login
+    Items.
+  - Choosing "Check for Updates…" closes the popover and opens Sparkle's checking window. While that
+    window is up, the item is disabled.
+  - Open at Login keeps #51's behaviour: checking registers, unchecking unregisters, in
+    `.requiresApproval` it opens Login Items, and toggling Unlatch in System Settings is reflected
+    the next time the popover opens.
+  - In `.requiresApproval` (Unlatch registered, then switched off in System Settings > General >
+    Login Items), choosing Open at Login opens Login Items, and when the menu is opened again
+    afterwards, Open at Login is still unchecked.
+  - Esc with the menu open closes only the menu. A second Esc closes the popover.
+  - Quit works by click and by ⌘Q.
+- The update-available state, checked with a temporary local edit that is **not committed** (for
+  example `updateAvailable = true` in `AppUpdater.init`) until T5 can show it for real:
+  - An accent "Update Available" button appears on the left, the ellipsis gets the dot, and the
+    menu item reads "Update Available…".
+  - Clicking the button or the item closes the popover and calls `checkForUpdates()`.
+- Accessibility, checked with VoiceOver and Accessibility Inspector:
+  - Normal state: Accessibility Inspector shows the ellipsis with label "More" and no value, and no
+    element for the dot.
+  - `.updateAvailable`: the ellipsis has label "More" and value "Update available", there is still
+    no separate dot element, and the "Update Available" button is its own element labelled "Update
+    Available". VoiceOver reads the update once on the ellipsis ("More, Update available, menu
+    button") and once on the button, which is the action.
+  - Each menu item is read, including Open at Login's checked state.
+  - With Keyboard navigation on, Tab reaches "Update Available", the ellipsis, and Quit, and Space
+    opens the menu.
+- Layout: at 372 pt nothing truncates or clips with the long dev version `0.0.0-abc1234-dirty
+  (999)`, in the footer or in the menu, and the footer stays one 26 pt row on every step. This
+  replaces the earlier criterion "The footer at 372 pt shows the version, the button, and Quit
+  without clipping".
+- The PR attaches light and dark screenshots of the normal footer, the update-available footer, and
+  the open menu in both states, and the retaken `docs/screenshot.png` is in the diff.
+- The maintainer runs the GUI check from #57 by hand on a packaged bundle before merging.
+- The update item's wording is "Update Available…" unless the maintainer answers §6 question 5
+  otherwise before merge.
 
 ### T4 (`devops`): Publish a signed appcast to GitHub Pages from the release workflow
 
@@ -939,7 +1277,7 @@ This depends on T5's findings.
 
 - Add an "Updates" section:
   - The second-launch prompt.
-  - "Check for Updates…" in the footer.
+  - "Check for Updates…" in the popover's ellipsis menu, and the "Update Available" button.
   - Beta builds follow betas.
   - v1.0.0 users install v1.1.0 manually once.
   - Whatever T5 found about repeated Gatekeeper, TCC, or App Management prompts, and why: ad-hoc
@@ -988,6 +1326,14 @@ This depends on T4.
    password manager the maintainer already uses for credentials, as a secure note titled
    "Unlatch Sparkle EdDSA private key (account: unlatch)". Never in the repository, and never in
    iCloud Drive as a plain file.
+
+5. **Wording of the menu item when an update is found (#57). Resolved 2026-10-14: "Update Available…".**
+   "Update Available…" or "Install Update…". Recommendation: **"Update Available…"**, because it
+   matches the footer's "Update Available" button, so the two controls read as the same action, and
+   because clicking it shows Sparkle's alert with release notes and a choice rather than installing
+   straight away, which "Install Update…" would suggest. The maintainer confirmed the
+   recommendation on 2026-10-14. The string is one constant
+   (`UpdateFooterPresentation.updateAvailableTitle`) and one test.
 
 **Resolved by the maintainer on 2026-10-09:** questions 1 to 3 are accepted as recommended.
 Automatic install stays off (`SUAllowsAutomaticUpdates = false`), `v1.1.0-beta.2` and
