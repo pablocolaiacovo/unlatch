@@ -65,9 +65,16 @@ if [[ "$TAG" == *-beta.* ]]; then CHANNEL="beta"; fi
 # 3. Start from the current feed, minus any item with this build number.
 #    Transform to a temp file and move it: a failed transform must not leave
 #    an empty appcast.xml behind ("zero length data" in generate_appcast).
-if [[ -n "$CURRENT" && -s "$CURRENT" ]]; then
+BEFORE_COUNT=0
+if [[ -n "$CURRENT" ]]; then
+  # A current feed was given, so it must be real: an empty or unparseable one
+  # (for example a 200 with an empty body) must not silently reset the feed.
+  [[ -s "$CURRENT" ]] || die "current feed '$CURRENT' is empty; refusing to start a new feed"
+  xmllint --noout "$CURRENT" || die "current feed '$CURRENT' is not well-formed XML"
+  [[ "$(xmllint --xpath 'count(/rss/channel)' "$CURRENT")" == "1" ]] || die "current feed '$CURRENT' is not an RSS feed"
   xsltproc --stringparam build "$BUILD" "$ROOT/Scripts/appcast-drop-build.xsl" "$CURRENT" > "$WORK/appcast.xml.tmp"
   mv "$WORK/appcast.xml.tmp" "$WORK/appcast.xml"
+  BEFORE_COUNT="$(xmllint --xpath 'count(//item)' "$WORK/appcast.xml")"
 else
   echo "No current feed; starting a new one"
 fi
@@ -99,6 +106,10 @@ if grep -qi 'does not match' <<<"$GEN_OUTPUT"; then
 fi
 xmllint --noout "$WORK/appcast.xml" || die "appcast.xml is not well-formed XML"
 
+# Existing items are kept and exactly one is added.
+TOTAL="$(xmllint --xpath 'count(//item)' "$WORK/appcast.xml")"
+[[ "$TOTAL" == "$((BEFORE_COUNT + 1))" ]] || die "expected $((BEFORE_COUNT + 1)) items after generation, found $TOTAL"
+
 xp() { xmllint --xpath "$1" "$WORK/appcast.xml"; }
 ITEM="//item[*[local-name()='version'][.='$BUILD'] or enclosure/@*[local-name()='version'][.='$BUILD']]"
 COUNT="$(xp "count($ITEM)")"
@@ -109,6 +120,10 @@ SIG="$(xp "string($ITEM/enclosure/@*[local-name()='edSignature'])")"
 [[ -n "$SIG" ]] || die "enclosure has no sparkle:edSignature"
 GOT_CHANNEL="$(xp "string($ITEM/*[local-name()='channel'])")"
 [[ "$GOT_CHANNEL" == "$CHANNEL" ]] || die "item channel '$GOT_CHANNEL' is not the expected '${CHANNEL}'"
+# Independent of Sparkle's warning text: verify the new signature against the
+# SUPublicEDKey in the bundle, over the exact zip that was signed.
+swift "$ROOT/Scripts/verify-ed-signature.swift" "$PUBKEY" "$SIG" "$ZIP" \
+  || die "edSignature of the new item does not verify against SUPublicEDKey"
 MINOS="$(xp "string($ITEM/*[local-name()='minimumSystemVersion'])")"
 [[ "$MINOS" == "14.0" ]] || die "minimumSystemVersion is '$MINOS', expected 14.0"
 
