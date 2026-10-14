@@ -85,16 +85,19 @@ follow.
 | `Tests/UnlatchTests/InfoPlistTemplateTests.swift` | New: guards on the template's Sparkle keys | `macos-developer` |
 | `README.md` | T3: the Open at Login paragraph describes the menu. T6: Updates section, the privacy paragraph, and the findings from the upgrade test | `macos-developer` |
 | `docs/screenshot.png` | T3: retake it with the new footer. It already predates #51 | `macos-developer` |
+| `Sources/Unlatch/AppModel.swift`, `Tests/UnlatchTests/LoginItemTests.swift` | T3: remove `loginItemRevision`, its bump in `refreshLoginItem()`, and the tests that only cover it (§2.4.2) | `macos-developer` |
 | `Scripts/package-app.sh` | Embed, trim, and sign Sparkle inside-out. Add `--sequesterRsrc` to the zip | `devops` |
 | `Scripts/update-appcast.sh` | New: strip, generate, and validate the appcast. Runnable locally with a throwaway key | `devops` |
 | `Scripts/appcast-drop-build.xsl` | New: removes items whose build number equals the new one (§2.6) | `devops` |
 | `.github/workflows/release.yml` | Extra verification in `build-and-package`, plus new `appcast` and `deploy-feed` jobs | `devops` |
 | `RELEASING.md` | Feed checks in the release checklist, key custody, and the #8 notes for Sparkle | `project-owner` |
 
-`Sources/UnlatchCore` and `Tests/UnlatchCoreTests` are not touched. `AppModel` is not touched
-either, because update state lives in its own object (§2.4). `LoginItem.swift` and the login item
-logic in `Logic.swift` are not touched: Open at Login moves into the menu, but what it does
-underneath stays as #51 built it.
+`Sources/UnlatchCore` and `Tests/UnlatchCoreTests` are not touched. No update state goes into
+`AppModel`; it lives in its own object (§2.4). T3's only `AppModel` change is removing
+`loginItemRevision`, which no view reads once the checkbox becomes a menu item (§2.4.2), together
+with its three observer tests in `Tests/UnlatchTests/LoginItemTests.swift`. `LoginItem.swift` and
+the login item logic in `Logic.swift` are not touched: Open at Login moves into the menu, but what
+it does underneath stays as #51 built it.
 
 ### 2.2 Dependency, version pin, and rpath
 
@@ -319,15 +322,26 @@ Behaviour:
   `!state.userInitiated`. `standardUserDriverDidReceiveUserAttention` and
   `standardUserDriverWillFinishUpdateSession` reset it to `false`. This follows Sparkle's
   background-app sample without the Dock-badge and notification parts (non-goals).
-- **When the indicator is actually visible** (read from `SPUStandardUserDriver.m` in 2.10.0). For an
-  `.accessory` app, a scheduled update right after launch, or while the app is active, is shown in
-  front and becomes key at once, which counts as attention, so the indicator clears almost
-  immediately. The indicator stays up when the scheduled check fires while Unlatch is inactive and
-  was not just launched: Sparkle then puts the alert *behind* the frontmost app. Opening the
-  popover shows "Update Available" and the dot, and clicking either entry point brings Sparkle's
-  window to the front. Activating Unlatch to show the popover can bring Sparkle's window forward
-  too, but the popover is key, not the alert, so the indicator stays until the user interacts with
-  the alert. "Remind Me Later", "Skip", and "Install" all count as attention and end the session,
+- **When the indicator is actually visible** (read from `SPUStandardUserDriver.m` in 2.10.0,
+  lines 198-286). Unlatch is a background (`.accessory`) app, so Sparkle always shows a scheduled
+  update at once. Where it puts the alert decides whether the indicator survives:
+  - **Within about 3 seconds of the updater starting** (the near-launch window), Sparkle activates
+    the app and shows the alert in front as key. That counts as attention right away, so the
+    indicator clears almost immediately.
+  - **Unlatch active with a key window, which in practice means the popover is open** (lines
+    263-268): `showingUpdateInBack = backgroundApp && [NSApp keyWindow] != nil`, so the alert is
+    ordered *behind* the app's windows and the popover stays key. The indicator appears live in the
+    open popover: "Update Available" on the left and the dot on the ellipsis. This is the case
+    Unlatch hits most often, because the popover is the app's only window.
+  - **Unlatch active without a key window** (popover closed, app not yet deactivated): the alert is
+    shown in front and normally becomes key, which counts as attention, so the indicator clears.
+  - **Unlatch inactive** (lines 270-283): the alert goes behind the frontmost app without focus.
+    The next time the user opens the popover, it shows the indicator. Activating Unlatch for the
+    popover may bring the alert forward too, but the popover is key, so attention is not recorded.
+
+  In every case where the indicator stays up, clicking "Update Available" or the menu item closes
+  the popover and `checkForUpdates()` brings the alert to the front as key, which clears the
+  indicator. "Remind Me Later", "Skip", and "Install" all count as attention and end the session,
   so the indicator never outlives the alert, and nothing is persisted across launches.
 - **`canCheckForUpdates` and the indicator.** Per `SPUUpdater.h`, `canCheckForUpdates` stays `true`
   while an update alert is shown, so `.updateAvailable` is reachable. It is `false` while a feed or
@@ -419,14 +433,19 @@ private var footer: some View {
 
 Details:
 
-- **The ellipsis button.** `Image(systemName: "ellipsis.circle")` at 13 pt as the `Menu` label, with
-  `.menuIndicator(.hidden)` and `.fixedSize()`. Use `.menuStyle(.button)` with
+- **The ellipsis button.** `Image(systemName: "ellipsis.circle")` at 13 pt as the `Menu` label,
+  padded with `.padding(.top, 4).padding(.trailing, 4)` as in the prototype
+  (`FooterVariants.swift`, lines 211-212), with `.menuIndicator(.hidden)` and `.fixedSize()`. The
+  padding gives the dot room at the top-trailing corner so it sits beside the glyph instead of on
+  top of it. Use `.menuStyle(.button)` with
   `.buttonStyle(.borderless)`, the replacement Apple's interface names for `.borderlessButton`. If
   that renders differently from the prototype's screenshots, `.menuStyle(.borderlessButton)` (what
   the prototype used) is acceptable: it is soft-deprecated (`deprecated: 100000.0`) and produces no
   warning.
 - **The dot.** A 7 pt accent `Circle` in an `.overlay(alignment: .topTrailing)` on the `Menu`, with
-  `.allowsHitTesting(false)`. It has to be outside the `Menu` label, because the `NSPopUpButton`
+  `.allowsHitTesting(false)` and `.accessibilityHidden(true)` (its meaning is announced through the
+  ellipsis button, see Accessibility below). It lands in the 4 pt padding of the label, so it must
+  not cover any part of the `ellipsis.circle` glyph. It has to be outside the `Menu` label, because the `NSPopUpButton`
   behind the menu flattens its label to a template image and drops the colour (found by the
   prototype).
 - **The "Update Available" button.** A plain button in the same style as Quit: 11 pt text, a 20 pt
@@ -434,14 +453,22 @@ Details:
   on the left of the row and calls `updater.checkForUpdates()`. Factor the shared hover-capsule
   styling out of `quitButton` into one private `ButtonStyle` or view in `PopoverView.swift`, so the
   two buttons can't drift. That is the only refactor of Quit.
-- **No `.id(model.loginItemRevision)` on the menu toggle.** The checkbox needed it because an
-  `NSButton` checkbox flips itself on click. An `NSMenuItem` does not flip its own state, and
-  SwiftUI rebuilds the menu items from `model.loginItem` whenever the model changes, so after a
-  failed register or unregister the checkmark shows the real state the next time the menu opens.
-  `model.setLaunchAtLogin(_:)` already calls `refreshLoginItem()` after every attempt.
-  `loginItemRevision` stays in `AppModel`, which T3 does not touch, and `LoginItemTests` keeps
-  covering it. Its doc comment mentions the checkbox. Updating that comment is the only `AppModel`
-  edit T3 may make.
+- **`loginItemRevision` goes away.** The checkbox needed `.id(model.loginItemRevision)` because an
+  `NSButton` checkbox flips itself on click, and `@Observable` doesn't notify when
+  `loginItemStatus` is assigned an equal value, so nothing redrew it after a failed attempt. A menu
+  item doesn't flip itself. **Verified during design** (macOS 27.0.1, throwaway SwiftUI package in
+  `/tmp`): choosing a `Toggle` menu item whose binding setter leaves the model unchanged calls the
+  setter with `true`, and the `NSMenuItem`'s state is still off right after the action and when
+  the menu opens again. So the checkmark always shows `model.loginItem.isOn`, the real system
+  state, and nothing needs to force a redraw. **Recommendation: T3 removes it.** Delete the
+  `loginItemRevision` property and its bump in `refreshLoginItem()`, reword the doc comments on
+  `refreshLoginItem()` and `setLaunchAtLogin(_:)` that mention the checkbox, and delete
+  `revisionChanges(_:during:)` and the three tests built on it
+  (`failedRegisterStillNotifiesObservers`, `openingSystemSettingsStillNotifiesObservers`,
+  `refreshWithAnUnchangedStatusNotifiesObservers`). `appModelSnapsBackWhenRegisterFails` and the
+  other state-based tests stay, and they still cover the snap-back. Keeping the property would
+  leave observable state that nothing reads and a doc comment describing a control that no longer
+  exists.
 - **Behaviour of Open at Login is unchanged** (#51): checking registers, unchecking unregisters,
   checking in `.requiresApproval` opens System Settings > General > Login Items, a failure is
   logged, and `StatusItemController.presentAndFocus()` still refreshes the state each time the
@@ -457,20 +484,21 @@ Accessibility:
 
 | Element | VoiceOver label | Tooltip (`.help`) |
 | --- | --- | --- |
-| Ellipsis menu button | "More" (no update suffix) | "More" |
-| Dot | "Update available", its own element | None |
+| Ellipsis menu button | Label "More". Value "Update available" in `.updateAvailable`, otherwise no value | "More" |
+| Dot | Not an element (`.accessibilityHidden(true)`). Its meaning is the ellipsis button's value | None |
 | "Update Available" button | "Update Available" | "See the available update" |
 | Menu items | Their titles. Open at Login is read with its checked state, the version as dimmed | Open at Login: `model.loginItem.help` |
 | Quit | "Quit Unlatch", unchanged | "Quit Unlatch", unchanged |
 
-The prototype labelled the ellipsis "More, update available". #57 asks for the dot to have its own
-label and for VoiceOver not to announce the update twice, so the update suffix moves off the button
-and onto the dot. Give the dot `.accessibilityElement()`, `.accessibilityLabel("Update available")`,
-and `.accessibilityAddTraits(.isImage)`. **Fallback**, only if Accessibility Inspector shows that
-SwiftUI doesn't expose the overlay as its own element next to the `NSPopUpButton`: hide the dot
-with `.accessibilityHidden(true)` and give the menu button `.accessibilityValue("Update
-available")`. VoiceOver then reads "More, Update available, menu button", still once. Record which
-variant shipped in the PR.
+In `.updateAvailable` there are two things to announce: the "Update Available" button, which is
+the action, and the dot, which marks the ellipsis. The dot's VoiceOver label (#57) is carried as the
+ellipsis button's accessibility value, so the ellipsis and its dot are one element that announces
+the update once: "More, Update available, menu button". The "Update Available" button is the
+separate element that performs the action. The prototype instead labelled the ellipsis "More,
+update available". A separate overlay element for a 7 pt dot was rejected: whether SwiftUI exposes
+an overlay on an `NSPopUpButton`-backed `Menu` as its own element is not guaranteed, and an
+unreliable element is not testable. In every other state the ellipsis has no value and reads "More,
+menu button".
 
 With System Settings > Keyboard > Keyboard navigation on, Tab reaches "Update Available", the
 ellipsis, and Quit. Space opens the menu, and the arrow keys and Return choose items. This is
@@ -480,8 +508,10 @@ standard `NSPopUpButton` behaviour and needs no code.
 `Menu` with the content above produces these `NSMenuItem`s: the `Text` as a disabled item, the
 `Divider` as a separator, `.help` on a `Button` as the item's `toolTip`, and a disabled `Toggle` as
 a disabled item with `state == .on` that keeps its `toolTip`. So the explanation from
-`loginItemControl(for:)` stays available as a tooltip under `swift run`, as #57 asks. Not checked
-on macOS 14; the T3 manual check covers the oldest macOS available to the maintainer.
+`loginItemControl(for:)` stays available as a tooltip under `swift run`, as #57 asks. A second
+AppKit probe confirmed that macOS actually *shows* the tooltip on a disabled `NSMenuItem`: hovering
+the disabled, checked "Open at Login" item displayed its tooltip window. Neither probe was run on
+macOS 14; the T3 manual check covers the oldest macOS available to the maintainer.
 
 ### 2.5 Pure helpers (`Logic.swift`)
 
@@ -1020,9 +1050,14 @@ exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
      ask for App Management permission, during install? Ad-hoc code has no team ID, and the macOS
      rule is "same team ID may update". How ad-hoc-to-ad-hoc is treated is the open risk.
    - **The new CDHash.** It must differ from the old one.
-6. Scheduled path, on a beta.2 install where automatic checks are on. Sparkle only leaves the
-   indicator up when the scheduled alert appears while Unlatch is inactive and not just launched
-   (§2.4.1), and one hour is its minimum check interval in release builds, so:
+6. Scheduled path. Step 4 left beta.3 installed, so first **reinstall `v1.1.0-beta.2` from its zip
+   into `/Applications`**, replacing beta.3, and follow the README's first-launch steps again if
+   Gatekeeper asks. Automatic checks must be on (the answer from step 2; the setting lives in the
+   `com.pablocolaiacovo.unlatch` defaults domain, which survives the reinstall). The `defaults`
+   values written below also live in that domain, not in the bundle, so they survive the reinstall
+   too, and they can be written before or after it. Sparkle leaves the indicator up only when the
+   scheduled alert appears while Unlatch is inactive or the popover is open, and not just launched
+   (§2.4.1). One hour is its minimum check interval in release builds, so:
    ```sh
    defaults write com.pablocolaiacovo.unlatch SUScheduledCheckInterval -int 3600
    defaults write com.pablocolaiacovo.unlatch SULastCheckTime -date "$(date -u -v-58M '+%Y-%m-%d %H:%M:%S +0000')"
@@ -1033,6 +1068,9 @@ exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
      item reads "Update Available…" (or the wording the maintainer chose).
    - Click "Update Available". The popover closes and Sparkle's window comes to the front. Reopen
      the popover: the button and the dot are gone.
+   - Repeat with the popover open: rewrite `SULastCheckTime` as above, relaunch, wait a few seconds,
+     open the popover, and leave it open for about two minutes. When the check fires, the alert is
+     ordered behind and "Update Available" and the dot appear in the open popover.
    - Run `defaults delete com.pablocolaiacovo.unlatch SUScheduledCheckInterval` afterwards.
    - "Remind Me Later" ends Sparkle's session, so the indicator correctly disappears after it too.
 7. Channel isolation, after `v1.1.0` ships: a v1.1.0 install isn't offered the next `-beta.N`.
@@ -1052,7 +1090,7 @@ M3–M4 (secret, Pages) ──► T4 (devops) ───┘                      
 ```
 
 T1 must merge before T2. Once T2 lands, the binary links Sparkle, and `main` must stay releasable.
-Status on 2026-10-14: T1 merged in #52, T2 merged in #54, T4 is in review as #55. Every PR uses
+Status on 2026-10-14: T1 merged in #52, T2 merged in #54, and T4 merged in #55 (`c5ae4d7`). Every PR uses
 `Part of #13`, except T6, which uses `Closes #13`. The T3 PR also says `Closes #57`. Each one ends with a clean
 `swift build` and a passing `swift test`. Suggested titles follow the changelog convention.
 Labels are `project-owner`'s call. The T1, T2, T4, and T7 PRs have no user-facing effect on their
@@ -1110,11 +1148,15 @@ Acceptance criteria:
 
 ### T3 (`macos-developer`): Check for updates from the popover's ellipsis menu
 
-Suggested title: "Check for updates from a new menu in the popover footer". Labels: `enhancement`
-and `area:app`, without `skip-changelog`: this is the user-facing line for #13 and #57.
+Suggested title: "Check for updates from a new menu in the popover footer, which now also holds the
+version and Open at Login". The title is the changelog line, and users of v1.0 need to know where
+the version and Open at Login went, so it names both. Labels: `enhancement` and `area:app`,
+without `skip-changelog`: this is the user-facing line for #13 and #57.
 
-This depends on T2 (merged in #54). It can merge before T4 (#55); until a feed is deployed, a check
-ends in Sparkle's "update error" alert, which is expected.
+This depends on T2 (merged in #54). T4 is merged too (#55, `c5ae4d7`), but the feed only exists
+once a Sparkle-enabled tag runs the `appcast` and `deploy-feed` jobs, which first happens with
+`v1.1.0-beta.2` under M5. Until then, "Check for Updates…" ends in Sparkle's "update error" alert,
+which is expected and not a T3 defect.
 
 **One PR for T3 and #57 (recommended).** The footer of #57 is the only consumer of `AppUpdater`, and
 T3's original footer button is exactly what #57 replaces. Two PRs would mean either an `AppUpdater`
@@ -1131,8 +1173,8 @@ whole change is about 250 lines plus tests and fits one session. The PR body say
    isolation"). The footer doesn't read it yet.
 3. **The footer.** Replace `PopoverView.footer` with the layout, menu, dot, and accessibility of
    §2.4.2. Remove `loginItemToggle`. Share the hover-capsule style between Quit and "Update
-   Available". Update `PopoverView`'s doc comment and the `loginItemRevision` doc comment in
-   `AppModel`.
+   Available". Update `PopoverView`'s doc comment. Remove `loginItemRevision` from `AppModel` and
+   its three observer tests and helper from `LoginItemTests.swift` (§2.4.2).
 4. **Docs.** In `README.md`, rewrite "check **Open at Login** at the bottom of the popover" to point
    at the ellipsis menu, and check every other place the README describes the footer. Retake
    `docs/screenshot.png`, which still shows the pre-#51 footer, from a `Scripts/package-app.sh`
@@ -1156,8 +1198,9 @@ Acceptance criteria:
   branch prints nothing.
 - Under `swift run Unlatch`:
   - The footer shows only the ellipsis and Quit. No Sparkle alert appears.
-  - The menu shows the version, a separator, and Open at Login, disabled, with the "Available when
-    Unlatch runs from an app bundle" tooltip.
+  - The menu shows the version, a separator, and Open at Login, disabled. Hovering Open at Login
+    shows the "Available when Unlatch runs from an app bundle" tooltip (verified to work on a
+    disabled menu item, §2.4.2).
 - In a `Scripts/package-app.sh` bundle:
   - The menu shows, in order, `Version <short> (<build>)` (disabled), a separator, "Check for
     Updates…", and Open at Login with a checkmark that matches System Settings > General > Login
@@ -1167,6 +1210,9 @@ Acceptance criteria:
   - Open at Login keeps #51's behaviour: checking registers, unchecking unregisters, in
     `.requiresApproval` it opens Login Items, and toggling Unlatch in System Settings is reflected
     the next time the popover opens.
+  - In `.requiresApproval` (Unlatch registered, then switched off in System Settings > General >
+    Login Items), choosing Open at Login opens Login Items, and when the menu is opened again
+    afterwards, Open at Login is still unchecked.
   - Esc with the menu open closes only the menu. A second Esc closes the popover.
   - Quit works by click and by ⌘Q.
 - The update-available state, checked with a temporary local edit that is **not committed** (for
@@ -1175,8 +1221,12 @@ Acceptance criteria:
     menu item reads "Update Available…".
   - Clicking the button or the item closes the popover and calls `checkForUpdates()`.
 - Accessibility, checked with VoiceOver and Accessibility Inspector:
-  - The ellipsis is announced as "More", and the update is announced once: on the dot, or through
-    the fallback `accessibilityValue` (§2.4.2). The PR says which variant shipped.
+  - Normal state: Accessibility Inspector shows the ellipsis with label "More" and no value, and no
+    element for the dot.
+  - `.updateAvailable`: the ellipsis has label "More" and value "Update available", there is still
+    no separate dot element, and the "Update Available" button is its own element labelled "Update
+    Available". VoiceOver reads the update once on the ellipsis ("More, Update available, menu
+    button") and once on the button, which is the action.
   - Each menu item is read, including Open at Login's checked state.
   - With Keyboard navigation on, Tab reaches "Update Available", the ellipsis, and Quit, and Space
     opens the menu.
