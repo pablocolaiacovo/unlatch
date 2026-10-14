@@ -2,12 +2,12 @@ import AppKit
 import SwiftUI
 
 /// The 372 pt popover panel: header, current step, the persistent file rows
-/// section, and a footer with the installed version, the Open at Login
-/// checkbox, and the Quit control.
+/// section, and a footer with an ellipsis menu (installed version, update
+/// check, Open at Login), the "Update Available" button when there is one,
+/// and the Quit control.
 struct PopoverView: View {
     @Bindable var model: AppModel
     let updater: AppUpdater
-    @State private var quitHovering = false
 
     /// The bundle's version never changes while running, so build it once.
     private static let versionText = versionLabel(
@@ -56,71 +56,89 @@ struct PopoverView: View {
         .padding(.bottom, 9)
     }
 
-    /// Single line with a fixed height so it never clips under the hosting
-    /// controller's preferred-content-size sizing.
+    /// Single 26 pt row with a fixed height so it never clips under the hosting
+    /// controller's preferred-content-size sizing. The version, the update
+    /// check, and Open at Login live in the ellipsis menu; only Quit, and the
+    /// "Update Available" button when there is something to act on, sit in the
+    /// row itself (Design/sparkle-updates.md §2.4.2).
     private var footer: some View {
-        HStack(spacing: 6) {
-            Text(Self.versionText)
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+        let update = updateFooterPresentation(for: updater.buttonState)
+        return HStack(spacing: 6) {
+            if update.showsUpdateIndicator { updateAvailableButton }
             Spacer()
-            loginItemToggle
+            moreMenu(update)
+                .overlay(alignment: .topTrailing) {
+                    if update.showsUpdateIndicator { updateDot }
+                }
             quitButton
         }
         .padding(.horizontal, 14)
         .frame(height: 26)
     }
 
-    /// Shows the system's login item state, not a stored preference; see
-    /// `loginItemControl(for:)`. The checkbox is an NSButton that flips itself
-    /// on click, so `.id` on the revision recreates it after every attempt and
-    /// refresh, even when the status did not change.
-    private var loginItemToggle: some View {
+    /// Version (a disabled item), the update item, and Open at Login. Open at
+    /// Login shows the system's login item state, not a stored preference; see
+    /// `loginItemControl(for:)`. A menu item does not flip itself on click, so
+    /// the checkmark always reads `model.loginItem.isOn`.
+    private func moreMenu(_ update: UpdateFooterPresentation) -> some View {
         let control = model.loginItem
-        return Toggle(
-            "Open at Login",
-            isOn: Binding(get: { model.loginItem.isOn }, set: { model.setLaunchAtLogin($0) })
-        )
-        .toggleStyle(.checkbox)
-        .controlSize(.small)
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .disabled(!control.isEnabled)
-        .help(control.help)
-        .id(model.loginItemRevision)
+        return Menu {
+            Text(Self.versionText)
+            Divider()
+            if let title = update.menuItemTitle {
+                Button(title) { updater.checkForUpdates() }
+                    .disabled(!update.menuItemEnabled)
+            }
+            Toggle(
+                "Open at Login",
+                isOn: Binding(get: { model.loginItem.isOn }, set: { model.setLaunchAtLogin($0) })
+            )
+            .disabled(!control.isEnabled)
+            .help(control.help)
+        } label: {
+            // The padding leaves room for the dot beside the glyph.
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 13))
+                .padding(.top, 4)
+                .padding(.trailing, 4)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More")
+        .accessibilityLabel("More")
+        .accessibilityValue(update.showsUpdateIndicator ? "Update available" : "")
+    }
+
+    /// Drawn outside the menu label: the `NSPopUpButton` behind a `Menu`
+    /// flattens its label to a template image and drops the accent colour.
+    private var updateDot: some View {
+        Circle()
+            .fill(Color.accentColor)
+            .frame(width: 7, height: 7)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private var updateAvailableButton: some View {
+        FooterButton(title: "Update Available", tint: .accentColor, showsDot: true) {
+            updater.checkForUpdates()
+        }
+        .help("See the available update")
+        .accessibilityLabel("Update Available")
     }
 
     /// Unobtrusive quit affordance in the footer, reachable from every
     /// step. `.accessory` apps have no Dock icon and no application menu, so
     /// this is the only way to quit besides Force Quit.
     private var quitButton: some View {
-        Button {
+        FooterButton(title: "Quit", symbol: "power") {
             NSApplication.shared.terminate(nil)
-        } label: {
-            HStack(spacing: 4) {
-                Text("Quit")
-                    .font(.system(size: 11))
-                Image(systemName: "power")
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .foregroundStyle(quitHovering ? .primary : .secondary)
-            .padding(.horizontal, 6)
-            .frame(height: 20)
-            .background(
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.primary.opacity(quitHovering ? 0.08 : 0))
-            )
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .keyboardShortcut("q", modifiers: .command)
         .help("Quit Unlatch")
         .accessibilityLabel("Quit Unlatch")
-        .onHover { hovering in
-            quitHovering = hovering
-        }
     }
 
     private var workingView: some View {
@@ -133,6 +151,48 @@ struct PopoverView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 160)
+    }
+}
+
+/// The footer's plain 11 pt button with a hover capsule, shared by Quit and
+/// "Update Available" so the two can't drift apart.
+private struct FooterButton: View {
+    let title: String
+    var symbol: String?
+    var tint: Color?
+    var showsDot = false
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if showsDot {
+                    Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                }
+                Text(title)
+                    .font(.system(size: 11))
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: 11, weight: .medium))
+                }
+            }
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 6)
+            .frame(height: 20)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.primary.opacity(hovering ? 0.08 : 0))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+
+    private var foreground: Color {
+        if let tint { return tint }
+        return hovering ? .primary : .secondary
     }
 }
 
