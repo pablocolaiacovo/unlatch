@@ -14,14 +14,37 @@ footer", maintainer decision of 2026-10-09, option C) replaces the footer layout
 originally gave T3. §2.4, §2.5, §3.8, §4, and T3 in §5 follow #57. The exploration branch
 `explore/footer-options` (commit 5b650f3) is reference only and does not ship.
 
+**Maintainer decisions of 2026-10-15**, made after the `v1.1.0-beta.2` → `v1.1.0-beta.3` upgrade
+test passed, change how a scheduled update reaches the user. They replace the earlier behaviour,
+where Sparkle showed its own window for a scheduled update and the footer indicator only survived
+when that window went behind:
+
+1. **Background checks run once a day, explicitly.** `Resources/Info.plist.template` sets
+   `SUScheduledCheckInterval` to `86400`. It was unset, relying on Sparkle's one-day default.
+   `SUEnableAutomaticChecks` stays unset, so Sparkle's second-launch prompt still asks for consent
+   (option A). `SUAllowsAutomaticUpdates` stays `false`.
+2. **Sparkle never shows a window for a scheduled update on its own**, not even in immediate focus
+   right after launch. Only the in-app indicator appears: the footer's accent "Update Available"
+   button, the dot on the ellipsis, and the "Update Available…" menu item. Clicking either calls
+   `checkForUpdates()`, and Sparkle shows the update it already found.
+3. **The menu bar status item also shows a dot** while an update is available, so it is noticed
+   without opening the popover. It clears together with the popover's indicator.
+
+§2.4.1, §2.4.3, §2.5, §2.11, §3.9, §3.10, §4, T8 to T10 in §5, and §6 questions 6 to 8 carry
+these decisions. They change `Sources/Unlatch/AppUpdater.swift` and the update configuration in
+`Resources/Info.plist.template`, both on RELEASING.md's upgrade-test trigger list, so
+`v1.1.0-beta.4` must re-run the upgrade test from `v1.1.0-beta.3` (§4, T10).
+
 ## 1. Summary
 
 Users who install from the zip can't currently find out that a newer version exists. This change
 embeds Sparkle 2. The app checks an EdDSA-signed appcast hosted on GitHub Pages and offers new
 versions with their release notes. When the user accepts, it installs the update in place and
 relaunches. The popover footer becomes an ellipsis ("…") menu next to Quit (#57): the menu holds
-the version, "Check for Updates…", and Open at Login. An accent "Update Available" button and a dot
-on the ellipsis appear only while a scheduled check has found an update. The release
+the version, "Check for Updates…", and Open at Login. A scheduled check never opens a window by
+itself: when it finds an update, an accent "Update Available" button and a dot on the ellipsis
+appear in the footer, and a dot appears on the menu bar icon, until the user looks at the update
+(2026-10-15). Scheduled checks run once a day. The release
 workflow signs every published `Unlatch.zip` with an ed25519 key held as a GitHub Actions secret,
 then updates and deploys the appcast. Beta tags go to a `beta` channel, which only beta builds
 follow.
@@ -36,7 +59,8 @@ follow.
 3. The popover footer's ellipsis menu gets "Check for Updates…", which is disabled while Sparkle
    can't start a check. When a scheduled check finds an update the user hasn't looked at yet, the
    footer shows an "Update Available" button, the ellipsis gets a dot, and the menu item reads
-   "Update Available…" (wording pending, §6 question 5).
+   "Update Available…" (§6 question 5). The status item icon gets a dot too (§2.4.3). Sparkle
+   shows no window for a scheduled update until the user clicks one of these (2026-10-15).
 4. The release workflow generates and signs `appcast.xml` and deploys it to GitHub Pages. Stable
    tags go to the default channel and `-beta.N` tags go to the `beta` channel.
 5. Verification has three parts: unit tests for the pure decisions, CI checks on signatures,
@@ -58,9 +82,14 @@ follow.
 - Sandboxing. The app isn't sandboxed: the repository has no entitlements file and `package-app.sh`
   passes no `--entitlements`. Sparkle's XPC services are removed (§2.3).
   `SUEnableInstallerLauncherService` is not set.
-- A badge on the status item icon, Dock or notification reminders, or a settings window. The
-  popover footer (its ellipsis menu item, the "Update Available" button, and the dot) is the only
-  update UI besides Sparkle's own windows.
+- Dock or notification reminders, or a settings window. Besides Sparkle's own windows, the update
+  UI is the popover footer (its ellipsis menu item, the "Update Available" button, and the dot) and
+  the dot on the status item icon (§2.4.3). The status item dot was a non-goal until the
+  maintainer added it on 2026-10-15.
+- A user setting for the check interval. Scheduled checks run once a day
+  (`SUScheduledCheckInterval` = 86400, 2026-10-15).
+- Escalating a long-ignored update. An update the user never clicks stays behind the indicator
+  until they act or quit the app (§2.4.1, "Lifecycle of a found update").
 - Other menu items such as About, Settings, or Copy Version, and moving Quit into the menu. #57
   rules these out.
 - Updating v1.0.0 installs. v1.0.0 doesn't contain Sparkle, so those users install v1.1.0 by hand
@@ -74,16 +103,17 @@ follow.
 | --- | --- | --- |
 | `Package.swift` | Add the Sparkle package dependency, the `Sparkle` product on the `Unlatch` target, and the `@executable_path/../Frameworks` rpath linker flag | `macos-developer` |
 | `Package.resolved` | New file, committed (the existing `.gitignore` comment already expects it) | `macos-developer` |
-| `Resources/Info.plist.template` | Add `SUFeedURL`, `SUPublicEDKey`, and `SUAllowsAutomaticUpdates` | `macos-developer` |
-| `Sources/Unlatch/Logic.swift` | T2 (merged in #54): `UpdaterAvailability`, `updaterAvailability(...)`, `allowedUpdateChannels(forVersion:)`, `UpdateButtonState`, and `updateButtonState(...)`. T3: `UpdateFooterPresentation` and `updateFooterPresentation(for:)` (§2.5) | `macos-developer` |
-| `Sources/Unlatch/AppUpdater.swift` | New: wraps `SPUStandardUpdaterController`, `@MainActor @Observable` | `macos-developer` |
+| `Resources/Info.plist.template` | Add `SUFeedURL`, `SUPublicEDKey`, and `SUAllowsAutomaticUpdates`. T8: add `SUScheduledCheckInterval` = `86400` | `macos-developer` |
+| `Sources/Unlatch/Logic.swift` | T2 (merged in #54): `UpdaterAvailability`, `updaterAvailability(...)`, `allowedUpdateChannels(forVersion:)`, `UpdateButtonState`, and `updateButtonState(...)`. T3: `UpdateFooterPresentation` and `updateFooterPresentation(for:)`. T8: `UpdateReminderEvent`, `sparkleShowsScheduledUpdate(inImmediateFocus:)`, and `updateIndicatorShown(after:current:)`. T9: `StatusItemPresentation` and `statusItemPresentation(hasLockedWork:updateState:)` (§2.5) | `macos-developer` |
+| `Sources/Unlatch/AppUpdater.swift` | New: wraps `SPUStandardUpdaterController`, `@MainActor @Observable`. T8: Sparkle never shows a scheduled update itself (§2.4.1) | `macos-developer` |
 | `Sources/Unlatch/AppDelegate.swift` | Create and own an `AppUpdater`, then pass it to `StatusItemController` | `macos-developer` |
-| `Sources/Unlatch/StatusItemController.swift` | Pass the updater into the hosting controller. Close the popover before Sparkle presents a window | `macos-developer` |
+| `Sources/Unlatch/StatusItemController.swift` | Pass the updater into the hosting controller. Close the popover before Sparkle presents a window. T9: render the status item from `statusItemPresentation(...)`, with the dot and the accessibility value (§2.4.3) | `macos-developer` |
 | `Sources/Unlatch/PopoverHostingController.swift` | `init(model:updater:)` | `macos-developer` |
 | `Sources/Unlatch/Views/PopoverView.swift` | Replace the footer: ellipsis menu (version, Check for Updates…, Open at Login), the conditional "Update Available" button, the dot, and the unchanged Quit button (§2.4, #57) | `macos-developer` |
-| `Tests/UnlatchTests/UpdaterLogicTests.swift` | T2 (merged in #54): tests for the three pure helpers. T3: tests for `updateFooterPresentation(for:)` | `macos-developer` |
-| `Tests/UnlatchTests/InfoPlistTemplateTests.swift` | New: guards on the template's Sparkle keys | `macos-developer` |
-| `README.md` | T3: the Open at Login paragraph describes the menu. T6: Updates section, the privacy paragraph, and the findings from the upgrade test | `macos-developer` |
+| `Tests/UnlatchTests/UpdaterLogicTests.swift` | T2 (merged in #54): tests for the three pure helpers. T3: tests for `updateFooterPresentation(for:)`. T8: tests for the reminder reducer and the no-window decision | `macos-developer` |
+| `Tests/UnlatchTests/StatusItemLogicTests.swift` | T9: tests for `statusItemPresentation(...)` | `macos-developer` |
+| `Tests/UnlatchTests/InfoPlistTemplateTests.swift` | New: guards on the template's Sparkle keys. T8: `SUScheduledCheckInterval` is `86400` | `macos-developer` |
+| `README.md` | T3: the Open at Login paragraph describes the menu. T6: Updates section (including the once-a-day check, the indicator, and the menu bar dot), the privacy paragraph, and the findings from the upgrade test | `macos-developer` |
 | `docs/screenshot.png` | T3: retake it with the new footer. It already predates #51 | `macos-developer` |
 | `Sources/Unlatch/AppModel.swift`, `Tests/UnlatchTests/LoginItemTests.swift` | T3: remove `loginItemRevision`, its bump in `refreshLoginItem()`, and the tests that only cover it (§2.4.2) | `macos-developer` |
 | `Scripts/package-app.sh` | Embed, trim, and sign Sparkle inside-out. Add `--sequesterRsrc` to the zip | `devops` |
@@ -288,6 +318,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
 
     // SPUStandardUserDriverDelegate (gentle reminders for a dockless app)
     var supportsGentleScheduledUpdateReminders: Bool { true }
+    /// T8 (2026-10-15): always false, so Sparkle never shows a scheduled update by itself.
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool
     func standardUserDriverWillHandleShowingUpdate(
         _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState)
     func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem)
@@ -314,39 +347,70 @@ Behaviour:
   Unlatch's own windows. Left open, it would cover Sparkle's update window. Both footer entry
   points, the menu item and the "Update Available" button, call this one method.
 - **`allowedChannels(for:)`** returns `allowedUpdateChannels(forVersion: shortVersion)`. See §2.5.
-- **Gentle reminders.** These are required for a dockless app, and Sparkle logs a warning without
-  them. `supportsGentleScheduledUpdateReminders` returns `true`.
-  `standardUserDriverShouldHandleShowingScheduledUpdate(_:andInImmediateFocus:)` is not
-  implemented, so Sparkle still shows the scheduled-update window itself.
-  `standardUserDriverWillHandleShowingUpdate` sets `updateAvailable = true` when
-  `!state.userInitiated`. `standardUserDriverDidReceiveUserAttention` and
-  `standardUserDriverWillFinishUpdateSession` reset it to `false`. This follows Sparkle's
-  background-app sample without the Dock-badge and notification parts (non-goals).
-- **When the indicator is actually visible** (read from `SPUStandardUserDriver.m` in 2.10.0,
-  lines 198-286). Unlatch is a background (`.accessory`) app, so Sparkle always shows a scheduled
-  update at once. Where it puts the alert decides whether the indicator survives:
-  - **Within about 3 seconds of the updater starting** (the near-launch window), Sparkle activates
-    the app and shows the alert in front as key. That counts as attention right away, so the
-    indicator clears almost immediately.
-  - **Unlatch active with a key window, which in practice means the popover is open** (lines
-    263-268): `showingUpdateInBack = backgroundApp && [NSApp keyWindow] != nil`, so the alert is
-    ordered *behind* the app's windows and the popover stays key. The indicator appears live in the
-    open popover: "Update Available" on the left and the dot on the ellipsis. This is the case
-    Unlatch hits most often, because the popover is the app's only window.
-  - **Unlatch active without a key window** (popover closed, app not yet deactivated): the alert is
-    shown in front and normally becomes key, which counts as attention, so the indicator clears.
-  - **Unlatch inactive** (lines 270-283): the alert goes behind the frontmost app without focus.
-    The next time the user opens the popover, it shows the indicator. Activating Unlatch for the
-    popover may bring the alert forward too, but the popover is key, so attention is not recorded.
+- **Gentle reminders, with Sparkle's window suppressed (T8, maintainer decision 2026-10-15).**
+  Gentle reminders are required for a dockless app, and Sparkle logs a warning without them.
+  `supportsGentleScheduledUpdateReminders` stays `true`. New in T8,
+  `standardUserDriverShouldHandleShowingScheduledUpdate(_:andInImmediateFocus:)` returns
+  `sparkleShowsScheduledUpdate(inImmediateFocus:)`, which is `false` for both values of
+  `immediateFocus` (§2.5). Sparkle then owns no presentation of a scheduled update: it neither
+  activates the app nor orders a window in, front or back. The delegate methods become one-liners
+  over the pure reducer `updateIndicatorShown(after:current:)` (§2.5):
+  - `standardUserDriverWillHandleShowingUpdate(_:forUpdate:state:)` applies
+    `.willShowUpdate(handledBySparkle: handleShowingUpdate, userInitiated: state.userInitiated)`.
+    The result is `true` whenever the check was not user-initiated, which with T8 always arrives
+    with `handleShowingUpdate == false`. A user-initiated check leaves the value alone: Sparkle
+    shows that update itself, in front, so there is nothing to remind about.
+  - `standardUserDriverDidReceiveUserAttention(forUpdate:)` applies `.userAttention`, and
+    `standardUserDriverWillFinishUpdateSession()` applies `.sessionFinished`. Both give `false`, as
+    before.
 
-  In every case where the indicator stays up, clicking "Update Available" or the menu item closes
-  the popover and `checkForUpdates()` brings the alert to the front as key, which clears the
-  indicator. "Remind Me Later", "Skip", and "Install" all count as attention and end the session,
-  so the indicator never outlives the alert, and nothing is persisted across launches.
+  This is Sparkle's documented "delegate handles showing the update" mode
+  (`SPUStandardUserDriverDelegate.h`, and sparkle-project.org/documentation/gentle-reminders),
+  without the Dock badge and notification parts (non-goals). The behaviour below was confirmed
+  against the gentle-reminders page and the Sparkle 2.10.0 sources pinned in `Package.resolved`
+  (file and line references are to that release).
+- **What Sparkle does when the delegate returns `false`** (`SPUStandardUserDriver.m`, lines
+  176-333). The standard user driver still builds the update alert and keeps it, unshown, as its
+  active alert. The update session stays open. It skips the activation, `showWindow`, and
+  `orderBack` calls that the previous version of this design depended on, and it calls
+  `standardUserDriverWillHandleShowingUpdate(false, …)` one run-loop turn later (lines 297-310).
+  The near-launch rule (within about 3 seconds of the updater starting, lines 195-198) and the
+  "app active with a key window" rule (lines 263-269) no longer matter for Unlatch: they only
+  decide how Sparkle would have shown the window. So the indicator now behaves the same in every
+  case: the scheduled check finds an update, and the footer button, the ellipsis dot, the menu
+  item, and the status item dot appear, live if the popover is open.
+- **`checkForUpdates()` presents the update already found.** `SPUUpdater.checkForUpdates`
+  (`SPUUpdater.m`, lines 684-705) sees that the scheduled driver is showing an update and calls
+  the user driver's `showUpdateInFocus` instead of starting a new check. That (lines 466-491)
+  calls `setUpActiveUpdateAlertForScheduledUpdate:nil`, which activates the app if needed and
+  shows the existing alert as key with the Install button focused (lines 183-192). The alert
+  becoming key in an active app counts as attention, so `.userAttention` clears the indicator.
+  No second feed request is made. The header confirms the intent: "To bring the update alert in
+  focus, you may call `-[SPUStandardUpdaterController checkForUpdates:]`."
 - **`canCheckForUpdates` and the indicator.** Per `SPUUpdater.h`, `canCheckForUpdates` stays `true`
-  while an update alert is shown, so `.updateAvailable` is reachable. It is `false` while a feed or
-  update downloads in the background, and `updateButtonState` then gives `.checkDisabled`, which
-  also hides the indicator for that moment.
+  while an update is being shown. `SPUUpdater.m` (lines 894-897) sets it back to `true` as soon as
+  the driver reports the update shown, which happens right after the alert is built, even though
+  it is not on screen (`SPUUIBasedUpdateDriver.m`, lines 243-325). The delegate callback that sets
+  `updateAvailable` comes a run-loop turn later, so `updateButtonState` reaches `.updateAvailable`.
+  It is `false` while a feed or update downloads in the background, and `updateButtonState` then
+  gives `.checkDisabled`, which also hides the indicator for that moment.
+
+#### Lifecycle of a found update (T8)
+
+| What happens | Result |
+| --- | --- |
+| Scheduled check finds an update, popover closed | No window, no activation. The status item dot appears. The footer indicator is there the next time the popover opens. |
+| Scheduled check finds an update, popover open | No window. The footer button, the ellipsis dot, and the status item dot appear in place. The popover stays key. |
+| Scheduled check right after launch (overdue check, near-launch window) | Same as above. Before T8 this case activated the app and showed Sparkle's alert in front. |
+| User clicks "Update Available" or "Update Available…", popover open | `onWillPresent` closes the popover, then `checkForUpdates()` shows the found update in front as key. The app is already active. Attention clears every indicator, the status item dot included. |
+| User only opens and closes the popover | Nothing changes. Clicking the status item never opens Sparkle's window; it only toggles the popover. |
+| User never clicks | The session stays open for the life of the process. Sparkle schedules the next check only when a session ends (`SPUUpdater.m`, lines 502-503, 593-600, and 886-890), so there is no re-check the next day and no second alert. Sparkle has no escalation for an ignored, not-downloaded update: `SUScheduledImpatientCheckInterval` only applies to updates that were already downloaded, which `SUAllowsAutomaticUpdates = false` rules out. The indicator stays until the user acts or quits. |
+| A newer release is published while an update is pending | The pending session still holds the older item. Clicking shows that item, and installing it installs that version. The next scheduled check, one interval after the session ends, offers the newer one. Accepted (§2.11). |
+| "Remind Me Later", or closing the alert with its close button | Both are `SPUUserUpdateChoiceDismiss` (`SUUpdateAlert.m`, lines 490-494). The session ends and the indicator clears. The next scheduled check runs one interval (a day) after the session ended and, if the update is still there, brings the indicator back. |
+| "Skip This Version" | The session ends and the indicator clears. Sparkle stores the version in `SUSkippedVersion` and filters it out of *scheduled* checks only (`SUAppcastDriver.m`, line 228), so no indicator returns for that version. "Check for Updates…" still offers it, and a newer version brings the indicator back. |
+| "Install Update" | Downloads, installs, and relaunches. The new process starts with no indicator. |
+| Quit or relaunch while an update is pending | The indicator is in-memory only, so it is gone after relaunch. Sparkle wrote `SULastCheckTime` when that check *started* (`SPUUpdater.m`, line 789), so the next scheduled check is about a day after it, and the indicator returns then, again without a window. "Check for Updates…" finds the update at any time. |
+| The user declined automatic checks in the second-launch prompt | No scheduled checks, so no indicator ever. "Check for Updates…" still works. |
 
 Lifetime, ownership, and isolation:
 
@@ -360,7 +424,8 @@ Lifetime, ownership, and isolation:
   `SPUStandardUpdaterController` it owns all live for the process. Nothing else holds the
   controller. Sparkle holds the `AppUpdater` only weakly, as both delegates.
 - **`StatusItemController`** takes `init(model: AppModel, updater: AppUpdater)`, sets
-  `updater.onWillPresent = { [weak self] in self?.closePopover() }`, and passes the updater to
+  `updater.onWillPresent = { [weak self] in self?.closePopover() }`, renders the status item from
+  both `model` and `updater` (T9, §2.4.3), and passes the updater to
   `PopoverHostingController(model:updater:)`, which passes it on to `PopoverView(model:updater:)` as
   a plain `let updater: AppUpdater`. SwiftUI tracks reads of an `@Observable` class without
   `@Bindable`.
@@ -401,7 +466,7 @@ The footer reads `updater.buttonState`, maps it through the pure `updateFooterPr
 | `.hidden` (`swift run`, missing feed or key) | Not in the menu | Hidden |
 | `.checkDisabled` | "Check for Updates…", disabled | Hidden |
 | `.check` | "Check for Updates…", enabled | Hidden |
-| `.updateAvailable` | "Update Available…" (pending, §6 question 5), enabled | Shown |
+| `.updateAvailable` | "Update Available…" (§6 question 5), enabled | Shown, together with the status item dot (§2.4.3) |
 
 Menu contents, in this order (#57). Nothing else goes in the menu:
 
@@ -513,6 +578,107 @@ AppKit probe confirmed that macOS actually *shows* the tooltip on a disabled `NS
 the disabled, checked "Open at Login" item displayed its tooltip window. Neither probe was run on
 macOS 14; the T3 manual check covers the oldest macOS available to the maintainer.
 
+#### 2.4.3 The status item dot (T9, maintainer decision 2026-10-15)
+
+While an update is available, the menu bar icon gets a small dot at its top-trailing corner, so the
+update is noticed without opening the popover. It appears and clears exactly with the footer's
+indicator, because both read the same value:
+`updateFooterPresentation(for: updater.buttonState).showsUpdateIndicator`, folded into
+`statusItemPresentation(hasLockedWork:updateState:)` (§2.5).
+
+```
+normal:            [lock.open]       the template glyph, as today
+update available:  [lock.open]•      the same glyph, a 6 pt dot at its top-trailing corner,
+                                     separated from the glyph by a 1.5 pt transparent ring
+```
+
+**Rendering.** Today `StatusItemController.renderButton(hasLockedWork:)` sets
+`NSImage(systemSymbolName: statusSymbolName(...), accessibilityDescription: "Unlatch")` with
+`isTemplate = true`, re-armed by `withObservationTracking` in `observeModel()`. T9 changes this to:
+
+```swift
+// StatusItemController.swift (sketch; the implementer owns the details)
+private func observeState() {
+    withObservationTracking {
+        render(statusItemPresentation(
+            hasLockedWork: model.hasLockedWork, updateState: updater.buttonState))
+    } onChange: { [weak self] in
+        Task { @MainActor in self?.observeState() }
+    }
+}
+
+private func render(_ presentation: StatusItemPresentation) {
+    guard let button = statusItem.button,
+          let symbol = NSImage(systemSymbolName: presentation.symbolName,
+                               accessibilityDescription: StatusItemPresentation.accessibilityLabel)
+    else { return }
+    let image = presentation.showsUpdateBadge ? Self.badged(symbol) : symbol
+    image.isTemplate = true
+    button.image = image
+    button.toolTip = presentation.toolTip
+    button.setAccessibilityLabel(StatusItemPresentation.accessibilityLabel)
+    button.setAccessibilityValue(presentation.accessibilityValue)
+}
+
+/// The symbol with a dot at its top-trailing corner, separated from the glyph by a transparent
+/// ring. Same size and alignment rect as the symbol, so the icon doesn't move when the dot comes
+/// and goes. Stays a template image: AppKit tints it for light, dark, and tinted menu bars and
+/// for the pressed highlight.
+private static func badged(_ symbol: NSImage) -> NSImage {
+    let diameter: CGFloat = 6, ring: CGFloat = 1.5
+    let image = NSImage(size: symbol.size, flipped: false) { rect in
+        symbol.draw(in: rect)
+        let dot = NSRect(x: rect.maxX - diameter, y: rect.maxY - diameter,
+                         width: diameter, height: diameter)
+        NSGraphicsContext.current?.compositingOperation = .clear
+        NSBezierPath(ovalIn: dot.insetBy(dx: -ring, dy: -ring)).fill()
+        NSGraphicsContext.current?.compositingOperation = .sourceOver
+        NSColor.black.setFill()
+        NSBezierPath(ovalIn: dot).fill()
+        return true
+    }
+    image.alignmentRect = symbol.alignmentRect
+    image.accessibilityDescription = symbol.accessibilityDescription
+    return image
+}
+```
+
+The one tracking closure reads `model.hasLockedWork` and `updater.buttonState`. Both are
+`@MainActor @Observable`, so a change to either re-renders the icon. `configureStatusItem()` stops
+setting `toolTip`, because `render` now owns it. The rest of the button (target, action,
+`sendAction(on:)`, the highlight monitor, and drag and drop from `Design/status-item-popover.md`)
+is unchanged.
+
+**Verified during design** (Swift 6.4, Xcode 27.0, macOS 27 SDK, deployment target 14, throwaway
+package in `/tmp`): the `badged(_:)` function above compiles in Swift 6 language mode as a
+`@MainActor` function with no warnings. It produces a 17 × 15 pt template image for `lock.open`,
+the same size as the symbol, which reports an alignment rect of (0, 2.5, 16.5, 9). That is why the
+composite copies `alignmentRect`. A drawing-handler image would otherwise report its full bounds
+and could shift the glyph vertically in the menu bar. The exact dot size and position against the
+`lock` and `lock.open` glyphs at 1x and 2x is a T9 manual check: the dot must not merge with the
+shackle, and the ring must keep a visible gap.
+
+**Template, not colour.** The dot is the same colour as the glyph: black or white for the menu
+bar, inverted with the pressed highlight. An accent-blue dot would need a non-template image,
+which AppKit no longer adapts to light, dark, and tinted menu bars or the highlight. That is §3.10
+and §6 question 6.
+
+**Accessibility.**
+
+| State | VoiceOver label | Value | Tooltip |
+| --- | --- | --- | --- |
+| No update (any lock state) | "Unlatch" | None | "Unlatch" |
+| Update available | "Unlatch" | "Update available" | "Unlatch: update available" |
+
+The value matches the ellipsis button's value in the footer, so VoiceOver uses the same words in
+both places ("Unlatch, Update available"). The label stays "Unlatch", as today. The lock state is
+not announced today and T9 doesn't add it.
+
+**Isolation.** Everything stays on the main actor: `StatusItemController`, `AppUpdater`, `AppModel`,
+the tracking closure (whose `onChange` hops back with `Task { @MainActor in … }`, as now), and the
+image's drawing handler, which only captures the symbol image and runs when AppKit draws the
+button. No new `Sendable` crossings.
+
 ### 2.5 Pure helpers (`Logic.swift`)
 
 Everything in the first block below is already on `main` (T2, #54) with its tests. T3 builds on it
@@ -583,6 +749,59 @@ func updateFooterPresentation(for state: UpdateButtonState) -> UpdateFooterPrese
 
 The copy lives in the two `static let`s, so the pending wording decision changes one line and one
 test. The footer button's own title, "Update Available", is fixed by #57 and stays in the view.
+
+T8 adds the scheduled-update decisions of 2026-10-15, so `AppUpdater`'s delegate methods hold no
+logic of their own:
+
+```swift
+/// What Sparkle's standard user driver reports about the update on offer.
+enum UpdateReminderEvent: Equatable, Sendable {
+    /// standardUserDriverWillHandleShowingUpdate(_:forUpdate:state:)
+    case willShowUpdate(handledBySparkle: Bool, userInitiated: Bool)
+    /// standardUserDriverDidReceiveUserAttention(forUpdate:)
+    case userAttention
+    /// standardUserDriverWillFinishUpdateSession()
+    case sessionFinished
+}
+
+/// Maintainer decision 2026-10-15: Sparkle never shows a scheduled update by itself, not even in
+/// immediate focus. The in-app indicator is the only reminder. Always false.
+func sparkleShowsScheduledUpdate(inImmediateFocus immediateFocus: Bool) -> Bool
+
+/// The next value of AppUpdater.updateAvailable. .willShowUpdate with userInitiated false gives
+/// true, whatever handledBySparkle says. .willShowUpdate with userInitiated true keeps `current`
+/// (Sparkle shows that update itself, in front). .userAttention and .sessionFinished give false.
+func updateIndicatorShown(after event: UpdateReminderEvent, current: Bool) -> Bool
+```
+
+The reducer is deliberately not named `updateAvailable(…)`: inside `AppUpdater`, unqualified
+lookup would find the `updateAvailable` property first and fail to compile.
+
+T9 adds the status item's presentation next to `statusSymbolName(hasLockedWork:)`, which it uses:
+
+```swift
+/// What the menu bar status item shows (Design/sparkle-updates.md §2.4.3).
+struct StatusItemPresentation: Equatable, Sendable {
+    /// statusSymbolName(hasLockedWork:): "lock" or "lock.open".
+    let symbolName: String
+    /// The dot on the icon. Same condition as the footer's indicator.
+    let showsUpdateBadge: Bool
+    /// nil, or updateAvailableValue.
+    let accessibilityValue: String?
+    let toolTip: String
+
+    static let accessibilityLabel = "Unlatch"
+    static let updateAvailableValue = "Update available"
+    static let updateAvailableToolTip = "Unlatch: update available"
+}
+
+/// showsUpdateBadge is updateFooterPresentation(for: updateState).showsUpdateIndicator, so the
+/// icon and the footer can't disagree. With the badge: accessibilityValue updateAvailableValue
+/// and toolTip updateAvailableToolTip. Without: nil and "Unlatch".
+func statusItemPresentation(
+    hasLockedWork: Bool, updateState: UpdateButtonState
+) -> StatusItemPresentation
+```
 
 `AppDelegate` reads `Bundle.main.bundleURL`, `SUFeedURL`, `SUPublicEDKey`, and
 `CFBundleShortVersionString` from `Bundle.main.infoDictionary` and passes in plain values. That
@@ -856,6 +1075,17 @@ I checked these with throwaway packages in `/tmp`. The repository was not touche
   offered a stable release whose build number is higher. That's harmless.
 - **Feed unreachable or offline.** A manual check shows Sparkle's error alert. Scheduled checks fail
   quietly.
+- **Scheduled update found (T8).** Sparkle shows no window. The footer indicator and the status
+  item dot are the only signal until the user clicks. The full lifecycle (ignore, Remind Me Later,
+  Skip, relaunch, a newer release while pending) is the table in §2.4.1.
+- **A newer release published while an update is pending.** The open session keeps offering the
+  older item until the user acts, because Sparkle doesn't re-check during a session. Installing it
+  is still an upgrade, and the next daily check offers the newer release. Accepted: Sparkle has no
+  public API to drop a pending session, and releases are rare.
+- **Check interval overrides.** Sparkle reads `SUScheduledCheckInterval` from user defaults before
+  the Info.plist (`SPUUpdaterSettings.m`, lines 255-264, and `SUHost.m`, lines 395-398), so the
+  `defaults write` in the upgrade test overrides the template's 86400, and
+  `defaults delete` restores it. Sparkle enforces a one-hour minimum in release builds.
 - **App translocation.** Sparkle can't update a copy running from a translocated (quarantined,
   never-moved) location. The README already says to drag the app to `/Applications`. The upgrade
   test installs it there.
@@ -962,6 +1192,36 @@ menu on 2026-10-09 (option C)**: the footer keeps one row, a future item is one 
 the only coloured thing in the footer is the update prompt when there is one. The accepted costs
 are that the version is no longer visible at a glance and Open at Login is one click deeper.
 
+### 3.9 Who presents a scheduled update (decided 2026-10-15)
+
+- **Let Sparkle show it (the T3 behaviour).** Sparkle's default for background apps. Its window
+  either appears in front right after launch, which interrupts whatever the user is doing at login,
+  or goes behind other apps, where it is easy to miss and still steals a window slot. The footer
+  indicator only survived in some of those cases (the old §2.4.1 case list).
+- **Return `immediateFocus`** (Sparkle's sample): Sparkle shows the window only in the near-launch
+  case and the app handles the rest. That still pops a window at login, which is what the
+  maintainer wanted to avoid.
+- **Always return `false` (chosen).** The update waits behind an indicator the user controls, in
+  the popover and on the menu bar icon. One rule, no timing-dependent cases, and the existing
+  `checkForUpdates()` path brings the update forward with no new Sparkle API. The cost is that an
+  update the user never looks at is never forced on them, and there is no escalation. For an app
+  that decrypts local PDFs and has no security-critical network surface, that is acceptable.
+
+### 3.10 How the status item shows the dot
+
+- **Composite template image (chosen).** One `NSImage` drawn from the SF Symbol plus a knocked-out
+  dot, `isTemplate = true`. AppKit keeps handling light, dark, and tinted menu bars, the pressed
+  highlight, and Increase Contrast. About 20 lines, no new view, verified to compile in Swift 6
+  mode (§2.4.3).
+- **A badged SF Symbol variant.** There is no `lock.badge` or `lock.open.badge` symbol in the
+  set the app can rely on back to macOS 14, and a custom symbol would mean shipping an asset
+  catalogue, which this SwiftPM-only package doesn't have.
+- **A coloured dot subview or layer on `NSStatusBarButton`.** Gives an accent-blue dot, but the app
+  would have to track appearance, highlight, and tinted menu bars itself, and subviews of the
+  status bar button are not a supported customisation point.
+- **A non-template image with a palette colour.** Same colour benefit and the same cost: AppKit
+  stops adapting the glyph, so it has to be redrawn for every appearance change.
+
 ## 4. Testing strategy
 
 ### Unit tests (`Tests/UnlatchTests`)
@@ -1000,6 +1260,33 @@ Those three groups merged with T2 (#54). T3 adds, in the same file:
 No test for the view itself: the repository has no SwiftUI view tests, and the login item
 behaviour behind the menu toggle is already covered by `LoginItemTests.swift`.
 
+T8 adds, in `UpdaterLogicTests.swift`:
+
+- `sparkleShowsScheduledUpdate(inImmediateFocus:)` is `false` for `true` and for `false`. This pins
+  the 2026-10-15 decision; changing it must fail a test.
+- `updateIndicatorShown(after:current:)`:
+  - `.willShowUpdate(handledBySparkle: false, userInitiated: false)` gives `true` from `false`.
+  - `.willShowUpdate(handledBySparkle: true, userInitiated: false)` also gives `true` (defensive:
+    the indicator doesn't depend on who shows the window).
+  - `.willShowUpdate(handledBySparkle: true, userInitiated: true)` keeps `false` as `false` and
+    `true` as `true`.
+  - `.userAttention` and `.sessionFinished` give `false` from `true` and from `false`.
+- One composed test: the event sequence `.willShowUpdate(false, false)`, then `.userAttention`,
+  folded from `false`, ends `false`, and after only the first event, `updateButtonState(availability:
+  .enabled, canCheck: true, updateAvailable: …)` is `.updateAvailable`.
+
+T9 adds, in `StatusItemLogicTests.swift`:
+
+- `statusItemPresentation(hasLockedWork:updateState:)` for both lock states crossed with
+  `.updateAvailable` and `.check`: the symbol name follows `statusSymbolName(hasLockedWork:)`, the
+  badge and accessibility value appear only with `.updateAvailable`, and the tool tip is
+  "Unlatch" or "Unlatch: update available".
+- `.hidden` and `.checkDisabled` give no badge, no value, and "Unlatch".
+- One agreement test: for every `UpdateButtonState`, `showsUpdateBadge ==
+  updateFooterPresentation(for:).showsUpdateIndicator`. This is the "clears when the popover's
+  indicator clears" requirement as a test.
+- The copy: `accessibilityLabel == "Unlatch"`, `updateAvailableValue == "Update available"`.
+
 `InfoPlistTemplateTests.swift`:
 
 - Read `Resources/Info.plist.template` via `#filePath`, substitute the two version placeholders, and
@@ -1007,12 +1294,15 @@ behaviour behind the menu toggle is already covered by `LoginItemTests.swift`.
 - `SUFeedURL` is the https Pages URL.
 - `SUPublicEDKey` base64-decodes to exactly 32 bytes.
 - `SUAllowsAutomaticUpdates` is `false`.
+- `SUScheduledCheckInterval` is the integer `86400` (T8, 2026-10-15).
 - `SUEnableInstallerLauncherService`, `SUEnableAutomaticChecks`, and `SUEnableSystemProfiling` are
-  all absent.
+  all absent. `SUEnableAutomaticChecks` staying absent is what keeps Sparkle's second-launch
+  prompt (option A).
 - `LSMinimumSystemVersion` is still `14.0`.
 
-Untestable in-process: `AppUpdater` itself, which needs a real bundle, and the footer's look,
-menu, and VoiceOver output, which T3 checks by hand. No new fixtures are needed,
+Untestable in-process: `AppUpdater` itself, which needs a real bundle, the footer's look,
+menu, and VoiceOver output, which T3 checks by hand, and the status item's rendered dot and
+VoiceOver output, which T9 checks by hand. No new fixtures are needed,
 and `Scripts/generate-fixtures.sh` doesn't change. `UnlatchCoreTests` is untouched.
 
 ### Script-level checks (`devops`, local)
@@ -1069,30 +1359,90 @@ exception), on a clean macOS 15+ machine as in RELEASING.md step 3.
      ask for App Management permission, during install? Ad-hoc code has no team ID, and the macOS
      rule is "same team ID may update". How ad-hoc-to-ad-hoc is treated is the open risk.
    - **The new CDHash.** It must differ from the old one.
-6. Scheduled path. Step 4 left beta.3 installed, so first **reinstall `v1.1.0-beta.2` from its zip
-   into `/Applications`**, replacing beta.3, and follow the README's first-launch steps again if
-   Gatekeeper asks. Automatic checks must be on (the answer from step 2; the setting lives in the
+6. Scheduled path. Step 4 left the new build installed, so first **reinstall the old build from
+   its zip into `/Applications`**, replacing the new one, and follow the README's first-launch steps
+   again if Gatekeeper asks. The scheduled path exercises the *installed* build's code, so which
+   expectations apply depends on that build. For `v1.1.0-beta.2` → `beta.3` (done, passed), the old
+   expectations applied: Sparkle's window appeared behind the frontmost app. From T8 on, the
+   installed build must show **no window**. That needs an installed build that contains T8 and an
+   older build number than the feed's newest item, see "Manual: the no-window scheduled path"
+   below. Automatic checks must be on (the answer from step 2; the setting lives in the
    `com.pablocolaiacovo.unlatch` defaults domain, which survives the reinstall). The `defaults`
-   values written below also live in that domain, not in the bundle, so they survive the reinstall
-   too, and they can be written before or after it. Sparkle leaves the indicator up only when the
-   scheduled alert appears while Unlatch is inactive or the popover is open, and not just launched
-   (§2.4.1). One hour is its minimum check interval in release builds, so:
+   values below also live in that domain, not in the bundle, so they survive the reinstall too, and
+   they override the template's `SUScheduledCheckInterval` of 86400 (§2.11). One hour is Sparkle's
+   minimum check interval in release builds, so:
    ```sh
    defaults write com.pablocolaiacovo.unlatch SUScheduledCheckInterval -int 3600
    defaults write com.pablocolaiacovo.unlatch SULastCheckTime -date "$(date -u -v-58M '+%Y-%m-%d %H:%M:%S +0000')"
    ```
    - Relaunch Unlatch, switch to another app, and wait about two minutes without opening the
-     popover. Sparkle's update window appears behind the frontmost app.
+     popover. A pre-T8 build shows Sparkle's window behind the frontmost app. A T8 build shows no
+     window; the menu bar icon gets the dot instead (T9).
    - Open the popover. The footer shows "Update Available", the ellipsis has the dot, and the menu
-     item reads "Update Available…" (or the wording the maintainer chose).
+     item reads "Update Available…".
    - Click "Update Available". The popover closes and Sparkle's window comes to the front. Reopen
-     the popover: the button and the dot are gone.
+     the popover: the button and both dots are gone.
    - Repeat with the popover open: rewrite `SULastCheckTime` as above, relaunch, wait a few seconds,
-     open the popover, and leave it open for about two minutes. When the check fires, the alert is
-     ordered behind and "Update Available" and the dot appear in the open popover.
+     open the popover, and leave it open for about two minutes. When the check fires, "Update
+     Available" and the dots appear in the open popover and on the icon, with no window (T8) or
+     with the alert ordered behind (pre-T8).
    - Run `defaults delete com.pablocolaiacovo.unlatch SUScheduledCheckInterval` afterwards.
    - "Remind Me Later" ends Sparkle's session, so the indicator correctly disappears after it too.
 7. Channel isolation, after `v1.1.0` ships: a v1.1.0 install isn't offered the next `-beta.N`.
+
+### Manual: the no-window scheduled path (T10, `v1.1.0-beta.4`)
+
+The beta.3 → beta.4 upgrade test (steps 1 to 6 with beta.3 as the old build and beta.4 as the new
+one) proves the install path still works after T8 and T9, but its scheduled path runs beta.3's
+code, which still lets Sparkle show the window. The new behaviour only runs in a build that
+contains T8 *and* finds a newer feed item. Until a `beta.5` exists, use a **rewound copy of
+beta.4**: the real beta.4 binary with a lower build number, so the live feed's beta.4 item is
+newer than it. Recommended in §6 question 7.
+
+```sh
+cd "$(mktemp -d)"
+gh release download v1.1.0-beta.4 --repo pablocolaiacovo/unlatch --pattern Unlatch.zip
+ditto -x -k Unlatch.zip .
+PL=Unlatch.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 1' "$PL"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 1.1.0-beta.3' "$PL"   # stays on the beta channel
+codesign --force --sign - Unlatch.app          # outer signature only; Sparkle.framework keeps its own
+codesign --verify --deep --strict Unlatch.app
+rm -rf /Applications/Unlatch.app && ditto Unlatch.app /Applications/Unlatch.app
+```
+
+The copy is never quarantined, so Gatekeeper doesn't apply; Gatekeeper, TCC, and App Management
+are covered by the real beta.3 → beta.4 run. Then, with the `defaults` from step 6:
+
+1. **Near launch.** Make the check overdue (`SULastCheckTime` two hours back) and launch. No
+   Sparkle window appears and Unlatch doesn't become active. The menu bar icon gets the dot within
+   a few seconds.
+2. **In the background.** Set `SULastCheckTime` 58 minutes back, relaunch, switch to another app,
+   and wait about two minutes. No window appears, not even behind other apps (check with Mission
+   Control). The icon gets the dot. VoiceOver on the icon reads "Unlatch, Update available".
+3. **Popover open.** Repeat 2 with the popover open when the check fires. The footer button, the
+   ellipsis dot, and the icon dot appear in place. The popover stays open and key.
+4. **Bring it forward.** Click "Update Available" (and in a second run, the "Update Available…"
+   menu item). The popover closes, Sparkle's window comes to the front listing 1.1.0-beta.4 with
+   its notes, and every indicator clears, the icon dot included.
+5. **Remind Me Later.** The window closes and no indicator remains.
+6. **Ignore it.** Let a check find the update, don't click, and wait past the next interval: no
+   second window and no new check: `defaults read com.pablocolaiacovo.unlatch SULastCheckTime`
+   still shows the time of the first check, because Sparkle writes it when a check starts. Quit
+   and relaunch: the indicator is gone until the next scheduled check.
+7. **Skip This Version.** Bring the update forward and choose Skip. Make the check overdue and
+   relaunch: no indicator. "Check for Updates…" still offers beta.4. Then
+   `defaults delete com.pablocolaiacovo.unlatch SUSkippedVersion`.
+8. **Install.** Bring it forward and choose "Install Update". The app relaunches as the real
+   beta.4, with no indicator.
+9. **Light, dark, and highlight.** With the dot showing, check the icon in a light and a dark menu
+   bar, with a tinted wallpaper, and while the popover is open (pressed highlight). The dot stays
+   visible and separate from the shackle of both `lock` and `lock.open` (load an encrypted PDF to
+   get `lock`).
+10. Clean up: `defaults delete com.pablocolaiacovo.unlatch SUScheduledCheckInterval`, and reinstall
+    the real beta.4 if step 8 was skipped.
+
+Record the results in the T10 comment on #13.
 
 **Go or no-go.** If step 5 finds that the install *fails* without a manual App Management grant,
 stop before tagging v1.1.0 and raise it with the maintainer (Open question 3). Repeated TCC or
@@ -1108,8 +1458,16 @@ T1 (devops) ──► T2                       ├─► M5 + T5 (betas, upgrade
 M3–M4 (secret, Pages) ──► T4 (devops) ───┘                                     T7 (RELEASING, after T4)
 ```
 
+After the 2026-10-15 decisions:
+
+```
+T8 (no window, daily interval) ──► T9 (status item dot) ──► M6 (approve beta.4) ──► T10 (beta.4 upgrade test) ──► T6 (README)
+```
+
 T1 must merge before T2. Once T2 lands, the binary links Sparkle, and `main` must stay releasable.
-Status on 2026-10-14: T1 merged in #52, T2 merged in #54, and T4 merged in #55 (`c5ae4d7`). Every PR uses
+Status on 2026-10-15: T1 merged in #52, T2 merged in #54, T4 merged in #55 (`c5ae4d7`), T3 merged in
+#59, and T7 landed in #62 (follow-ups in #64 and #65). T5 is done: `v1.1.0-beta.2` and `v1.1.0-beta.3` are published and
+the beta.2 → beta.3 upgrade test passed. T8 to T10 are new. Every PR uses
 `Part of #13`, except T6, which uses `Closes #13`. The T3 PR also says `Closes #57`. Each one ends with a clean
 `swift build` and a passing `swift test`. Suggested titles follow the changelog convention.
 Labels are `project-owner`'s call. The T1, T2, T4, and T7 PRs have no user-facing effect on their
@@ -1293,10 +1651,13 @@ CDHash, and the scheduled path, with the go/no-go outcome stated.
 
 Suggested title: "Explain how Unlatch checks for and installs updates".
 
-This depends on T5's findings.
+This depends on T5's findings, and on T10's, so the README describes the shipped no-window
+behaviour.
 
 - Add an "Updates" section:
   - The second-launch prompt.
+  - Unlatch checks once a day. When it finds an update it shows no window: the menu bar icon gets
+    a dot, and the popover shows "Update Available". Clicking it shows the update and its notes.
   - "Check for Updates…" in the popover's ellipsis menu, and the "Update Available" button.
   - Beta builds follow betas.
   - v1.0.0 users install v1.1.0 manually once.
@@ -1327,6 +1688,95 @@ This depends on T4.
     inside-out with the same identity, and the §2.8 assertions flip.
 - The hotfix path: a deleted release leaves a dead feed item until the hotfix's feed deploys.
 
+### T8 (`macos-developer`): Keep scheduled updates out of sight until the user asks
+
+Suggested title: "Wait for the user before showing a scheduled update". Labels: `enhancement`,
+`area:app`. `project-owner` decides on `skip-changelog`; the recommendation is to add it, because
+v1.0 users never saw the previous behaviour and T3's line already announces the update UI. PR body:
+`Part of #13`.
+
+This depends on T3 (merged in #59). Implements maintainer decisions 1 and 2 of 2026-10-15.
+
+1. `Logic.swift`: add `UpdateReminderEvent`, `sparkleShowsScheduledUpdate(inImmediateFocus:)`, and
+   `updateIndicatorShown(after:current:)` (§2.5), with the T8 tests in `UpdaterLogicTests.swift`
+   (§4).
+2. `AppUpdater.swift`: implement
+   `standardUserDriverShouldHandleShowingScheduledUpdate(_:andInImmediateFocus:)` returning
+   `sparkleShowsScheduledUpdate(inImmediateFocus:)`. Route the three existing delegate methods
+   through `updateIndicatorShown(after:current:)`. Keep `supportsGentleScheduledUpdateReminders`
+   `true`. Rewrite the doc comment on the gentle-reminder section, which today says Sparkle still
+   shows the window, and the one on `updateAvailable` ("A scheduled update was found and the user
+   hasn't looked at it yet").
+3. `Resources/Info.plist.template`: add `SUScheduledCheckInterval` = `<integer>86400</integer>`
+   with a one-line comment ("Scheduled checks once a day; Sparkle's own prompt still asks first").
+   Leave `SUEnableAutomaticChecks` absent. Add the T8 assertion to `InfoPlistTemplateTests.swift`.
+
+Acceptance criteria:
+
+- `swift build` is clean with no new warnings under strict concurrency, and `swift test` passes
+  with the new tests. No `nonisolated(unsafe)` or `@unchecked Sendable`. `git diff --stat
+  Sources/UnlatchCore Tests/UnlatchCoreTests` is empty.
+- `AppUpdater`'s delegate methods contain no conditionals of their own; the decisions live in
+  `Logic.swift`.
+- In a `Scripts/package-app.sh` bundle, `plutil -p dist/Unlatch.app/Contents/Info.plist` shows
+  `SUScheduledCheckInterval => 86400`, and "Check for Updates…" still opens Sparkle's checking
+  window and reaches the live feed (it reports the beta.3 item or "up to date", depending on the
+  local build number).
+- The PR says that the change is on RELEASING.md's upgrade-test list (`AppUpdater.swift` and the
+  update configuration in the template), so the next beta runs the upgrade test.
+- The scheduled path itself can't be shown before a newer feed item exists; T10 covers it. A
+  temporary, **uncommitted** local check is enough here: package a bundle with
+  `CFBundleVersion` lowered as in §4 "Manual: the no-window scheduled path", run step 1 against the
+  live beta.3 item, and paste the result in the PR.
+
+### T9 (`macos-developer`): Show a dot on the menu bar icon when an update is available
+
+Suggested title: "Show a dot on the menu bar icon when an update is available". Labels:
+`enhancement`, `area:app`, no `skip-changelog`: it's a visible change. PR body: `Part of #13`.
+
+This depends on T8 (both edit `Logic.swift` and `UpdaterLogicTests.swift`'s neighbourhood; merging
+in order avoids conflicts, and the dot is only useful once Sparkle stops showing its window).
+Implements maintainer decision 3 of 2026-10-15.
+
+1. `Logic.swift`: add `StatusItemPresentation` and `statusItemPresentation(hasLockedWork:updateState:)`
+   (§2.5), with the T9 tests in `StatusItemLogicTests.swift` (§4). `statusSymbolName` stays and is
+   used by the new function.
+2. `StatusItemController.swift`: replace `observeModel()` and `renderButton(hasLockedWork:)` with
+   `observeState()` and `render(_:)`, add `badged(_:)`, and move the tool tip out of
+   `configureStatusItem()` (§2.4.3). Update the type's doc comment to mention the update dot.
+
+Acceptance criteria:
+
+- `swift build` is clean with no new warnings under strict concurrency, and `swift test` passes
+  with the new tests, including the agreement test between the icon and the footer.
+- Under `swift run Unlatch` the icon never shows a dot (the updater is unavailable), and the lock
+  glyph still switches between `lock` and `lock.open` as before.
+- With a temporary, **uncommitted** `updateAvailable = true` in `AppUpdater.init` on a packaged
+  bundle: the icon shows the dot at top-trailing; it doesn't move the glyph; it is legible in light
+  and dark menu bars, with a tinted wallpaper, and in the pressed highlight while the popover is
+  open; Accessibility Inspector shows the status item with label "Unlatch" and value "Update
+  available"; hovering shows "Unlatch: update available". Clicking "Update Available" clears the
+  footer indicator and the icon dot together.
+- Drag and drop on the icon (`Design/status-item-popover.md`) still highlights and accepts PDFs with
+  and without the dot.
+- The PR attaches 2x screenshots of the icon with and without the dot, light and dark.
+
+### T10 (`release-manager` and the maintainer): `v1.1.0-beta.4` and its upgrade test
+
+This depends on T8, T9, and M6 (the maintainer approves `v1.1.0-beta.4`, §6 question 8).
+
+- `release-manager` tags `v1.1.0-beta.4` only with the maintainer's approval of that exact
+  version, and checks that the `appcast` and `deploy-feed` jobs are green and the live feed has a
+  `beta`-channel item for it.
+- T8 changes `Sources/Unlatch/AppUpdater.swift` and the update configuration in
+  `Resources/Info.plist.template`, both on RELEASING.md's upgrade-test trigger list (step 3), so the
+  maintainer re-runs §4 "Manual" steps 2 to 6 from `v1.1.0-beta.3` to `v1.1.0-beta.4` on the clean
+  machine, then §4 "Manual: the no-window scheduled path" on a rewound beta.4.
+
+Acceptance criteria: a comment on #13 records the beta.3 → beta.4 install (Gatekeeper, TCC, App
+Management, CDHash) and every step of the no-window scheduled path, with a go or no-go for T6 and
+the v1.1.0 release.
+
 ## 6. Open questions
 
 1. **No in-app "automatically download and install" option (`SUAllowsAutomaticUpdates = false`).**
@@ -1355,9 +1805,33 @@ This depends on T4.
    recommendation on 2026-10-14. The string is one constant
    (`UpdateFooterPresentation.updateAvailableTitle`) and one test.
 
+6. **Colour of the status item dot.** A template dot, the same colour as the glyph (black or white,
+   inverted when pressed), or an accent-blue dot like the footer's. Recommendation: **template**.
+   It follows the menu bar convention for status items, and AppKit keeps it right in light, dark,
+   and tinted menu bars and the pressed highlight with no extra code (§3.10). Blue would match the
+   footer, but it means a non-template image redrawn for every appearance change. T9 is written for
+   the template dot; choosing blue changes only `badged(_:)` and its manual checks.
+7. **How to verify the no-window scheduled path for beta.4.** The maintainer asked for the beta.3 →
+   beta.4 upgrade test to include the scheduled path with the new behaviour, but that path runs the
+   *installed* build's code, and beta.3 still lets Sparkle show the window. Recommendation: run the
+   full beta.3 → beta.4 test as usual (install, Gatekeeper, TCC, App Management, and beta.3's
+   scheduled path for regressions), and verify the new no-window behaviour on a rewound copy of the
+   real beta.4 binary with a lower `CFBundleVersion`, against the live feed (§4). The alternative,
+   waiting for a beta.5 to test beta.4's behaviour, adds a beta only for testing and delays T6.
+8. **Approve `v1.1.0-beta.4` (M6).** RELEASING.md requires the maintainer to approve each exact
+   version, and the v1.1 milestone isn't empty, so this is another mid-milestone beta.
+   Recommendation: approve it once T8 and T9 are merged, so T10 tests both together.
+
 **Resolved by the maintainer on 2026-10-09:** questions 1 to 3 are accepted as recommended.
 Automatic install stays off (`SUAllowsAutomaticUpdates = false`), `v1.1.0-beta.2` and
 `v1.1.0-beta.3` are approved as mid-milestone betas for the upgrade test (M5). They replace the
 originally proposed beta.1 and beta.2, because `v1.1.0-beta.1` was already published on 2026-10-01
 as the release-workflow dry run, without Sparkle. The App Management fallback stands: ship with a
 documented one-time grant, or make #8 a prerequisite if the install fails outright. Question 4: the private key is backed up in the maintainer's 1Password.
+
+**Decided by the maintainer on 2026-10-15**, after the beta.2 → beta.3 upgrade test passed (the
+header of this document has the full text): scheduled checks once a day with
+`SUScheduledCheckInterval` = 86400, `SUEnableAutomaticChecks` unset (option A) and
+`SUAllowsAutomaticUpdates` `false`; Sparkle never shows a scheduled update by itself, only the
+in-app indicator does; and the status item icon shows a dot while an update is available.
+Questions 6 to 8 above follow from those decisions and are still open.
