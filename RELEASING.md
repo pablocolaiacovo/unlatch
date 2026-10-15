@@ -124,7 +124,9 @@ fingerprint of the run that recorded them, also written by CI. Do not edit it by
 
 ### Locally
 
-When the fingerprint does not match, the suite is skipped and `swift test` shows why. The reason
+When the fingerprint does not match, the suite is skipped and `swift test` shows why. Expect that on
+most Macs: the CI runner has Reduce Transparency on, which changes how the footer's controls render, so
+a Mac with the default setting never matches. The reason
 names the first field that differs, for example "references were recorded on macOS 27.0.1 (26A434);
 this Mac runs 27.1 (26B12)", and the stderr line starts with "Popover snapshot tests skipped". That is
 not a failure. To run the suite anyway, use `UNLATCH_SNAPSHOTS=require swift test`; expect diffs on a
@@ -145,7 +147,7 @@ recorded/                                     Tests/UnlatchTests/__Snapshots__ a
   PopoverSnapshotTests/*.png                  been re-recorded; the rest are unchanged
 ```
 
-Download it with `gh run download <run-id> -n popover-snapshots-<attempt> -D /tmp/snapshots`. Open
+Download it to a fresh directory: `rm -rf /tmp/snapshots`, then `gh run download <run-id> -n popover-snapshots-<attempt> -D /tmp/snapshots`. Open
 `failures/PopoverSnapshotTests/` in Finder and Quick Look the render, its `.reference.png`, and its
 `.difference.png` together. In the difference image black means identical and lit pixels show what
 moved. A render that is a different size from its reference always fails, so a clipped or grown
@@ -171,9 +173,18 @@ step shows up as a size change.
 
 Run the **Record snapshots** workflow (`.github/workflows/record-snapshots.yml`, `workflow_dispatch`)
 on the branch of the PR that will carry the new references. It records all references, verifies
-them on the same runner, and uploads `recorded-snapshots-<run attempt>`; then follow step 3 above
-with that artifact's contents. It never commits or pushes. The workflow can only be dispatched once
-it is on `main`.
+them on the same runner, and uploads `recorded-snapshots-<run attempt>`. That artifact holds the
+`__Snapshots__` contents at its root, with no `recorded/` folder, so download it to a fresh directory
+and copy it from there:
+
+```sh
+rm -rf /tmp/recorded
+gh run download <run-id> -n recorded-snapshots-<attempt> -D /tmp/recorded
+rsync -a --delete /tmp/recorded/ Tests/UnlatchTests/__Snapshots__/
+```
+
+Check the images by eye as in step 3, then commit. The workflow never commits or pushes. It can only be
+dispatched once it is on `main`.
 
 This is **mandatory** after any of these:
 
