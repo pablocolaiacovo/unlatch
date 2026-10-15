@@ -873,8 +873,11 @@ I checked these with throwaway packages in `/tmp`. The repository was not touche
   re-fetches the live feed right before deploying and refuses if a live item would be dropped or
   demoted. The expected worst case is a failed `deploy-feed`, with that release not yet announced
   in the app, fixed by **Re-run this job** on that run's `appcast` (`RELEASING.md` step 5). Only if
-  `deploy-feed`'s own fetch is stale too can an item be lost; re-running that tag's `appcast`
-  within 30 days restores it.
+  `deploy-feed`'s own fetch doesn't yet show the other release (a stale CDN copy, or the other
+  run's Pages deploy still in flight, where the last deploy wins) can an item be lost. That loss is
+  silent, with every job green, so the `RELEASING.md` step 5 live-feed check, run for both tags once
+  both runs have finished, is what catches it. Re-running that tag's `appcast` within 30 days
+  restores it.
 - **Key rotation.** Rotation is still possible while the old key exists: ship an update signed with
   the old key that contains the new public key. Losing the key is the case that can't be recovered
   while signing is ad-hoc.
