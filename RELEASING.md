@@ -223,7 +223,8 @@ finishes:
 - The generated notes read like a changelog. Fix a bad line by editing the release body; fix the
   cause by writing better PR titles next time. The feed item embeds the notes as they were when
   `appcast` ran: a later edit to the release body reaches the update window only after re-running
-  `appcast` as described below, which is possible for 30 days after the run.
+  `appcast` as described below, which is possible for 30 days after the run (older tags have a
+  catch, see below).
 - The prerelease flag matches the tag.
 - The live feed carries the release. From the repository root, with the tag just pushed:
 
@@ -257,6 +258,14 @@ build artifact and rebuilds from the live feed, so this works days later too, bu
 GitHub allows re-running jobs only within 30 days of the original run. After that there is no
 supported way to add or refresh a tag's feed item, because a `workflow_dispatch` run never reaches
 `appcast`; ship the next version instead.
+
+Re-running `appcast` also needs a tag cut from a commit whose `release.yml` names the Pages
+artifact per run attempt (#64), because a re-run uses the workflow file from the tagged commit. On
+older tags (v1.1.0-beta.2, v1.1.0-beta.3) it fails with "Multiple artifacts named github-pages" if
+an earlier attempt's `deploy-feed` had already uploaded its Pages artifact. Delete that run's
+`github-pages` artifacts first
+(`gh api -X DELETE repos/pablocolaiacovo/unlatch/actions/artifacts/<id>`),
+or ship the next version instead.
 
 - Never use **Re-run all jobs**: `publish` fails because the release already exists.
 - Do not use **Re-run failed jobs** when only `deploy-feed` failed: it redeploys the feed artifact
