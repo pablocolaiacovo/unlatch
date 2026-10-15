@@ -85,7 +85,7 @@ Updates…**.
 
 Unlatch updates itself with [Sparkle](https://sparkle-project.org). Once a day it checks, in the
 background, a signed feed at `https://pablocolaiacovo.github.io/unlatch/appcast.xml`, and it only
-installs an update whose EdDSA signature verifies. The first time you launch it a second time,
+installs an update whose EdDSA signature verifies. On the second launch,
 Sparkle asks whether it may check for updates automatically; if you say no, it never checks on its
 own, but **Check for Updates…** still works.
 
