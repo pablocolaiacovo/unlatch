@@ -648,8 +648,10 @@ build-and-package (xcode-27)  ->  publish (ubuntu-24.04)  ->  appcast (xcode-27)
 
 Running the feed *after* `publish` means the feed never points at an asset that doesn't exist yet.
 If `appcast` or `deploy-feed` fails, the release exists but isn't announced in the app yet.
-Re-running the failed jobs is idempotent, because the strip step and `generate_appcast` re-key on
-the build number.
+Re-running is not idempotent for every job: recover with **Re-run this job** on `appcast`, never
+**Re-run all jobs**, and only within 30 days of the original run. The full procedure, including why
+**Re-run failed jobs** is wrong when only `deploy-feed` failed, is in `RELEASING.md` step 5 and the
+header of `release.yml`.
 
 **`appcast`** job:
 
