@@ -665,22 +665,31 @@ header of `release.yml`.
   1. `actions/checkout` (depth 1 is enough), then `swift package resolve`. The tools come from
      `.build/artifacts/sparkle/Sparkle/bin`, the version pinned in `Package.resolved` and checked
      against the binary target's checksum by SwiftPM. No second version pin goes in the workflow.
-  2. Download the `unlatch-zip` artifact.
+  2. Download `Unlatch.zip` from the published release with `gh release download`, not the 7-day
+     `unlatch-zip` build artifact, so a late re-run still works. Fail unless the asset has a
+     `sha256:` digest in the GitHub API and the downloaded file's `shasum -a 256` matches it.
   3. Release notes: `gh release view "$TAG" --json body --jq .body`. Delete the
      `<!-- Release notes generated … -->` comment line and write the result to `Unlatch.md` next to
      the zip. `generate_appcast` picks up a `.md` file with the same base name as the archive, and
      `--embed-release-notes` embeds it as `<description sparkle:format="markdown">`. Sparkle 2.9+
      renders basic Markdown on macOS 12+. These are the same PR-title notes the release page shows,
      so there's one source of truth.
-  4. Run `Scripts/update-appcast.sh`, below.
-  5. Upload the output directory, which holds `appcast.xml` only, as the `appcast` artifact.
+  4. Fetch the live feed as §2.6 describes. The feed URL is `SUFeedURL` read from the zip's
+     `Info.plist`. That URL and the bundle's `CFBundleVersion` become job outputs for `deploy-feed`.
+  5. Run `Scripts/update-appcast.sh`, below.
+  6. Upload `appcast.xml` as the `appcast` artifact, with `overwrite: true` so a re-run of the job
+     can upload it again.
 
 **`deploy-feed`** job:
 
 - `runs-on: ubuntu-24.04`, with `needs: appcast`.
 - `environment: { name: github-pages, url: ${{ steps.deploy.outputs.page_url }} }`.
 - `permissions: { pages: write, id-token: write }`.
-- Steps: download the artifact, `actions/upload-pages-artifact`, then `actions/deploy-pages`.
+- Steps: download the artifact, then re-fetch the live feed and fail if the artifact lacks a live
+  item, by `sparkle:version` and channel. The only exception is the build `appcast` replaced moving
+  from beta to stable. A 404 means there is no feed yet. This stops a re-run of an older tag's
+  deploy from rolling the feed back, because the `appcast` concurrency group doesn't cover this
+  job. Then `actions/upload-pages-artifact` and `actions/deploy-pages`.
   `devops` pins the current major versions when implementing. They are a separate Linux job
   because `upload-pages-artifact` tars with GNU tar flags.
 
