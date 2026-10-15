@@ -9,6 +9,8 @@ Unlatch ships two things from one SwiftPM package:
 - **`UnlatchCore`**, a library consumed through Swift Package Manager, versioned by the git tag.
 - **`Unlatch.app`**, a menu bar app, distributed as a zip attached to a GitHub Release. It is
   **ad-hoc signed and not notarized** (see [Distribution and signing](#distribution-and-signing)).
+  From v1.1, installed copies learn about new releases from a Sparkle update feed that the release
+  workflow signs and publishes (see [Update feed and signing key](#update-feed-and-signing-key)).
 
 Both are released together under a single version.
 
@@ -151,9 +153,35 @@ Verify on the clean machine, running macOS 15 or later:
 - A password-protected PDF, an owner-restricted one, and a damaged one each behave correctly.
 - The outputs open in Preview without a password.
 - Get Info shows the version from the tag, not `0.0.0`.
+- "Check for Updates…" in the popover's ellipsis menu reaches the feed and reports that this build
+  is up to date. A beta install follows the `beta` channel, so it is offered betas and stable
+  releases; a stable install is offered stable releases only.
 
 Downloading with `curl` does not exercise Gatekeeper — the file has to carry the quarantine
 attribute that a browser download applies.
+
+**Upgrade test.** When the release changes any of the following, also check that the previous
+build updates in place:
+
+- the Sparkle version pinned in `Package.resolved`;
+- the update configuration or the bundle identifier in `Resources/Info.plist.template`;
+- how `Scripts/package-app.sh` signs the bundle, or how it numbers `CFBundleVersion`;
+- `Sources/Unlatch/AppUpdater.swift`, or the update-channel logic in `Sources/Unlatch/Logic.swift`
+  (`allowedUpdateChannels(forVersion:)`);
+- the `appcast` or `deploy-feed` jobs, or `Scripts/update-appcast.sh`.
+
+Install the previous beta in `/Applications` on the clean machine through the README's first-launch
+steps, then choose "Check for Updates…": it must offer the new version with its notes, and "Install
+and Relaunch" must finish with the footer menu showing the new version. Record whether Gatekeeper,
+TCC (save to Desktop again), or App Management prompts again, and that the CDHash changed. The full
+procedure, including the scheduled check, is in
+[Design/sparkle-updates.md](Design/sparkle-updates.md) §4, "Manual: the real N → N+1 upgrade test".
+If the install fails outright without a manual App Management grant, stop and raise it with the
+maintainer before tagging the release; repeated prompts do not block it, they go in the README.
+
+A stable hotfix that skips its beta (see [Hotfix path](#hotfix-path)) cannot run the upgrade test
+before tagging. If it touches anything in the list above, run the test right after the release is
+published, from the previous stable release, and treat a failure as a new hotfix.
 
 Any failure is fixed on `main` through a pull request, followed by a new beta. Betas are cheap.
 
@@ -170,19 +198,92 @@ every local tag, including experiments you meant to keep to yourself.
 
 ### 5. Verify the published release
 
-`.github/workflows/release.yml` runs on the pushed tag: it packages and ad-hoc signs through
-`Scripts/package-app.sh`, verifies the signature, zips, and publishes a GitHub Release with notes
-generated from squashed PR titles. Once it finishes:
+`.github/workflows/release.yml` runs on the pushed tag as four jobs, each starting only after the
+previous one succeeds:
 
-- The run is green, and the `codesign --verify --deep --strict` step genuinely passed.
+1. **`build-and-package`** packages and ad-hoc signs through `Scripts/package-app.sh`, verifies the
+   signature, the embedded Sparkle framework, and the version, zips, and launches the unzipped copy.
+2. **`publish`** creates the GitHub Release with notes generated from squashed PR titles.
+3. **`appcast`** downloads `Unlatch.zip` from the published release (checked against the asset's
+   sha256 digest), starts from the live feed, and runs `Scripts/update-appcast.sh`. That script
+   signs the zip with the EdDSA key and adds one item with `generate_appcast --maximum-versions 0`,
+   so every older item is kept. A `-beta.N` tag's item goes on the `beta` channel; a stable item has
+   no channel. A stable tag on the same commit as its last beta shares that beta's build number, so
+   its item replaces the beta item. The script fails if the new signature does not verify against
+   the bundle's `SUPublicEDKey`.
+4. **`deploy-feed`** re-fetches the live feed and refuses to deploy if the new one would drop or
+   demote a live item, comparing items by `sparkle:version` and channel. It then publishes
+   `appcast.xml` to GitHub Pages at <https://pablocolaiacovo.github.io/unlatch/appcast.xml>.
+
+The feed is updated after the release exists, so it never points at a missing asset. Once the run
+finishes:
+
+- All four jobs are green, and the `codesign --verify --deep --strict` step genuinely passed.
 - `Unlatch.zip` is attached and its size is plausible.
 - The generated notes read like a changelog. Fix a bad line by editing the release body; fix the
-  cause by writing better PR titles next time.
+  cause by writing better PR titles next time. The feed item embeds the notes as they were when
+  `appcast` ran: a later edit to the release body reaches the update window only after re-running
+  `appcast` as described below, which is possible for 30 days after the run.
 - The prerelease flag matches the tag.
+- The live feed carries the release. From the repository root, with the tag just pushed:
 
-If the workflow published something broken, delete the release **and** the tag, fix forward on
-`main`, and tag `vX.Y.Z+1`. Never move or force-push a tag that has been published — anyone who
-already fetched it now has a different artifact under the same version.
+  ```sh
+  TAG=v1.1.0     # the tag just pushed
+  CHECK="$(mktemp -d)"
+  curl -sS -o "$CHECK/appcast.xml" -w '%{http_code}\n' \
+    "https://pablocolaiacovo.github.io/unlatch/appcast.xml?cb=$(date +%s)"   # 200
+  xmllint --xpath "//item[enclosure[contains(@url,'/$TAG/Unlatch.zip')]]" "$CHECK/appcast.xml"
+  gh release view "$TAG" --json assets --jq '.assets[] | [.name, .size] | @tsv'
+  gh release download "$TAG" -p Unlatch.zip -D "$CHECK"
+  swift Scripts/verify-ed-signature.swift <SUPublicEDKey> <edSignature> "$CHECK/Unlatch.zip"   # exit 0
+  ```
+
+  There is exactly one item for the tag. Its `sparkle:shortVersionString` is the tag without the
+  `v`, its `sparkle:version` is the app's `CFBundleVersion`, and its `sparkle:channel` is `beta`
+  for a beta and absent for a stable release. The enclosure URL is
+  `https://github.com/pablocolaiacovo/unlatch/releases/download/<tag>/Unlatch.zip`, and its
+  `length` equals the asset size. `<SUPublicEDKey>` comes from `Resources/Info.plist.template`,
+  `<edSignature>` from the enclosure, and `verify-ed-signature.swift` exits 0.
+- An install with a lower `CFBundleVersion` that should receive this release is offered it by
+  "Check for Updates…": an earlier beta for a beta, and an earlier beta or the previous stable
+  release (v1.1 or later) for a stable release. Not the beta built from the same commit: it shares
+  the build number and correctly reports that it is up to date. The update window shows the new
+  version and its notes; installing it is not required for this check.
+
+**If `appcast` or `deploy-feed` fails,** the release is public but installed copies are not told
+about it. Fix the cause, then open the run and use **Re-run this job** on `appcast`; GitHub re-runs
+its dependent `deploy-feed` with it. `appcast` takes the zip from the release rather than the 7-day
+build artifact and rebuilds from the live feed, so this works days later too, but not forever:
+GitHub allows re-running jobs only within 30 days of the original run. After that there is no
+supported way to add or refresh a tag's feed item, because a `workflow_dispatch` run never reaches
+`appcast`; ship the next version instead.
+
+- Never use **Re-run all jobs**: `publish` fails because the release already exists.
+- Do not use **Re-run failed jobs** when only `deploy-feed` failed: it redeploys the feed artifact
+  from the earlier `appcast` run, which may be stale.
+- A `deploy-feed` failure saying the deploy "would drop or demote live feed items" means another
+  feed deploy landed in between. Re-running `appcast` is the fix, not working around the check.
+
+**If the workflow published something broken,** fix forward: fix it on `main` through a pull
+request and tag `vX.Y.Z+1` (a new beta, for a beta). How to handle the broken release depends on
+whether `appcast` already published its item:
+
+- **No feed item yet:** delete the release **and** the tag, but only after the run has finished
+  with `deploy-feed` not green. `deploy-feed` does not check that the asset still exists, so never
+  re-run that run afterwards: it would publish an item pointing at the deleted release.
+- **The feed item is live:** leave the release in place and ship `vX.Y.Z+1` promptly. Its item
+  supersedes the broken one for everyone who checks. When the broken release is a stable one, the
+  fix ships directly as a stable release, without a beta first: stable installs do not see beta
+  items, so they would keep being offered the broken build while a beta is tested. Delete the
+  release and tag only if installing the build does real harm, such as data loss or an app that
+  does not launch. Its feed item then points at a missing asset until the `+1` release's
+  `deploy-feed` publishes a newer item, and users who check in between get a download error and
+  stay on the version they have. That is accepted. There is no supported way to remove an item
+  from the live feed: do not deploy Pages by hand. The dead item stays in the feed, below the
+  newer one.
+
+Never move or force-push a tag that has been published — anyone who already fetched it now has a
+different artifact under the same version.
 
 ### 6. Close the milestone and open the next one
 
@@ -208,7 +309,13 @@ first-launch steps.
 3. Land the fix through a normal squash-merged pull request with CI green.
 4. Tag `vX.Y.Z+1` from `main` and follow the release checklist from step 4. A hotfix may skip the
    beta in step 3 only if the fix is small and clearly verified, and the reason is recorded in the
-   release notes.
+   release notes. A fix for a broken stable release whose feed item is live always skips the beta
+   (step 5); the reason is still recorded in the release notes. If it touches anything on step 3's
+   upgrade-test list, it runs the upgrade test right after publishing instead.
+
+If the broken release was deleted after its feed item went live (step 5), that item points at a
+missing asset until the hotfix's `deploy-feed` publishes a newer one. Users who check in between
+get a download error, so the hotfix should not wait.
 
 If the fix cannot be released from `main` because `main` has already moved on with unreleased,
 unfinished work, that is a signal that changes are sitting on `main` too long — not a reason to
@@ -228,7 +335,9 @@ What that means in practice:
   -`), without the hardened runtime. That signature is required on Apple Silicon, not optional: a
   bundle that is not sealed as a whole is reported as "damaged" once downloaded. The release workflow
   verifies it with `codesign --verify --deep --strict` before publishing.
-- The release workflow reads no Apple credentials and needs no repository secrets.
+- The release workflow reads no Apple credentials and no repository-level secrets. Its only secret
+  is the Sparkle update-signing key, scoped to the `sparkle-signing` environment (see [Update feed
+  and signing key](#update-feed-and-signing-key)).
 - Every downloaded copy is quarantined, and Gatekeeper blocks its first launch. The README's Install
   section tells users how to open it: System Settings > Privacy & Security > Open Anyway, or `xattr
   -dr com.apple.quarantine /Applications/Unlatch.app`. Right-click > Open no longer bypasses
@@ -237,6 +346,32 @@ What that means in practice:
   that step knowingly.
 - The official `homebrew/cask` repository does not accept apps that fail Gatekeeper checks, so a
   cask (#12) can only live in a personal tap until the app is notarized.
+
+### Update feed and signing key
+
+From v1.1, Unlatch checks for updates with Sparkle (issue #13). The design is
+[Design/sparkle-updates.md](Design/sparkle-updates.md); the one-time setup is its §2.9.
+
+- **The feed** is <https://pablocolaiacovo.github.io/unlatch/appcast.xml>, the `SUFeedURL` in
+  `Resources/Info.plist.template`. GitHub Pages serves it, deployed by the `deploy-feed` job through
+  Actions, not from a `gh-pages` branch. Nothing in the repository holds the feed: the live feed is
+  the state, and every release adds to it. Its items point at the `Unlatch.zip` assets on GitHub
+  Releases. Betas are on the `beta` channel of the same feed.
+- **The signing key** is an EdDSA (ed25519) key pair. The public half is `SUPublicEDKey` in
+  `Resources/Info.plist.template`. The private half is `SPARKLE_ED_PRIVATE_KEY`, an environment
+  secret of the `sparkle-signing` environment, which only `v*` tags may use. Branch runs and
+  `workflow_dispatch` runs never see it, and only the `appcast` job reads it, piping it to the
+  tools on stdin. Never echo it or run that step under `set -x`.
+- **The `github-pages` environment** allows `main` and `v*` tags to deploy. Without the tag rule,
+  `deploy-feed` fails with "Tag … is not allowed to deploy to github-pages due to environment
+  protection rules".
+- **The backup** of the private key is in the maintainer's 1Password. Never in the repository, and
+  never as a plain file.
+- **Losing the private key strands every installed copy.** With ad-hoc signing, the EdDSA
+  signature is Sparkle's only trust anchor, so no update signed with another key installs, and
+  every user would have to download and reinstall by hand. Rotating the key is possible only while
+  the old one exists: ship an update signed with the old key that carries the new public key.
+- v1.0.0 has no updater. Its users install v1.1.0 by hand once.
 
 ### Path back to notarization
 
@@ -258,10 +393,15 @@ goals. Switching requires:
    | `APPLE_API_KEY_P8` | Base64 of the `.p8` private key |
    | `APPLE_TEAM_ID` | Apple Developer team identifier |
 
-3. Passing that identity to `Scripts/package-app.sh` instead of `-`, which enables the hardened
-   runtime and a secure timestamp, then `notarytool submit --wait`, `stapler staple`, and `spctl -a
-   -vvv -t install`. In the workflow: import the certificate into a temporary keychain, deleted in an
-   `always()` step, and attach the zip only after stapling.
+3. Passing that identity to `Scripts/package-app.sh` instead of `-`, then `notarytool submit
+   --wait`, `stapler staple`, and `spctl -a -vvv -t install`. In the workflow: import the
+   certificate into a temporary keychain, deleted in an `always()` step, and attach the zip only
+   after stapling. For Sparkle: `CODESIGN_ARGS` in `Scripts/package-app.sh` gets `--options runtime
+   --timestamp` (never while ad-hoc, where the hardened runtime turns on library validation and dyld
+   refuses the embedded framework), the nested Sparkle code is signed inside-out with the same
+   identity, and the "Verify Sparkle bundle" step's ad-hoc, no-`Authority`, and no-`runtime`
+   assertions flip. Keep the same EdDSA key: as long as it does not change, ad-hoc installs update
+   to the Developer ID build without a manual reinstall.
 4. Updating this file: the release checklist verifies that the app opens with no Gatekeeper prompt,
    and the published-release check confirms that notarization and `spctl` passed. The README's
    first-launch steps are removed. Record the certificate's expiry date here. **Developer ID
@@ -279,4 +419,5 @@ Rules that hold either way:
 
 Contributors do not need an Apple Developer account. `Scripts/package-app.sh` produces the same
 ad-hoc signed `dist/Unlatch.app` that the release workflow ships. A locally built copy is not
-quarantined, so it opens without the first-launch steps.
+quarantined, so it opens without the first-launch steps. It carries the real feed URL and public
+key, so it may be offered a newer stable release; that is harmless.
