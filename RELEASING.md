@@ -212,18 +212,19 @@ finishes:
 - The generated notes read like a changelog. Fix a bad line by editing the release body; fix the
   cause by writing better PR titles next time. The feed item embeds the notes as they were when
   `appcast` ran: a later edit to the release body reaches the update window only after re-running
-  `appcast` as described below.
+  `appcast` as described below, which is possible for 30 days after the run.
 - The prerelease flag matches the tag.
-- The live feed carries the release:
+- The live feed carries the release. From the repository root, with the tag just pushed:
 
   ```sh
-  TAG=v1.0.0
-  curl -sS -o appcast.xml -w '%{http_code}\n' \
+  TAG=v1.1.0     # the tag just pushed
+  CHECK="$(mktemp -d)"
+  curl -sS -o "$CHECK/appcast.xml" -w '%{http_code}\n' \
     "https://pablocolaiacovo.github.io/unlatch/appcast.xml?cb=$(date +%s)"   # 200
-  xmllint --xpath "//item[enclosure[contains(@url,'/$TAG/Unlatch.zip')]]" appcast.xml
+  xmllint --xpath "//item[enclosure[contains(@url,'/$TAG/Unlatch.zip')]]" "$CHECK/appcast.xml"
   gh release view "$TAG" --json assets --jq '.assets[] | [.name, .size] | @tsv'
-  gh release download "$TAG" -p Unlatch.zip
-  swift Scripts/verify-ed-signature.swift <SUPublicEDKey> <edSignature> Unlatch.zip   # exit 0
+  gh release download "$TAG" -p Unlatch.zip -D "$CHECK"
+  swift Scripts/verify-ed-signature.swift <SUPublicEDKey> <edSignature> "$CHECK/Unlatch.zip"   # exit 0
   ```
 
   There is exactly one item for the tag. Its `sparkle:shortVersionString` is the tag without the
@@ -232,13 +233,17 @@ finishes:
   `https://github.com/pablocolaiacovo/unlatch/releases/download/<tag>/Unlatch.zip`, and its
   `length` equals the asset size. `<SUPublicEDKey>` comes from `Resources/Info.plist.template`,
   `<edSignature>` from the enclosure, and `verify-ed-signature.swift` exits 0.
-- An install of the previous version is offered the update by "Check for Updates…" (the upgrade
-  test in step 3 covers this for betas).
+- An installed previous version that should receive this release (a beta install for a beta, any
+  install from v1.1 on for a stable release) is offered it by "Check for Updates…": the update
+  window shows the new version and its notes. Installing it is not required for this check.
 
 **If `appcast` or `deploy-feed` fails,** the release is public but installed copies are not told
 about it. Fix the cause, then open the run and use **Re-run this job** on `appcast`; GitHub re-runs
 its dependent `deploy-feed` with it. `appcast` takes the zip from the release rather than the 7-day
-build artifact and rebuilds from the live feed, so this works days later too.
+build artifact and rebuilds from the live feed, so this works days later too, but not forever:
+GitHub allows re-running jobs only within 30 days of the original run. After that there is no
+supported way to add or refresh a tag's feed item, because a `workflow_dispatch` run never reaches
+`appcast`; ship the next version instead.
 
 - Never use **Re-run all jobs**: `publish` fails because the release already exists.
 - Do not use **Re-run failed jobs** when only `deploy-feed` failed: it redeploys the feed artifact
@@ -250,8 +255,9 @@ build artifact and rebuilds from the live feed, so this works days later too.
 request and tag `vX.Y.Z+1` (a new beta, for a beta). How to handle the broken release depends on
 whether `appcast` already published its item:
 
-- **No feed item yet** (`deploy-feed` has not succeeded for this tag): delete the release **and**
-  the tag, as nothing points at them.
+- **No feed item yet:** delete the release **and** the tag, but only after the run has finished
+  with `deploy-feed` not green. `deploy-feed` does not check that the asset still exists, so never
+  re-run that run afterwards: it would publish an item pointing at the deleted release.
 - **The feed item is live:** leave the release in place and ship `vX.Y.Z+1` promptly. Its item
   supersedes the broken one for everyone who checks. Delete the release and tag only if installing
   the build does real harm, such as data loss or an app that does not launch. Its feed item then
@@ -369,8 +375,7 @@ goals. Switching requires:
    | `APPLE_API_KEY_P8` | Base64 of the `.p8` private key |
    | `APPLE_TEAM_ID` | Apple Developer team identifier |
 
-3. Passing that identity to `Scripts/package-app.sh` instead of `-`, which enables the hardened
-   runtime and a secure timestamp, then `notarytool submit --wait`, `stapler staple`, and `spctl -a
+3. Passing that identity to `Scripts/package-app.sh` instead of `-`, then `notarytool submit --wait`, `stapler staple`, and `spctl -a
    -vvv -t install`. In the workflow: import the certificate into a temporary keychain, deleted in an
    `always()` step, and attach the zip only after stapling. For Sparkle: `CODESIGN_ARGS` in
    `Scripts/package-app.sh` gets `--options runtime --timestamp` (never while ad-hoc, where the
