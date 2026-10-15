@@ -30,7 +30,7 @@ when that window went behind:
 3. **The menu bar status item also shows a dot** while an update is available, so it is noticed
    without opening the popover. It clears together with the popover's indicator.
 
-§2.4.1, §2.4.3, §2.5, §2.11, §3.9, §3.10, §4, T8 to T10 in §5, and §6 questions 6 to 8 carry
+§2.4.1, §2.4.3, §2.5, §2.11, §3.9, §3.10, §4, T8 to T10 in §5, and §6 carry
 these decisions. They change `Sources/Unlatch/AppUpdater.swift` and the update configuration in
 `Resources/Info.plist.template`, both on RELEASING.md's upgrade-test trigger list, so
 `v1.1.0-beta.4` must re-run the upgrade test from `v1.1.0-beta.3` (§4, T10).
@@ -624,7 +624,9 @@ private func render(_ presentation: StatusItemPresentation) {
 /// ring. Same size and alignment rect as the symbol, so the icon doesn't move when the dot comes
 /// and goes. Stays a template image: AppKit tints it for light, dark, and tinted menu bars and
 /// for the pressed highlight.
-private static func badged(_ symbol: NSImage) -> NSImage {
+/// `nonisolated`: AppKit may call an NSImage drawing handler on any thread (NSImage.h), and the
+/// handler isn't `@Sendable`, so inside a main-actor method it would inherit main-actor isolation.
+nonisolated private static func badged(_ symbol: NSImage) -> NSImage {
     let diameter: CGFloat = 6, ring: CGFloat = 1.5
     let image = NSImage(size: symbol.size, flipped: false) { rect in
         symbol.draw(in: rect)
@@ -650,8 +652,10 @@ setting `toolTip`, because `render` now owns it. The rest of the button (target,
 is unchanged.
 
 **Verified during design** (Swift 6.4, Xcode 27.0, macOS 27 SDK, deployment target 14, throwaway
-package in `/tmp`): the `badged(_:)` function above compiles in Swift 6 language mode as a
-`@MainActor` function with no warnings. It produces a 17 × 15 pt template image for `lock.open`,
+package in `/tmp`): the `badged(_:)` function above compiles in Swift 6 language mode with no
+warnings. (The design probe compiled it as a `@MainActor` function; review of PR #66 found that
+variant unsafe at run time and verified the `nonisolated` form clean, see Isolation below.) It
+produces a 17 × 15 pt template image for `lock.open`,
 the same size as the symbol, which reports an alignment rect of (0, 2.5, 16.5, 9). That is why the
 composite copies `alignmentRect`. A drawing-handler image would otherwise report its full bounds
 and could shift the glyph vertically in the menu bar. The exact dot size and position against the
@@ -660,8 +664,8 @@ shackle, and the ring must keep a visible gap.
 
 **Template, not colour.** The dot is the same colour as the glyph: black or white for the menu
 bar, inverted with the pressed highlight. An accent-blue dot would need a non-template image,
-which AppKit no longer adapts to light, dark, and tinted menu bars or the highlight. That is §3.10
-and §6 question 6.
+which AppKit no longer adapts to light, dark, and tinted menu bars or the highlight (§3.10). The
+maintainer chose the template dot on 2026-10-15 (§6).
 
 **Accessibility.**
 
@@ -674,10 +678,17 @@ The value matches the ellipsis button's value in the footer, so VoiceOver uses t
 both places ("Unlatch, Update available"). The label stays "Unlatch", as today. The lock state is
 not announced today and T9 doesn't add it.
 
-**Isolation.** Everything stays on the main actor: `StatusItemController`, `AppUpdater`, `AppModel`,
-the tracking closure (whose `onChange` hops back with `Task { @MainActor in … }`, as now), and the
-image's drawing handler, which only captures the symbol image and runs when AppKit draws the
-button. No new `Sendable` crossings.
+**Isolation.** `StatusItemController`, `AppUpdater`, `AppModel`, and the tracking closure (whose
+`onChange` hops back with `Task { @MainActor in … }`, as now) stay on the main actor. The image's
+drawing handler is the exception. `NSImage(size:flipped:drawingHandler:)` documents that AppKit may
+run the handler on any thread (NSImage.h, line 117), and the closure parameter isn't `@Sendable`.
+Written inside a member of the `@MainActor` `StatusItemController`, the closure would therefore be
+main-actor isolated. Swift 6 then inserts an executor check, and drawing off the main thread logs
+"data race detected: @MainActor function … not called on the main thread" at run time. The review
+of PR #66 reproduced this. So `badged(_:)` is `nonisolated private static`: the closure it creates
+is nonisolated and only touches the captured symbol image, `NSGraphicsContext.current`,
+`NSBezierPath`, and `NSColor`, all of which are safe in a drawing context on any thread. The
+reviewer verified that form clean. `render(_:)` stays main-actor and calls it synchronously.
 
 ### 2.5 Pure helpers (`Logic.swift`)
 
@@ -1397,7 +1408,7 @@ one) proves the install path still works after T8 and T9, but its scheduled path
 code, which still lets Sparkle show the window. The new behaviour only runs in a build that
 contains T8 *and* finds a newer feed item. Until a `beta.5` exists, use a **rewound copy of
 beta.4**: the real beta.4 binary with a lower build number, so the live feed's beta.4 item is
-newer than it. Recommended in §6 question 7.
+newer than it. The maintainer chose this approach on 2026-10-15 (§6).
 
 ```sh
 cd "$(mktemp -d)"
@@ -1408,6 +1419,7 @@ PL=Unlatch.app/Contents/Info.plist
 /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 1.1.0-beta.3' "$PL"   # stays on the beta channel
 codesign --force --sign - Unlatch.app          # outer signature only; Sparkle.framework keeps its own
 codesign --verify --deep --strict Unlatch.app
+osascript -e 'quit app "Unlatch"'              # Quit Unlatch first (or choose Quit in the popover)
 rm -rf /Applications/Unlatch.app && ditto Unlatch.app /Applications/Unlatch.app
 ```
 
@@ -1434,13 +1446,17 @@ are covered by the real beta.3 → beta.4 run. Then, with the `defaults` from st
    relaunch: no indicator. "Check for Updates…" still offers beta.4. Then
    `defaults delete com.pablocolaiacovo.unlatch SUSkippedVersion`.
 8. **Install.** Bring it forward and choose "Install Update". The app relaunches as the real
-   beta.4, with no indicator.
+   beta.4, with no indicator. The re-signed copy has its own ad-hoc CDHash, so macOS may show an
+   App Management or TCC prompt during or after this install. That comes from the rewound copy's
+   new identity, not from T8, and is not a regression; the real beta.3 → beta.4 run is the one
+   that records those prompts.
 9. **Light, dark, and highlight.** With the dot showing, check the icon in a light and a dark menu
    bar, with a tinted wallpaper, and while the popover is open (pressed highlight). The dot stays
    visible and separate from the shackle of both `lock` and `lock.open` (load an encrypted PDF to
    get `lock`).
-10. Clean up: `defaults delete com.pablocolaiacovo.unlatch SUScheduledCheckInterval`, and reinstall
-    the real beta.4 if step 8 was skipped.
+10. Clean up: `defaults delete com.pablocolaiacovo.unlatch SUScheduledCheckInterval` and
+    `defaults delete com.pablocolaiacovo.unlatch SUSkippedVersion` (harmless if step 7 already
+    removed it), and reinstall the real beta.4 if step 8 was skipped.
 
 Record the results in the T10 comment on #13.
 
@@ -1461,7 +1477,7 @@ M3–M4 (secret, Pages) ──► T4 (devops) ───┘                      
 After the 2026-10-15 decisions:
 
 ```
-T8 (no window, daily interval) ──► T9 (status item dot) ──► M6 (approve beta.4) ──► T10 (beta.4 upgrade test) ──► T6 (README)
+T8 (no window, daily interval) ──► T9 (status item dot) ──► T10 (beta.4, approved as M6, and its upgrade test) ──► T6 (README)
 ```
 
 T1 must merge before T2. Once T2 lands, the binary links Sparkle, and `main` must stay releasable.
@@ -1759,11 +1775,23 @@ Acceptance criteria:
   footer indicator and the icon dot together.
 - Drag and drop on the icon (`Design/status-item-popover.md`) still highlights and accepts PDFs with
   and without the dot.
+- `badged(_:)` is `nonisolated private static` (§2.4.3, Isolation). Running the packaged bundle with
+  the dot showing, through a few appearance switches and popover opens, logs no "data race
+  detected" or "not called on the main thread" warning in Console for the Unlatch process.
+- Accessibility Inspector, without the dot: the `NSStatusBarButton` has no `AXValue` attribute at
+  all, not an empty string, after `setAccessibilityValue(nil)`. The footer avoids even an empty value
+  for the same reason (`PopoverView.swift`, lines 112-113). If `nil` leaves an empty value, the
+  implementer finds another way to clear it and notes it in the PR.
+- VoiceOver on the icon reads "Unlatch" once, not twice. The button's accessibility label and the
+  image's `accessibilityDescription` are both "Unlatch"; if VoiceOver reads both, drop the image's
+  description (pass `nil` to `NSImage(systemSymbolName:accessibilityDescription:)` and in
+  `badged(_:)`) and keep the button label.
 - The PR attaches 2x screenshots of the icon with and without the dot, light and dark.
 
 ### T10 (`release-manager` and the maintainer): `v1.1.0-beta.4` and its upgrade test
 
-This depends on T8, T9, and M6 (the maintainer approves `v1.1.0-beta.4`, §6 question 8).
+This depends on T8 and T9. M6 is done: the maintainer approved `v1.1.0-beta.4` as a
+mid-milestone beta on 2026-10-15, to be tagged once T8 and T9 are merged (§6).
 
 - `release-manager` tags `v1.1.0-beta.4` only with the maintainer's approval of that exact
   version, and checks that the `appcast` and `deploy-feed` jobs are green and the live feed has a
@@ -1805,23 +1833,6 @@ the v1.1.0 release.
    recommendation on 2026-10-14. The string is one constant
    (`UpdateFooterPresentation.updateAvailableTitle`) and one test.
 
-6. **Colour of the status item dot.** A template dot, the same colour as the glyph (black or white,
-   inverted when pressed), or an accent-blue dot like the footer's. Recommendation: **template**.
-   It follows the menu bar convention for status items, and AppKit keeps it right in light, dark,
-   and tinted menu bars and the pressed highlight with no extra code (§3.10). Blue would match the
-   footer, but it means a non-template image redrawn for every appearance change. T9 is written for
-   the template dot; choosing blue changes only `badged(_:)` and its manual checks.
-7. **How to verify the no-window scheduled path for beta.4.** The maintainer asked for the beta.3 →
-   beta.4 upgrade test to include the scheduled path with the new behaviour, but that path runs the
-   *installed* build's code, and beta.3 still lets Sparkle show the window. Recommendation: run the
-   full beta.3 → beta.4 test as usual (install, Gatekeeper, TCC, App Management, and beta.3's
-   scheduled path for regressions), and verify the new no-window behaviour on a rewound copy of the
-   real beta.4 binary with a lower `CFBundleVersion`, against the live feed (§4). The alternative,
-   waiting for a beta.5 to test beta.4's behaviour, adds a beta only for testing and delays T6.
-8. **Approve `v1.1.0-beta.4` (M6).** RELEASING.md requires the maintainer to approve each exact
-   version, and the v1.1 milestone isn't empty, so this is another mid-milestone beta.
-   Recommendation: approve it once T8 and T9 are merged, so T10 tests both together.
-
 **Resolved by the maintainer on 2026-10-09:** questions 1 to 3 are accepted as recommended.
 Automatic install stays off (`SUAllowsAutomaticUpdates = false`), `v1.1.0-beta.2` and
 `v1.1.0-beta.3` are approved as mid-milestone betas for the upgrade test (M5). They replace the
@@ -1834,4 +1845,18 @@ header of this document has the full text): scheduled checks once a day with
 `SUScheduledCheckInterval` = 86400, `SUEnableAutomaticChecks` unset (option A) and
 `SUAllowsAutomaticUpdates` `false`; Sparkle never shows a scheduled update by itself, only the
 in-app indicator does; and the status item icon shows a dot while an update is available.
-Questions 6 to 8 above follow from those decisions and are still open.
+
+**Also decided by the maintainer on 2026-10-15**, answering the three questions those decisions
+raised (each as recommended):
+
+- **Colour of the status item dot: a template image in the icon's colour** (black or white, inverted
+  when pressed), not accent blue. AppKit keeps it right in light, dark, and tinted menu bars and
+  the pressed highlight (§2.4.3, §3.10).
+- **Testing the no-window behaviour: a rewound, lower-build copy of beta.4**, after the normal
+  beta.3 → beta.4 upgrade test. The scheduled path runs the installed build's code, and beta.3
+  still lets Sparkle show its window, so the new behaviour can only be seen in a build that
+  contains T8 and finds a newer feed item (§4, "Manual: the no-window scheduled path").
+- **`v1.1.0-beta.4` is approved as a mid-milestone beta (M6)**, to be tagged once T8 and T9 are
+  merged, so T10 tests both together.
+
+No questions from these decisions remain open.
