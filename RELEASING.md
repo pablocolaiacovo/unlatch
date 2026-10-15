@@ -160,9 +160,17 @@ Verify on the clean machine, running macOS 15 or later:
 Downloading with `curl` does not exercise Gatekeeper — the file has to carry the quarantine
 attribute that a browser download applies.
 
-**Upgrade test.** When the release changes Sparkle, the update configuration in
-`Resources/Info.plist.template`, how `Scripts/package-app.sh` signs the bundle, or the feed jobs,
-also check that the previous build updates in place. Install the previous beta in `/Applications`
+**Upgrade test.** When the release changes any of the following, also check that the previous
+build updates in place:
+
+- the Sparkle version pinned in `Package.resolved`;
+- the update configuration or the bundle identifier in `Resources/Info.plist.template`;
+- how `Scripts/package-app.sh` signs the bundle, or how it numbers `CFBundleVersion`;
+- `Sources/Unlatch/AppUpdater.swift`, or the update-channel logic in `Sources/Unlatch/Logic.swift`
+  (`allowedUpdateChannels(forVersion:)`);
+- the `appcast` or `deploy-feed` jobs, or `Scripts/update-appcast.sh`.
+
+ Install the previous beta in `/Applications`
 on the clean machine through the README's first-launch steps, then choose "Check for Updates…": it
 must offer the new version with its notes, and "Install and Relaunch" must finish with the footer
 menu showing the new version. Record whether Gatekeeper, TCC (save to Desktop again), or App
@@ -171,6 +179,10 @@ check, is in [Design/sparkle-updates.md](Design/sparkle-updates.md) §4, "Manual
 upgrade test". If the install fails outright without a manual App Management grant, stop and raise
 it with the maintainer before tagging the release; repeated prompts do not block it, they go in the
 README.
+
+A stable hotfix that skips its beta (see [Hotfix path](#hotfix-path)) cannot run the upgrade test
+before tagging. If it touches anything in the list above, run the test right after the release is
+published, from the previous stable release, and treat a failure as a new hotfix.
 
 Any failure is fixed on `main` through a pull request, followed by a new beta. Betas are cheap.
 
@@ -259,7 +271,9 @@ whether `appcast` already published its item:
   with `deploy-feed` not green. `deploy-feed` does not check that the asset still exists, so never
   re-run that run afterwards: it would publish an item pointing at the deleted release.
 - **The feed item is live:** leave the release in place and ship `vX.Y.Z+1` promptly. Its item
-  supersedes the broken one for everyone who checks. Delete the release and tag only if installing
+  supersedes the broken one for everyone who checks. When the broken release is a stable one, the
+  fix ships directly as a stable release, without a beta first: stable installs do not see beta
+  items, so they would keep being offered the broken build while a beta is tested. Delete the release and tag only if installing
   the build does real harm, such as data loss or an app that does not launch. Its feed item then
   points at a missing asset until the `+1` release's `deploy-feed` publishes a newer item, and users
   who check in between get a download error and stay on the version they have. That is accepted.
@@ -293,7 +307,8 @@ first-launch steps.
 3. Land the fix through a normal squash-merged pull request with CI green.
 4. Tag `vX.Y.Z+1` from `main` and follow the release checklist from step 4. A hotfix may skip the
    beta in step 3 only if the fix is small and clearly verified, and the reason is recorded in the
-   release notes.
+   release notes. A fix for a broken stable release whose feed item is live always skips the beta
+   (step 5), and runs the upgrade test after publishing instead (step 3).
 
 If the broken release was deleted after its feed item went live (step 5), that item points at a
 missing asset until the hotfix's `deploy-feed` publishes a newer one. Users who check in between
