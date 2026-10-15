@@ -5,6 +5,7 @@ import Observation
 /// Replaces the previous SwiftUI menu bar scene, which gave no control over
 /// dismissal and no access to the underlying status item. There is exactly
 /// one instance, created by `AppDelegate` and living for the whole process.
+/// While an update is available the icon carries a small dot (Design/sparkle-updates.md §2.4.3).
 @MainActor
 final class StatusItemController: NSObject, NSPopoverDelegate {
     private let model: AppModel
@@ -29,13 +30,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         configureStatusItem()
         configurePopover()
-        observeModel()
+        observeState()
         installHighlightMonitor()
     }
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        button.toolTip = "Unlatch"
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseDown])
@@ -128,19 +128,53 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     /// `withObservationTracking` is one-shot, so it's re-armed from
     /// `onChange`, which fires in `willSet` and hops back to the main actor
-    /// to read the new value on the next turn.
-    private func observeModel() {
+    /// to read the new value on the next turn. Tracks both the model's lock
+    /// state and the updater's button state.
+    private func observeState() {
         withObservationTracking {
-            renderButton(hasLockedWork: model.hasLockedWork)
+            render(statusItemPresentation(
+                hasLockedWork: model.hasLockedWork, updateState: updater.buttonState))
         } onChange: { [weak self] in
-            Task { @MainActor in self?.observeModel() }
+            Task { @MainActor in self?.observeState() }
         }
     }
 
-    private func renderButton(hasLockedWork: Bool) {
-        let symbolName = statusSymbolName(hasLockedWork: hasLockedWork)
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Unlatch")
-        image?.isTemplate = true
-        statusItem.button?.image = image
+    private func render(_ presentation: StatusItemPresentation) {
+        // No image accessibilityDescription: the button's label already says "Unlatch", and
+        // having both would make VoiceOver read it twice.
+        guard let button = statusItem.button,
+              let symbol = NSImage(systemSymbolName: presentation.symbolName,
+                                   accessibilityDescription: nil)
+        else { return }
+        let image = presentation.showsUpdateBadge ? Self.badged(symbol) : symbol
+        image.isTemplate = true
+        button.image = image
+        button.toolTip = presentation.toolTip
+        button.setAccessibilityLabel(StatusItemPresentation.accessibilityLabel)
+        button.setAccessibilityValue(presentation.accessibilityValue)
+    }
+
+    /// The symbol with a dot at its top-trailing corner, separated from the glyph by a transparent
+    /// ring. Same size and alignment rect as the symbol, so the icon doesn't move when the dot
+    /// comes and goes. Stays a template image: AppKit tints it for light, dark, and tinted menu
+    /// bars and for the pressed highlight.
+    /// `nonisolated`: AppKit may call an NSImage drawing handler on any thread, and the handler
+    /// isn't `@Sendable`, so inside a main-actor method it would inherit main-actor isolation and
+    /// log a data race at run time.
+    nonisolated private static func badged(_ symbol: NSImage) -> NSImage {
+        let diameter: CGFloat = 6, ring: CGFloat = 1.5
+        let image = NSImage(size: symbol.size, flipped: false) { rect in
+            symbol.draw(in: rect)
+            let dot = NSRect(x: rect.maxX - diameter, y: rect.maxY - diameter,
+                             width: diameter, height: diameter)
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: dot.insetBy(dx: -ring, dy: -ring)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        image.alignmentRect = symbol.alignmentRect
+        return image
     }
 }

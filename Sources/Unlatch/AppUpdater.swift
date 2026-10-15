@@ -15,7 +15,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     /// Mirrors `SPUUpdater.canCheckForUpdates` (KVO).
     private(set) var canCheckForUpdates = false
     /// A scheduled check found an update that Sparkle is holding without a window, and the user
-    /// hasn't looked at it yet. Drives the footer indicator.
+    /// hasn't looked at it yet. Drives the footer indicator and the dot on the menu bar icon.
     private(set) var updateAvailable = false
 
     /// The footer's input: `updateButtonState(...)` over the three values above.

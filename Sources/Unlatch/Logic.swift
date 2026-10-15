@@ -333,6 +333,37 @@ func statusSymbolName(hasLockedWork: Bool) -> String {
     hasLockedWork ? "lock" : "lock.open"
 }
 
+/// What the menu bar status item shows (Design/sparkle-updates.md §2.4.3).
+struct StatusItemPresentation: Equatable, Sendable {
+    /// `statusSymbolName(hasLockedWork:)`: "lock" or "lock.open".
+    let symbolName: String
+    /// The dot on the icon. Same condition as the footer's indicator.
+    let showsUpdateBadge: Bool
+    /// `nil`, or `updateAvailableValue`.
+    let accessibilityValue: String?
+    let toolTip: String
+
+    static let accessibilityLabel = "Unlatch"
+    static let updateAvailableValue = "Update available"
+    static let updateAvailableToolTip = "Unlatch: update available"
+}
+
+/// `showsUpdateBadge` is `updateFooterPresentation(for: updateState).showsUpdateIndicator`, so the
+/// icon and the footer can't disagree. With the badge: `updateAvailableValue` and
+/// `updateAvailableToolTip`. Without: no value and "Unlatch".
+func statusItemPresentation(
+    hasLockedWork: Bool, updateState: UpdateButtonState
+) -> StatusItemPresentation {
+    let badge = updateFooterPresentation(for: updateState).showsUpdateIndicator
+    return StatusItemPresentation(
+        symbolName: statusSymbolName(hasLockedWork: hasLockedWork),
+        showsUpdateBadge: badge,
+        accessibilityValue: badge ? StatusItemPresentation.updateAvailableValue : nil,
+        toolTip: badge
+            ? StatusItemPresentation.updateAvailableToolTip
+            : StatusItemPresentation.accessibilityLabel)
+}
+
 // MARK: - Launch at Login
 
 /// The login item's state as the system reports it, folded down from
