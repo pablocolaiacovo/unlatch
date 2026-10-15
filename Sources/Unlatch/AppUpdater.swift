@@ -14,7 +14,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     let availability: UpdaterAvailability
     /// Mirrors `SPUUpdater.canCheckForUpdates` (KVO).
     private(set) var canCheckForUpdates = false
-    /// A scheduled update alert is on screen and hasn't had the user's attention yet.
+    /// A scheduled check found an update that Sparkle is holding without a window, and the user
+    /// hasn't looked at it yet. Drives the footer and menu bar indicators.
     private(set) var updateAvailable = false
 
     /// The footer's input: `updateButtonState(...)` over the three values above.
@@ -70,24 +71,32 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
 
     // MARK: SPUStandardUserDriverDelegate
 
-    /// Required for a dockless app; Sparkle still shows the scheduled-update
-    /// window itself because `standardUserDriverShouldHandleShowingScheduledUpdate`
-    /// is not implemented.
+    /// Required for a dockless app. Sparkle logs a warning without it.
     var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    /// Sparkle never shows a scheduled update by itself: it keeps the alert unshown and the
+    /// session open, and the in-app indicator is the reminder. `checkForUpdates()` then brings
+    /// the held alert to the front. See Design/sparkle-updates.md §2.4.1.
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        sparkleShowsScheduledUpdate(inImmediateFocus: immediateFocus)
+    }
 
     func standardUserDriverWillHandleShowingUpdate(
         _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState
     ) {
-        if !state.userInitiated {
-            updateAvailable = true
-        }
+        updateAvailable = updateIndicatorShown(
+            after: .willShowUpdate(
+                handledBySparkle: handleShowingUpdate, userInitiated: state.userInitiated),
+            current: updateAvailable)
     }
 
     func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
-        updateAvailable = false
+        updateAvailable = updateIndicatorShown(after: .userAttention, current: updateAvailable)
     }
 
     func standardUserDriverWillFinishUpdateSession() {
-        updateAvailable = false
+        updateAvailable = updateIndicatorShown(after: .sessionFinished, current: updateAvailable)
     }
 }
