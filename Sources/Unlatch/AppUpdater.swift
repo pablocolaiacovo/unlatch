@@ -32,6 +32,19 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private var controller: SPUStandardUpdaterController?
     @ObservationIgnored private var canCheckObservation: NSKeyValueObservation?
 
+    /// Assigns the three stored values and never creates a Sparkle object.
+    /// Only the debug-only preview factory below uses it.
+    private init(
+        availability: UpdaterAvailability, shortVersion: String?,
+        canCheck: Bool, updateAvailable: Bool
+    ) {
+        self.availability = availability
+        self.shortVersion = shortVersion
+        self.canCheckForUpdates = canCheck
+        self.updateAvailable = updateAvailable
+        super.init()
+    }
+
     init(availability: UpdaterAvailability, shortVersion: String?) {
         self.availability = availability
         self.shortVersion = shortVersion
@@ -91,3 +104,15 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         updateAvailable = false
     }
 }
+
+#if DEBUG
+extension AppUpdater {
+    /// Snapshot tests only. A footer that shows the "Update Available" button, with no
+    /// Sparkle object behind it: `checkForUpdates()` does nothing because `controller` is nil.
+    /// Compiled out of release builds (`Scripts/package-app.sh` builds `-c release`).
+    static func previewingUpdateAvailable() -> AppUpdater {
+        AppUpdater(
+            availability: .enabled, shortVersion: nil, canCheck: true, updateAvailable: true)
+    }
+}
+#endif

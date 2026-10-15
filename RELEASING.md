@@ -102,6 +102,92 @@ internal and do not get it.
 
 ---
 
+## Snapshot tests
+
+`PopoverSnapshotTests` renders every popover step (idle, password, destination, working, done, done
+with a partial failure, and the footer with an update available) in light and dark, and compares each
+render with a reference PNG under `Tests/UnlatchTests/__Snapshots__/PopoverSnapshotTests/`. They run in
+`swift test`, inside the required `build-and-test` job. The design, including the tolerances and why
+they were chosen, is [Design/snapshot-tests.md](Design/snapshot-tests.md).
+
+**CI's references are authoritative.** Rendering depends on the macOS build, the Xcode toolchain, and
+system settings, so the references are recorded on the CI runner and nowhere else. **Never commit an
+image recorded on a Mac.** `Tests/UnlatchTests/__Snapshots__/RECORDED_ON.txt` is the rendering
+fingerprint of the run that recorded them, also written by CI. Do not edit it by hand.
+
+### Environment variables
+
+| Variable | Values | Meaning |
+| --- | --- | --- |
+| `UNLATCH_SNAPSHOTS` | `auto` (default), `require`, `skip` | `require` always runs the suite (CI sets it). `skip` never runs it. `auto` runs it only when this Mac's fingerprint (OS build, accent and highlight colour, Increase Contrast, Reduce Transparency) equals `RECORDED_ON.txt`. |
+| `SNAPSHOT_TESTING_RECORD` | `never` (default), `failed`, `all`, `missing` | What to do with references. The default writes nothing into the source tree. CI's `build-and-test` uses `failed`: a mismatch or a missing reference is re-recorded in the runner's workspace **and the test still fails**, so the check stays red until the images are committed. The record workflow uses `all`. |
+
+### Locally
+
+When the fingerprint does not match, the suite is skipped and `swift test` shows why. The reason
+names the first field that differs, for example "references were recorded on macOS 27.0.1 (26A434);
+this Mac runs 27.1 (26B12)", and the stderr line starts with "Popover snapshot tests skipped". That is
+not a failure. To run the suite anyway, use `UNLATCH_SNAPSHOTS=require swift test`; expect diffs on a
+different macOS. `UNLATCH_SNAPSHOTS=skip swift test` skips it even on a matching Mac, for example when
+your Xcode differs from CI's and changes pixels. Do not set `SNAPSHOT_TESTING_RECORD` locally.
+
+### Reading a failed run
+
+A failing `build-and-test` run uploads the artifact `popover-snapshots-<run attempt>`:
+
+```
+failures/PopoverSnapshotTests/
+  popover.<name>-<appearance>.png             the new render
+  popover.<name>-<appearance>.reference.png   the committed reference
+  popover.<name>-<appearance>.difference.png  a difference blend
+recorded/                                     Tests/UnlatchTests/__Snapshots__ after the run:
+  RECORDED_ON.txt                             every reference that failed or was missing has
+  PopoverSnapshotTests/*.png                  been re-recorded; the rest are unchanged
+```
+
+Download it with `gh run download <run-id> -n popover-snapshots-<attempt> -D /tmp/snapshots`. Open
+`failures/PopoverSnapshotTests/` in Finder and Quick Look the render, its `.reference.png`, and its
+`.difference.png` together. In the difference image black means identical and lit pixels show what
+moved. A render that is a different size from its reference always fails, so a clipped or grown
+step shows up as a size change.
+
+### Recording new or changed references (a new fixture, or an intended layout change)
+
+1. Push the branch. `build-and-test` fails, either with "No reference was found on disk" or with
+   "does not match reference".
+2. Download the artifact as above and read every difference.
+3. If the change is intended, copy the CI recording over the tree and commit it:
+
+   ```sh
+   rsync -a --delete /tmp/snapshots/recorded/ Tests/UnlatchTests/__Snapshots__/
+   ```
+
+   `--delete` drops the references of removed fixtures, which the library never deletes itself.
+   Check by eye that each new image looks right: that is the approval of the baseline. Push, and the
+   next run passes, because CI now compares against images CI recorded.
+4. If the change is not intended, fix the code and do not commit the images.
+
+### Re-recording everything
+
+Run the **Record snapshots** workflow (`.github/workflows/record-snapshots.yml`, `workflow_dispatch`)
+on the branch of the PR that will carry the new references. It records all references, verifies
+them on the same runner, and uploads `recorded-snapshots-<run attempt>`; then follow step 3 above
+with that artifact's contents. It never commits or pushes. The workflow can only be dispatched once
+it is on `main`.
+
+This is **mandatory** after any of these:
+
+- `DEVELOPER_DIR` or `runs-on` changes in `ci.yml` (and the same values in `record-snapshots.yml`);
+- the `swift-snapshot-testing` pin in `Package.swift` is bumped, which belongs in its own PR;
+- a passing CI run shows the warning "Snapshot environment changed", which means GitHub updated the
+  runner image and the pixels still matched within tolerance. Re-record when convenient, so that a
+  local `swift test` matches the fingerprint again.
+
+A runner image update that does change pixels fails `build-and-test` on every PR until the full
+re-record is merged.
+
+---
+
 ## Release checklist
 
 Work through this in order. Do not skip ahead; each step exists because skipping it has a specific
@@ -129,6 +215,9 @@ git checkout main && git pull
 gh run list --branch main --limit 5
 swift build && swift test
 ```
+
+A skipped popover snapshot suite in your local `swift test` output is expected (see [Snapshot
+tests](#snapshot-tests)). CI's run is the one that counts.
 
 ### 3. Cut a beta and smoke-test it
 
