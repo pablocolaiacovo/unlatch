@@ -648,8 +648,7 @@ nonisolated private static func badged(_ symbol: NSImage) -> NSImage {
 The one tracking closure reads `model.hasLockedWork` and `updater.buttonState`. Both are
 `@MainActor @Observable`, so a change to either re-renders the icon. `configureStatusItem()` stops
 setting `toolTip`, because `render` now owns it. The rest of the button (target, action,
-`sendAction(on:)`, the highlight monitor, and drag and drop from `Design/status-item-popover.md`)
-is unchanged.
+`sendAction(on:)`, and the highlight monitor) is unchanged.
 
 **Verified during design** (Swift 6.4, Xcode 27.0, macOS 27 SDK, deployment target 14, throwaway
 package in `/tmp`): the `badged(_:)` function above compiles in Swift 6 language mode with no
@@ -1483,7 +1482,8 @@ T8 (no window, daily interval) ──► T9 (status item dot) ──► T10 (bet
 T1 must merge before T2. Once T2 lands, the binary links Sparkle, and `main` must stay releasable.
 Status on 2026-10-15: T1 merged in #52, T2 merged in #54, T4 merged in #55 (`c5ae4d7`), T3 merged in
 #59, and T7 landed in #62 (follow-ups in #64 and #65). T5 is done: `v1.1.0-beta.2` and `v1.1.0-beta.3` are published and
-the beta.2 → beta.3 upgrade test passed. T8 to T10 are new. Every PR uses
+the beta.2 → beta.3 upgrade test passed. T8 to T10 are done (T8 and T9 merged in #67 and #68; the
+beta.3 → beta.4 upgrade test passed on 2026-10-15), and T6 is done with the README update. Every PR uses
 `Part of #13`, except T6, which uses `Closes #13`. The T3 PR also says `Closes #57`. Each one ends with a clean
 `swift build` and a passing `swift test`. Suggested titles follow the changelog convention.
 Labels are `project-owner`'s call. The T1, T2, T4, and T7 PRs have no user-facing effect on their
@@ -1663,7 +1663,7 @@ This depends on T1 to T4 and M5.
 Acceptance criteria: the findings comment exists and covers Gatekeeper, TCC, App Management,
 CDHash, and the scheduled path, with the go/no-go outcome stated.
 
-### T6 (`macos-developer`): Document updates in the README
+### T6 (`macos-developer`): Document updates in the README (done)
 
 Suggested title: "Explain how Unlatch checks for and installs updates".
 
@@ -1704,7 +1704,7 @@ This depends on T4.
     inside-out with the same identity, and the §2.8 assertions flip.
 - The hotfix path: a deleted release leaves a dead feed item until the hotfix's feed deploys.
 
-### T8 (`macos-developer`): Keep scheduled updates out of sight until the user asks
+### T8 (`macos-developer`): Keep scheduled updates out of sight until the user asks (done)
 
 Suggested title: "Wait for the user before showing a scheduled update". Labels: `enhancement`,
 `area:app`. `project-owner` decides on `skip-changelog`; the recommendation is to add it, because
@@ -1745,7 +1745,7 @@ Acceptance criteria:
   `CFBundleVersion` lowered as in §4 "Manual: the no-window scheduled path", run step 1 against the
   live beta.3 item, and paste the result in the PR.
 
-### T9 (`macos-developer`): Show a dot on the menu bar icon when an update is available
+### T9 (`macos-developer`): Show a dot on the menu bar icon when an update is available (done)
 
 Suggested title: "Show a dot on the menu bar icon when an update is available". Labels:
 `enhancement`, `area:app`, no `skip-changelog`: it's a visible change. PR body: `Part of #13`.
@@ -1773,8 +1773,6 @@ Acceptance criteria:
   open; Accessibility Inspector shows the status item with label "Unlatch" and value "Update
   available"; hovering shows "Unlatch: update available". Clicking "Update Available" clears the
   footer indicator and the icon dot together.
-- Drag and drop on the icon (`Design/status-item-popover.md`) still highlights and accepts PDFs with
-  and without the dot.
 - `badged(_:)` is `nonisolated private static` (§2.4.3, Isolation). Running the packaged bundle with
   the dot showing, through a few appearance switches and popover opens, logs no "data race
   detected" or "not called on the main thread" warning in Console for the Unlatch process.
@@ -1788,7 +1786,7 @@ Acceptance criteria:
   `badged(_:)`) and keep the button label.
 - The PR attaches 2x screenshots of the icon with and without the dot, light and dark.
 
-### T10 (`release-manager` and the maintainer): `v1.1.0-beta.4` and its upgrade test
+### T10 (`release-manager` and the maintainer): `v1.1.0-beta.4` and its upgrade test (done)
 
 This depends on T8 and T9. M6 is done: the maintainer approved `v1.1.0-beta.4` as a
 mid-milestone beta on 2026-10-15, to be tagged once T8 and T9 are merged (§6).
