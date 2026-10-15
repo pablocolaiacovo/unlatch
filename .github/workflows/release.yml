@@ -16,7 +16,10 @@ name: Release
 # "Re-run this job" on `appcast`, which also re-runs its dependent
 # `deploy-feed`. `appcast` takes the zip from the release (not from the 7-day
 # build artifact) and starts from the live feed; `deploy-feed` refuses to
-# deploy a feed that would drop or demote an item that is live.
+# deploy a feed that would drop or demote an item that is live. The Pages
+# artifact is named per run attempt (`github-pages-<run_attempt>`) because
+# deploy-pages fails when a run holds more than one artifact of the same name,
+# which a re-run would otherwise create.
 #
 # Triggers:
 #   - A pushed `v*` tag (the real release path). Only this path publishes.
@@ -471,11 +474,18 @@ jobs:
               sys.exit(1)
           PY
 
+      # The name is unique per attempt: a re-run of this job (or of `appcast`,
+      # which re-runs it) happens in the same run as an earlier attempt that
+      # already uploaded a Pages artifact, and deploy-pages refuses to pick
+      # between two artifacts with the same name.
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: site
 
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
