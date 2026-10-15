@@ -170,15 +170,14 @@ build updates in place:
   (`allowedUpdateChannels(forVersion:)`);
 - the `appcast` or `deploy-feed` jobs, or `Scripts/update-appcast.sh`.
 
- Install the previous beta in `/Applications`
-on the clean machine through the README's first-launch steps, then choose "Check for Updates…": it
-must offer the new version with its notes, and "Install and Relaunch" must finish with the footer
-menu showing the new version. Record whether Gatekeeper, TCC (save to Desktop again), or App
-Management prompts again, and that the CDHash changed. The full procedure, including the scheduled
-check, is in [Design/sparkle-updates.md](Design/sparkle-updates.md) §4, "Manual: the real N → N+1
-upgrade test". If the install fails outright without a manual App Management grant, stop and raise
-it with the maintainer before tagging the release; repeated prompts do not block it, they go in the
-README.
+Install the previous beta in `/Applications` on the clean machine through the README's first-launch
+steps, then choose "Check for Updates…": it must offer the new version with its notes, and "Install
+and Relaunch" must finish with the footer menu showing the new version. Record whether Gatekeeper,
+TCC (save to Desktop again), or App Management prompts again, and that the CDHash changed. The full
+procedure, including the scheduled check, is in
+[Design/sparkle-updates.md](Design/sparkle-updates.md) §4, "Manual: the real N → N+1 upgrade test".
+If the install fails outright without a manual App Management grant, stop and raise it with the
+maintainer before tagging the release; repeated prompts do not block it, they go in the README.
 
 A stable hotfix that skips its beta (see [Hotfix path](#hotfix-path)) cannot run the upgrade test
 before tagging. If it touches anything in the list above, run the test right after the release is
@@ -245,9 +244,11 @@ finishes:
   `https://github.com/pablocolaiacovo/unlatch/releases/download/<tag>/Unlatch.zip`, and its
   `length` equals the asset size. `<SUPublicEDKey>` comes from `Resources/Info.plist.template`,
   `<edSignature>` from the enclosure, and `verify-ed-signature.swift` exits 0.
-- An installed previous version that should receive this release (a beta install for a beta, any
-  install from v1.1 on for a stable release) is offered it by "Check for Updates…": the update
-  window shows the new version and its notes. Installing it is not required for this check.
+- An install with a lower `CFBundleVersion` that should receive this release is offered it by
+  "Check for Updates…": an earlier beta for a beta, and an earlier beta or the previous stable
+  release (v1.1 or later) for a stable release. Not the beta built from the same commit: it shares
+  the build number and correctly reports that it is up to date. The update window shows the new
+  version and its notes; installing it is not required for this check.
 
 **If `appcast` or `deploy-feed` fails,** the release is public but installed copies are not told
 about it. Fix the cause, then open the run and use **Re-run this job** on `appcast`; GitHub re-runs
@@ -273,12 +274,13 @@ whether `appcast` already published its item:
 - **The feed item is live:** leave the release in place and ship `vX.Y.Z+1` promptly. Its item
   supersedes the broken one for everyone who checks. When the broken release is a stable one, the
   fix ships directly as a stable release, without a beta first: stable installs do not see beta
-  items, so they would keep being offered the broken build while a beta is tested. Delete the release and tag only if installing
-  the build does real harm, such as data loss or an app that does not launch. Its feed item then
-  points at a missing asset until the `+1` release's `deploy-feed` publishes a newer item, and users
-  who check in between get a download error and stay on the version they have. That is accepted.
-  There is no supported way to remove an item from the live feed: do not deploy Pages by hand. The
-  dead item stays in the feed, below the newer one.
+  items, so they would keep being offered the broken build while a beta is tested. Delete the
+  release and tag only if installing the build does real harm, such as data loss or an app that
+  does not launch. Its feed item then points at a missing asset until the `+1` release's
+  `deploy-feed` publishes a newer item, and users who check in between get a download error and
+  stay on the version they have. That is accepted. There is no supported way to remove an item
+  from the live feed: do not deploy Pages by hand. The dead item stays in the feed, below the
+  newer one.
 
 Never move or force-push a tag that has been published — anyone who already fetched it now has a
 different artifact under the same version.
@@ -308,7 +310,8 @@ first-launch steps.
 4. Tag `vX.Y.Z+1` from `main` and follow the release checklist from step 4. A hotfix may skip the
    beta in step 3 only if the fix is small and clearly verified, and the reason is recorded in the
    release notes. A fix for a broken stable release whose feed item is live always skips the beta
-   (step 5), and runs the upgrade test after publishing instead (step 3).
+   (step 5); the reason is still recorded in the release notes. If it touches anything on step 3's
+   upgrade-test list, it runs the upgrade test right after publishing instead.
 
 If the broken release was deleted after its feed item went live (step 5), that item points at a
 missing asset until the hotfix's `deploy-feed` publishes a newer one. Users who check in between
@@ -390,15 +393,15 @@ goals. Switching requires:
    | `APPLE_API_KEY_P8` | Base64 of the `.p8` private key |
    | `APPLE_TEAM_ID` | Apple Developer team identifier |
 
-3. Passing that identity to `Scripts/package-app.sh` instead of `-`, then `notarytool submit --wait`, `stapler staple`, and `spctl -a
-   -vvv -t install`. In the workflow: import the certificate into a temporary keychain, deleted in an
-   `always()` step, and attach the zip only after stapling. For Sparkle: `CODESIGN_ARGS` in
-   `Scripts/package-app.sh` gets `--options runtime --timestamp` (never while ad-hoc, where the
-   hardened runtime turns on library validation and dyld refuses the embedded framework), the
-   nested Sparkle code is signed inside-out with the same identity, and the "Verify Sparkle bundle"
-   step's ad-hoc, no-`Authority`, and no-`runtime` assertions flip. Keep the same EdDSA key: as long
-   as it does not change, ad-hoc installs update to the Developer ID build without a manual
-   reinstall.
+3. Passing that identity to `Scripts/package-app.sh` instead of `-`, then `notarytool submit
+   --wait`, `stapler staple`, and `spctl -a -vvv -t install`. In the workflow: import the
+   certificate into a temporary keychain, deleted in an `always()` step, and attach the zip only
+   after stapling. For Sparkle: `CODESIGN_ARGS` in `Scripts/package-app.sh` gets `--options runtime
+   --timestamp` (never while ad-hoc, where the hardened runtime turns on library validation and dyld
+   refuses the embedded framework), the nested Sparkle code is signed inside-out with the same
+   identity, and the "Verify Sparkle bundle" step's ad-hoc, no-`Authority`, and no-`runtime`
+   assertions flip. Keep the same EdDSA key: as long as it does not change, ad-hoc installs update
+   to the Developer ID build without a manual reinstall.
 4. Updating this file: the release checklist verifies that the app opens with no Gatekeeper prompt,
    and the published-release check confirms that notarization and `spctl` passed. The README's
    first-launch steps are removed. Record the certificate's expiry date here. **Developer ID
