@@ -39,6 +39,9 @@
     <!-- Updates are offered, never installed without the user accepting. -->
     <key>SUAllowsAutomaticUpdates</key>
     <false/>
+    <!-- Scheduled checks once a day; Sparkle's own prompt still asks first. -->
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Pablo Colaiacovo</string>
     <key>NSHighResolutionCapable</key>

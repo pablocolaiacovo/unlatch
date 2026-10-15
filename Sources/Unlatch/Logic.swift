@@ -333,6 +333,37 @@ func statusSymbolName(hasLockedWork: Bool) -> String {
     hasLockedWork ? "lock" : "lock.open"
 }
 
+/// What the menu bar status item shows (Design/sparkle-updates.md §2.4.3).
+struct StatusItemPresentation: Equatable, Sendable {
+    /// `statusSymbolName(hasLockedWork:)`: "lock" or "lock.open".
+    let symbolName: String
+    /// The dot on the icon. Same condition as the footer's indicator.
+    let showsUpdateBadge: Bool
+    /// `nil`, or `updateAvailableValue`.
+    let accessibilityValue: String?
+    let toolTip: String
+
+    static let accessibilityLabel = "Unlatch"
+    static let updateAvailableValue = "Update available"
+    static let updateAvailableToolTip = "Unlatch: update available"
+}
+
+/// `showsUpdateBadge` is `updateFooterPresentation(for: updateState).showsUpdateIndicator`, so the
+/// icon and the footer can't disagree. With the badge: `updateAvailableValue` and
+/// `updateAvailableToolTip`. Without: no value and "Unlatch".
+func statusItemPresentation(
+    hasLockedWork: Bool, updateState: UpdateButtonState
+) -> StatusItemPresentation {
+    let badge = updateFooterPresentation(for: updateState).showsUpdateIndicator
+    return StatusItemPresentation(
+        symbolName: statusSymbolName(hasLockedWork: hasLockedWork),
+        showsUpdateBadge: badge,
+        accessibilityValue: badge ? StatusItemPresentation.updateAvailableValue : nil,
+        toolTip: badge
+            ? StatusItemPresentation.updateAvailableToolTip
+            : StatusItemPresentation.accessibilityLabel)
+}
+
 // MARK: - Launch at Login
 
 /// The login item's state as the system reports it, folded down from
@@ -487,6 +518,35 @@ func updateFooterPresentation(for state: UpdateButtonState) -> UpdateFooterPrese
         UpdateFooterPresentation(
             menuItemTitle: UpdateFooterPresentation.updateAvailableTitle, menuItemEnabled: true,
             showsUpdateIndicator: true)
+    }
+}
+
+/// What Sparkle's standard user driver reports about the update on offer.
+enum UpdateReminderEvent: Equatable, Sendable {
+    /// `standardUserDriverWillHandleShowingUpdate(_:forUpdate:state:)`
+    case willShowUpdate(handledBySparkle: Bool, userInitiated: Bool)
+    /// `standardUserDriverDidReceiveUserAttention(forUpdate:)`
+    case userAttention
+    /// `standardUserDriverWillFinishUpdateSession()`
+    case sessionFinished
+}
+
+/// Maintainer decision 2026-10-15: Sparkle never shows a scheduled update by itself, not even in
+/// immediate focus. The in-app indicator is the only reminder. Always false.
+func sparkleShowsScheduledUpdate(inImmediateFocus immediateFocus: Bool) -> Bool {
+    false
+}
+
+/// The next value of `AppUpdater.updateAvailable`. `.willShowUpdate` with `userInitiated` false
+/// gives true, whatever `handledBySparkle` says. `.willShowUpdate` with `userInitiated` true keeps
+/// `current` (Sparkle shows that update itself, in front). `.userAttention` and `.sessionFinished`
+/// give false.
+func updateIndicatorShown(after event: UpdateReminderEvent, current: Bool) -> Bool {
+    switch event {
+    case .willShowUpdate(_, let userInitiated):
+        userInitiated ? current : true
+    case .userAttention, .sessionFinished:
+        false
     }
 }
 
