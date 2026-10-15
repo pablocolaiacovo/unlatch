@@ -866,9 +866,15 @@ I checked these with throwaway packages in `/tmp`. The repository was not touche
 - **A release deleted after publishing** (RELEASING.md's fix-forward rule). Its feed item points at
   a deleted asset until the `+1` hotfix's feed job publishes a newer item. Users who check in
   between get a download error, which is accepted. RELEASING.md should say so (Task 7).
-- **Two tags pushed within about 10 minutes.** Pages' CDN caching could hand the second run a stale
-  feed. The job-level `concurrency` group serializes the runs, and the cache-busting query string
-  reduces the risk. The worst case is losing the previous item, which the next release restores.
+- **Two tags pushed within about 10 minutes.** The `appcast` concurrency group doesn't cover
+  `deploy-feed`, and Pages' CDN can serve a stale feed despite the cache-busting query string, so
+  one run can build its feed without the other release's item. `update-appcast.sh` doesn't catch
+  this: it only checks that the items of the feed it was given are kept. `deploy-feed` does: it
+  re-fetches the live feed right before deploying and refuses if a live item would be dropped or
+  demoted. The expected worst case is a failed `deploy-feed`, with that release not yet announced
+  in the app, fixed by **Re-run this job** on that run's `appcast` (`RELEASING.md` step 5). Only if
+  `deploy-feed`'s own fetch is stale too can an item be lost; re-running that tag's `appcast`
+  within 30 days restores it.
 - **Key rotation.** Rotation is still possible while the old key exists: ship an update signed with
   the old key that contains the new public key. Losing the key is the case that can't be recovered
   while signing is ad-hoc.
