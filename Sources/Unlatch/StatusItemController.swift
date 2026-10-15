@@ -154,19 +154,23 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         button.setAccessibilityValue(presentation.accessibilityValue)
     }
 
-    /// The symbol with a dot at its top-trailing corner, separated from the glyph by a transparent
-    /// ring. Same size and alignment rect as the symbol, so the icon doesn't move when the dot
-    /// comes and goes. Stays a template image: AppKit tints it for light, dark, and tinted menu
-    /// bars and for the pressed highlight.
+    /// The symbol with a dot hanging off its top-trailing corner, separated from the glyph by a
+    /// transparent ring. The canvas is the symbol's rect grown to hold the dot, with the symbol
+    /// drawn at the origin and `alignmentRect` copied, so the glyph stays where it is when the dot
+    /// comes and goes and the glyph itself is never erased. Stays a template image: AppKit tints
+    /// it for light, dark, and tinted menu bars and for the pressed highlight.
     /// `nonisolated`: AppKit may call an NSImage drawing handler on any thread, and the handler
     /// isn't `@Sendable`, so inside a main-actor method it would inherit main-actor isolation and
-    /// log a data race at run time.
+    /// log a data race at run time. The handler captures only immutable values.
     nonisolated private static func badged(_ symbol: NSImage) -> NSImage {
-        let diameter: CGFloat = 6, ring: CGFloat = 1.5
-        let image = NSImage(size: symbol.size, flipped: false) { rect in
-            symbol.draw(in: rect)
-            let dot = NSRect(x: rect.maxX - diameter, y: rect.maxY - diameter,
-                             width: diameter, height: diameter)
+        let diameter: CGFloat = 5, ring: CGFloat = 1
+        let glyph = symbol.alignmentRect
+        let dot = NSRect(x: glyph.maxX - diameter / 2 + 1.5, y: glyph.maxY - diameter / 2 + 1.5,
+                         width: diameter, height: diameter)
+        let size = NSSize(width: max(symbol.size.width, dot.maxX),
+                          height: max(symbol.size.height, dot.maxY))
+        let image = NSImage(size: size, flipped: false) { _ in
+            symbol.draw(in: NSRect(origin: .zero, size: symbol.size))
             NSGraphicsContext.current?.compositingOperation = .clear
             NSBezierPath(ovalIn: dot.insetBy(dx: -ring, dy: -ring)).fill()
             NSGraphicsContext.current?.compositingOperation = .sourceOver
@@ -174,7 +178,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             NSBezierPath(ovalIn: dot).fill()
             return true
         }
-        image.alignmentRect = symbol.alignmentRect
+        image.alignmentRect = glyph
         return image
     }
 }
