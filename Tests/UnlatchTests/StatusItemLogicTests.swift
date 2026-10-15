@@ -45,3 +45,41 @@ import Testing
 @Test func statusSymbolNameIsLockOpenOtherwise() {
     #expect(statusSymbolName(hasLockedWork: false) == "lock.open")
 }
+
+// MARK: - statusItemPresentation
+
+@Test(arguments: [true, false])
+func statusItemPresentationShowsTheDotOnlyWhenAnUpdateIsAvailable(hasLockedWork: Bool) {
+    let update = statusItemPresentation(hasLockedWork: hasLockedWork, updateState: .updateAvailable)
+    #expect(update.symbolName == statusSymbolName(hasLockedWork: hasLockedWork))
+    #expect(update.showsUpdateBadge)
+    #expect(update.accessibilityValue == "Update available")
+    #expect(update.toolTip == "Unlatch: update available")
+
+    let check = statusItemPresentation(hasLockedWork: hasLockedWork, updateState: .check)
+    #expect(check.symbolName == statusSymbolName(hasLockedWork: hasLockedWork))
+    #expect(!check.showsUpdateBadge)
+    #expect(check.accessibilityValue == nil)
+    #expect(check.toolTip == "Unlatch")
+}
+
+@Test(arguments: [UpdateButtonState.hidden, .checkDisabled])
+func statusItemPresentationHasNoDotWhenUpdatesAreUnavailable(state: UpdateButtonState) {
+    let presentation = statusItemPresentation(hasLockedWork: false, updateState: state)
+    #expect(!presentation.showsUpdateBadge)
+    #expect(presentation.accessibilityValue == nil)
+    #expect(presentation.toolTip == "Unlatch")
+}
+
+@Test(arguments: [UpdateButtonState.hidden, .checkDisabled, .check, .updateAvailable],
+      [true, false])
+func statusItemDotAgreesWithTheFooterIndicator(state: UpdateButtonState, hasLockedWork: Bool) {
+    let presentation = statusItemPresentation(hasLockedWork: hasLockedWork, updateState: state)
+    #expect(presentation.showsUpdateBadge == updateFooterPresentation(for: state).showsUpdateIndicator)
+}
+
+@Test func statusItemPresentationCopy() {
+    #expect(StatusItemPresentation.accessibilityLabel == "Unlatch")
+    #expect(StatusItemPresentation.updateAvailableValue == "Update available")
+    #expect(StatusItemPresentation.updateAvailableToolTip == "Unlatch: update available")
+}
