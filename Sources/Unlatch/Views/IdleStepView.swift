@@ -13,7 +13,7 @@ struct IdleStepView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             chooseButton
-            Text("Removes the open password so the file opens without one. Nothing leaves your Mac.")
+            Text("Removes the open password so the file opens without one. Nothing leaves this Mac.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
@@ -21,7 +21,6 @@ struct IdleStepView: View {
                 // an unconstrained multi-line Text can report a one-line
                 // ideal height and get clipped. Forcing the ideal height at
                 // the frame's fixed width makes it grow to fit both lines.
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
     }
