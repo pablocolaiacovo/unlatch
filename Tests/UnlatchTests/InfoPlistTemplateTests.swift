@@ -37,6 +37,11 @@ private func loadTemplate() throws -> [String: Any] {
     #expect(plist["SUAllowsAutomaticUpdates"] as? Bool == false)
 }
 
+@Test func templateChecksOnceADay() throws {
+    let plist = try loadTemplate()
+    #expect(plist["SUScheduledCheckInterval"] as? Int == 86400)
+}
+
 @Test func templateLeavesSparkleDefaultsAlone() throws {
     let plist = try loadTemplate()
     for key in [

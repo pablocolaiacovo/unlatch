@@ -153,3 +153,37 @@ func betaVersionsFollowTheBetaChannel(version: String) {
     #expect(presentation.menuItemTitle == nil)
     #expect(presentation.showsUpdateIndicator == false)
 }
+
+// MARK: - Gentle reminders (T8)
+
+@Test(arguments: [true, false])
+func sparkleNeverShowsAScheduledUpdateItself(inImmediateFocus: Bool) {
+    #expect(sparkleShowsScheduledUpdate(inImmediateFocus: inImmediateFocus) == false)
+}
+
+@Test(arguments: [true, false], [true, false])
+func aScheduledUpdateRaisesTheIndicatorWhoeverShowsIt(handledBySparkle: Bool, current: Bool) {
+    let event = UpdateReminderEvent.willShowUpdate(
+        handledBySparkle: handledBySparkle, userInitiated: false)
+    #expect(updateIndicatorShown(after: event, current: current) == true)
+}
+
+@Test(arguments: [true, false])
+func aUserInitiatedUpdateLeavesTheIndicatorAlone(current: Bool) {
+    let event = UpdateReminderEvent.willShowUpdate(handledBySparkle: true, userInitiated: true)
+    #expect(updateIndicatorShown(after: event, current: current) == current)
+}
+
+@Test(arguments: [UpdateReminderEvent.userAttention, .sessionFinished], [true, false])
+func attentionAndSessionEndClearTheIndicator(event: UpdateReminderEvent, current: Bool) {
+    #expect(updateIndicatorShown(after: event, current: current) == false)
+}
+
+@Test func foundThenSeenUpdateRaisesAndClearsTheFooterButton() {
+    let found = updateIndicatorShown(
+        after: .willShowUpdate(handledBySparkle: false, userInitiated: false), current: false)
+    #expect(
+        updateButtonState(availability: .enabled, canCheck: true, updateAvailable: found)
+            == .updateAvailable)
+    #expect(updateIndicatorShown(after: .userAttention, current: found) == false)
+}

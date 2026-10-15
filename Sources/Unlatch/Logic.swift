@@ -490,6 +490,35 @@ func updateFooterPresentation(for state: UpdateButtonState) -> UpdateFooterPrese
     }
 }
 
+/// What Sparkle's standard user driver reports about the update on offer.
+enum UpdateReminderEvent: Equatable, Sendable {
+    /// `standardUserDriverWillHandleShowingUpdate(_:forUpdate:state:)`
+    case willShowUpdate(handledBySparkle: Bool, userInitiated: Bool)
+    /// `standardUserDriverDidReceiveUserAttention(forUpdate:)`
+    case userAttention
+    /// `standardUserDriverWillFinishUpdateSession()`
+    case sessionFinished
+}
+
+/// Maintainer decision 2026-10-15: Sparkle never shows a scheduled update by itself, not even in
+/// immediate focus. The in-app indicator is the only reminder. Always false.
+func sparkleShowsScheduledUpdate(inImmediateFocus immediateFocus: Bool) -> Bool {
+    false
+}
+
+/// The next value of `AppUpdater.updateAvailable`. `.willShowUpdate` with `userInitiated` false
+/// gives true, whatever `handledBySparkle` says. `.willShowUpdate` with `userInitiated` true keeps
+/// `current` (Sparkle shows that update itself, in front). `.userAttention` and `.sessionFinished`
+/// give false.
+func updateIndicatorShown(after event: UpdateReminderEvent, current: Bool) -> Bool {
+    switch event {
+    case .willShowUpdate(_, let userInitiated):
+        userInitiated ? current : true
+    case .userAttention, .sessionFinished:
+        false
+    }
+}
+
 // MARK: - PDF helpers (blocking; call off the main actor)
 
 /// True when `password` opens the document (or it needs no password at all).
