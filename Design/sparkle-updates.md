@@ -648,8 +648,10 @@ build-and-package (xcode-27)  ->  publish (ubuntu-24.04)  ->  appcast (xcode-27)
 
 Running the feed *after* `publish` means the feed never points at an asset that doesn't exist yet.
 If `appcast` or `deploy-feed` fails, the release exists but isn't announced in the app yet.
-Re-running the failed jobs is idempotent, because the strip step and `generate_appcast` re-key on
-the build number.
+Re-running is not idempotent for every job: recover with **Re-run this job** on `appcast`, never
+**Re-run all jobs**, and only within 30 days of the original run. The full procedure, including why
+**Re-run failed jobs** is wrong when only `deploy-feed` failed, is in `RELEASING.md` step 5 and the
+header of `release.yml`.
 
 **`appcast`** job:
 
@@ -663,22 +665,31 @@ the build number.
   1. `actions/checkout` (depth 1 is enough), then `swift package resolve`. The tools come from
      `.build/artifacts/sparkle/Sparkle/bin`, the version pinned in `Package.resolved` and checked
      against the binary target's checksum by SwiftPM. No second version pin goes in the workflow.
-  2. Download the `unlatch-zip` artifact.
+  2. Download `Unlatch.zip` from the published release with `gh release download`, not the 7-day
+     `unlatch-zip` build artifact, so a late re-run still works. Fail unless the asset has a
+     `sha256:` digest in the GitHub API and the downloaded file's `shasum -a 256` matches it.
   3. Release notes: `gh release view "$TAG" --json body --jq .body`. Delete the
      `<!-- Release notes generated … -->` comment line and write the result to `Unlatch.md` next to
      the zip. `generate_appcast` picks up a `.md` file with the same base name as the archive, and
      `--embed-release-notes` embeds it as `<description sparkle:format="markdown">`. Sparkle 2.9+
      renders basic Markdown on macOS 12+. These are the same PR-title notes the release page shows,
      so there's one source of truth.
-  4. Run `Scripts/update-appcast.sh`, below.
-  5. Upload the output directory, which holds `appcast.xml` only, as the `appcast` artifact.
+  4. Fetch the live feed as §2.6 describes. The feed URL is `SUFeedURL` read from the zip's
+     `Info.plist`. That URL and the bundle's `CFBundleVersion` become job outputs for `deploy-feed`.
+  5. Run `Scripts/update-appcast.sh`, below.
+  6. Upload `appcast.xml` as the `appcast` artifact, with `overwrite: true` so a re-run of the job
+     can upload it again.
 
 **`deploy-feed`** job:
 
 - `runs-on: ubuntu-24.04`, with `needs: appcast`.
 - `environment: { name: github-pages, url: ${{ steps.deploy.outputs.page_url }} }`.
 - `permissions: { pages: write, id-token: write }`.
-- Steps: download the artifact, `actions/upload-pages-artifact`, then `actions/deploy-pages`.
+- Steps: download the artifact, then re-fetch the live feed and fail if the artifact lacks a live
+  item, by `sparkle:version` and channel. The only exception is the build `appcast` replaced moving
+  from beta to stable. A 404 means there is no feed yet. This stops a re-run of an older tag's
+  deploy from rolling the feed back, because the `appcast` concurrency group doesn't cover this
+  job. Then `actions/upload-pages-artifact` and `actions/deploy-pages`.
   `devops` pins the current major versions when implementing. They are a separate Linux job
   because `upload-pages-artifact` tars with GNU tar flags.
 
@@ -855,9 +866,18 @@ I checked these with throwaway packages in `/tmp`. The repository was not touche
 - **A release deleted after publishing** (RELEASING.md's fix-forward rule). Its feed item points at
   a deleted asset until the `+1` hotfix's feed job publishes a newer item. Users who check in
   between get a download error, which is accepted. RELEASING.md should say so (Task 7).
-- **Two tags pushed within about 10 minutes.** Pages' CDN caching could hand the second run a stale
-  feed. The job-level `concurrency` group serializes the runs, and the cache-busting query string
-  reduces the risk. The worst case is losing the previous item, which the next release restores.
+- **Two tags pushed within about 10 minutes.** The `appcast` concurrency group doesn't cover
+  `deploy-feed`, and Pages' CDN can serve a stale feed despite the cache-busting query string, so
+  one run can build its feed without the other release's item. `update-appcast.sh` doesn't catch
+  this: it only checks that the items of the feed it was given are kept. `deploy-feed` does: it
+  re-fetches the live feed right before deploying and refuses if a live item would be dropped or
+  demoted. The expected worst case is a failed `deploy-feed`, with that release not yet announced
+  in the app, fixed by **Re-run this job** on that run's `appcast` (`RELEASING.md` step 5). Only if
+  `deploy-feed`'s own fetch doesn't yet show the other release (a stale CDN copy, or the other
+  run's Pages deploy still in flight, where the last deploy wins) can an item be lost. That loss is
+  silent, with every job green, so the `RELEASING.md` step 5 live-feed check, run for both tags once
+  both runs have finished, is what catches it. Re-running that tag's `appcast` within 30 days
+  restores it.
 - **Key rotation.** Rotation is still possible while the old key exists: ship an update signed with
   the old key that contains the new public key. Losing the key is the case that can't be recovered
   while signing is ad-hoc.
