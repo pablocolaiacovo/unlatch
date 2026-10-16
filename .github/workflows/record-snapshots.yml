@@ -1,0 +1,66 @@
+name: Record snapshots
+
+# Full re-record of the popover snapshot references on CI's own toolchain and image. Run it
+# (Actions tab > Record snapshots > Run workflow) on the branch of the PR that will carry the
+# new references, after changing DEVELOPER_DIR or runs-on in ci.yml, bumping the snapshot
+# library, or seeing the "Snapshot environment changed" warning from a CI run. Download the
+# artifact and rsync it over Tests/UnlatchTests/__Snapshots__ (see RELEASING.md, "Snapshot
+# tests"). This workflow never commits or pushes; a human reviews the images in the PR.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Must equal DEVELOPER_DIR in ci.yml, and runs-on below must equal ci.yml's runs-on:
+  # references recorded on a different toolchain or image than the one CI verifies on
+  # defeat the purpose. Change all of them together.
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+
+jobs:
+  record:
+    name: record
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - name: Print Swift version
+        run: swift --version
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Same key scheme as ci.yml, so this run reuses CI's build cache.
+      - name: Cache .build
+        uses: actions/cache@v6
+        with:
+          path: .build
+          key: macos-27-xcode27.0-spm-${{ hashFiles('**/Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            macos-27-xcode27.0-spm-
+
+      # Record mode reports every assertion as an issue, so this step always "fails".
+      # || true is deliberate; the verification step below decides the job's result.
+      - name: Record all references
+        env:
+          UNLATCH_SNAPSHOTS: require
+          SNAPSHOT_TESTING_RECORD: all
+        run: swift test --filter PopoverSnapshotTests || true
+
+      # Proves the new references reproduce on a second run in the same job, so they are
+      # not flaky before anyone commits them.
+      - name: Verify the new references on the same runner
+        env:
+          UNLATCH_SNAPSHOTS: require
+          SNAPSHOT_TESTING_RECORD: never
+        run: swift test --filter PopoverSnapshotTests
+
+      # The run attempt is in the name so a re-run never collides with the first attempt.
+      - name: Upload recorded snapshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: recorded-snapshots-${{ github.run_attempt }}
+          path: Tests/UnlatchTests/__Snapshots__
+          if-no-files-found: ignore
+          retention-days: 14
