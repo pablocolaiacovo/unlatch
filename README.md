@@ -38,7 +38,7 @@ Requires macOS 14 or later.
 
 ### First launch
 
-Unlatch v1.0 is **ad-hoc signed, not notarized by Apple** — it's a free, single-maintainer project
+Unlatch is **ad-hoc signed, not notarized by Apple** — it's a free, single-maintainer project
 without a paid Apple Developer membership. Because of that, every copy downloaded from a browser is
 quarantined, and macOS Gatekeeper blocks the very first launch. This is expected, not a sign of a
 broken or malicious download, and it only needs to be dealt with once per install.
@@ -83,11 +83,16 @@ Updates…**.
 
 ## Updates
 
-Unlatch updates itself with [Sparkle](https://sparkle-project.org). Once a day it checks, in the
-background, a signed feed at `https://pablocolaiacovo.github.io/unlatch/appcast.xml`, and it only
-installs an update whose EdDSA signature verifies. On the second launch,
-Sparkle asks whether it may check for updates automatically; if you say no, it never checks on its
-own, but **Check for Updates…** still works.
+Unlatch updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle
+asks whether it may check for updates automatically. If you allow it, Unlatch checks once a day, in
+the background, a signed feed at `https://pablocolaiacovo.github.io/unlatch/appcast.xml`, and it only
+installs an update whose EdDSA signature verifies. If you say no, Unlatch never checks on its own and
+there is no setting in the app to change that; **Check for Updates…** still works, or turn automatic
+checks back on in Terminal:
+
+```sh
+defaults write com.pablocolaiacovo.unlatch SUEnableAutomaticChecks -bool YES
+```
 
 When a check finds an update, nothing opens on its own. A dot appears on the menu bar icon, and
 the popover footer shows a blue **Update Available** button and a dot on the ellipsis (…) menu,
@@ -98,9 +103,10 @@ Updates…** in the ellipsis menu. Unlatch never installs an update automaticall
 A beta install is offered betas as well as stable releases; a stable install is only offered stable
 releases.
 
-Updating in place keeps the app's ad-hoc identity, so the first-launch steps above are not repeated:
-in testing, upgrading between builds showed no Gatekeeper prompt, no second Desktop-folder prompt,
-and no App Management prompt. Copies older than v1.1 (v1.0.x) have no updater, so download v1.1
+An update installed from inside the app isn't quarantined, so the first-launch steps above aren't
+needed again. Each build is ad-hoc signed, so its code signature changes with every update; in testing
+(v1.1.0-beta.2 to beta.3 and beta.3 to beta.4) that caused no Gatekeeper prompt, no folder-access
+prompt, and no App Management prompt. Copies older than v1.1 (v1.0.x) have no updater, so download v1.1
 from the Releases page once, as in [Install](#install); every update after that happens in the app.
 
 ## Building from source
