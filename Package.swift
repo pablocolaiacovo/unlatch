@@ -27,6 +27,10 @@ let package = Package(
         // in its own PR, and re-run the release workflow's dry run.
         // 2.9.2 or later is mandatory: CVE-2026-47122 affects <= 2.9.1.
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+        // Test-only: linked by UnlatchTests and nothing else. Exact pin because a library
+        // release can change PNG encoding or diffing, which would churn every reference.
+        // Bump deliberately, in its own PR, and expect to re-record (RELEASING.md).
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -57,7 +61,13 @@ let package = Package(
         ),
         .testTarget(
             name: "UnlatchTests",
-            dependencies: ["Unlatch"]
+            dependencies: [
+                "Unlatch",
+                .product(name: "SnapshotTesting", package: "swift-snapshot-testing"),
+            ],
+            // The reference PNGs and RECORDED_ON.txt are read by path (#filePath), not as
+            // bundle resources. Without this, SwiftPM warns "found N file(s) which are unhandled".
+            exclude: ["__Snapshots__"]
         ),
     ],
     swiftLanguageModes: [.v6]

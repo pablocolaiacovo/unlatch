@@ -1,0 +1,5 @@
+osVersion=27.0.1 (26A434)
+accentColor=default
+highlightColor=default
+increaseContrast=false
+reduceTransparency=true
