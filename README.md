@@ -8,7 +8,9 @@ open password removed, wherever you choose. Files that already open without a pa
 (owner-restricted or not encrypted) are copied as-is, restrictions intact.
 
 Unlatch is local and private. Your files never leave the Mac and nothing is uploaded: there is no
-server, no account, and no network access involved in classifying or unlocking a PDF.
+server, no account, and no network access involved in classifying or unlocking a PDF. The only
+network traffic is the [update check](#updates) and, when you choose to install one, the download
+from GitHub. Nothing about your files is sent, and Sparkle's system profiling is off.
 
 ![Unlatch unlocking a password-protected PDF, step by step](docs/demo.gif)
 
@@ -36,7 +38,7 @@ Requires macOS 14 or later.
 
 ### First launch
 
-Unlatch v1.0 is **ad-hoc signed, not notarized by Apple** — it's a free, single-maintainer project
+Unlatch is **ad-hoc signed, not notarized by Apple** — it's a free, single-maintainer project
 without a paid Apple Developer membership. Because of that, every copy downloaded from a browser is
 quarantined, and macOS Gatekeeper blocks the very first launch. This is expected, not a sign of a
 broken or malicious download, and it only needs to be dealt with once per install.
@@ -76,7 +78,36 @@ results: an unlocked copy for password-protected files, an unchanged copy for th
 
 To have Unlatch start with your Mac, open the **ellipsis (…) menu** at the bottom of the popover
 and check **Open at Login**. It follows System Settings > General > Login Items, so turning
-Unlatch off there unchecks it too. The same menu shows the installed version.
+Unlatch off there unchecks it too. The same menu shows the installed version and **Check for
+Updates…**.
+
+## Updates
+
+Unlatch updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle
+asks whether it may check for updates automatically. If you allow it, Unlatch checks once a day, in
+the background, a signed feed at `https://pablocolaiacovo.github.io/unlatch/appcast.xml`, and it only
+installs an update whose EdDSA signature verifies. If you say no, Unlatch never checks on its own and
+there is no setting in the app to change that; **Check for Updates…** still works, or turn automatic
+checks back on in Terminal:
+
+```sh
+defaults write com.pablocolaiacovo.unlatch SUEnableAutomaticChecks -bool YES
+```
+
+When a check finds an update, nothing opens on its own. A dot appears on the menu bar icon, and
+the popover footer shows a blue **Update Available** button and a dot on the ellipsis (…) menu,
+whose item reads **Update Available…**. Click either to open the update window with the release
+notes, then **Install and Relaunch** to install it. To check right now, choose **Check for
+Updates…** in the ellipsis menu. Unlatch never installs an update automatically.
+
+A beta install is offered betas as well as stable releases; a stable install is only offered stable
+releases.
+
+An update installed from inside the app isn't quarantined, so the first-launch steps above aren't
+needed again. Each build is ad-hoc signed, so its code signature changes with every update; in testing
+(v1.1.0-beta.2 to beta.3 and beta.3 to beta.4) that caused no Gatekeeper prompt, no folder-access
+prompt, and no App Management prompt. Copies older than v1.1 (v1.0.x) have no updater, so download v1.1
+from the Releases page once, as in [Install](#install); every update after that happens in the app.
 
 ## Building from source
 
@@ -89,7 +120,8 @@ swift run Unlatch
 
 To produce a standalone, ad-hoc signed `Unlatch.app` you can drag into `/Applications` or hand to
 someone else, use `Scripts/package-app.sh`. A locally built app isn't quarantined, so it launches
-without the first-launch steps above.
+without the first-launch steps above. There is no updater under `swift run`; a locally packaged
+build does check, and may be offered a newer published release.
 
 Run it from the repository root (it also locates the root itself, so any directory works):
 
