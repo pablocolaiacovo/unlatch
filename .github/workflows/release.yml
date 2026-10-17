@@ -18,12 +18,13 @@ name: Release
 # build artifact) and starts from the live feed; `deploy-feed` refuses to
 # deploy a feed that would drop or demote an item that is live. The Pages
 # artifact is named per run attempt (`github-pages-<run_attempt>`) because
-# a name shared by two artifacts of a run is ambiguous, which a re-run would
-# otherwise create. Pages also dedupes on `pages_build_version`, which
-# actions/deploy-pages hard-wires to the commit SHA, and a stable tag shares
-# its beta's commit. So `deploy-feed` creates the Pages deployment through the
-# API with a per-run-attempt build version, then verifies that the live feed
-# carries the tag's item.
+# deploy-pages fails when a run holds more than one artifact of the same name,
+# which a re-run would otherwise create. Pages also dedupes on
+# `pages_build_version`, which actions/deploy-pages hard-wires to the commit
+# SHA: a second deploy of a commit reports success but leaves the first one
+# live. A stable tag therefore must not share a commit with an earlier tag
+# (RELEASING.md step 4). `deploy-feed` fails fast on that before deploying, and
+# after deploying verifies that the live feed carries the tag's item.
 #
 # Triggers:
 #   - A pushed `v*` tag (the real release path). Only this path publishes.
@@ -417,15 +418,18 @@ jobs:
     needs: appcast
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    # Covers about 1 minute before the deploy, up to 8 minutes waiting for it,
-    # and the post-deploy feed check, which polls for up to 13 minutes.
-    timeout-minutes: 25
+    # Covers about 2 minutes before the deploy, up to 10 minutes waiting for it
+    # (deploy-pages' default timeout), and the post-deploy feed check, which
+    # polls for up to 13 minutes.
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
+      # Read-only, for the same-commit guard below.
+      deployments: read
     steps:
       - name: Download appcast
         uses: actions/download-artifact@v8
@@ -480,85 +484,52 @@ jobs:
               sys.exit(1)
           PY
 
+      # Pages dedupes on `pages_build_version`, which actions/deploy-pages
+      # sets to the commit SHA, so a second deploy of a commit is accepted,
+      # reported as a success, and never served (v1.1.0 on v1.1.0-beta.5's
+      # commit). Fail before deploying if another tag already deployed this
+      # commit. Each deploy-feed run leaves a `github-pages` deployment record
+      # on the tag's ref (a failed attempt a `failure` status), so only a
+      # record with `success` as its latest status, on a different ref, counts.
+      # Records on this tag's own ref are earlier attempts of this same tag
+      # (a re-run), which must stay possible.
+      - name: Check no other tag already deployed this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          IDS="$(gh api --paginate "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&sha=$GITHUB_SHA&per_page=100" \
+            | jq -r --arg ref "$TAG" '.[] | select(.ref != $ref) | "\(.id) \(.ref)"')"
+          CLASH=""
+          while read -r ID REF; do
+            [ -n "$ID" ] || continue
+            STATE="$(gh api "repos/$GITHUB_REPOSITORY/deployments/$ID/statuses?per_page=1" --jq '.[0].state // "none"')"
+            echo "deployment $ID (ref $REF) of commit $GITHUB_SHA: latest status $STATE"
+            if [ "$STATE" = success ]; then CLASH="$CLASH $REF"; fi
+          done <<<"$IDS"
+          if [ -n "$CLASH" ]; then
+            echo "::error::Commit $GITHUB_SHA is already deployed to Pages by:$CLASH. Pages would accept a second deploy of the same commit, report success, and keep serving the first one. Do not re-run this job. $TAG needs a different commit than the earlier tag (the next commit on main), so clean up $TAG as RELEASING.md describes and tag again; see RELEASING.md step 4." >&2
+            exit 1
+          fi
+          echo "No other tag has deployed $GITHUB_SHA"
+
       # The name is unique per attempt: a re-run of this job (or of `appcast`,
       # which re-runs it) happens in the same run as an earlier attempt that
-      # already uploaded a Pages artifact, and a name shared by two artifacts
-      # is ambiguous.
+      # already uploaded a Pages artifact, and deploy-pages refuses to pick
+      # between two artifacts with the same name.
       - name: Upload Pages artifact
-        id: pages-artifact
         uses: actions/upload-pages-artifact@v5
         with:
           name: github-pages-${{ github.run_attempt }}
           path: site
 
-      # Pages treats `pages_build_version` as the identity of a deployment.
-      # actions/deploy-pages always sends $GITHUB_SHA for it, and the runner
-      # re-applies GITHUB_SHA after step `env:`, so it cannot be overridden.
-      # A stable tag shares its last beta's commit by design, so v1.1.0 reused
-      # beta.5's build version and Pages reported success without replacing the
-      # live feed. So this step creates the Pages deployment through the API
-      # itself, with a build version that is unique per run attempt (a SHA-1
-      # hex digest, keeping the 40-hex shape of a commit SHA), then waits for
-      # it to finish like deploy-pages does.
       - name: Deploy to GitHub Pages
         id: deploy
-        uses: actions/github-script@v9
-        env:
-          ARTIFACT_ID: ${{ steps.pages-artifact.outputs.artifact_id }}
+        uses: actions/deploy-pages@v5
         with:
-          script: |
-            const crypto = require('crypto');
-            const { owner, repo } = context.repo;
-            const buildVersion = crypto.createHash('sha1')
-              .update(`${context.sha}:${context.runId}:${process.env.GITHUB_RUN_ATTEMPT}`)
-              .digest('hex');
-            const artifactId = Number(process.env.ARTIFACT_ID);
-            if (!Number.isInteger(artifactId)) {
-              core.setFailed(`No Pages artifact id from upload-pages-artifact: ${process.env.ARTIFACT_ID}`);
-              return;
-            }
-            core.info(`Creating Pages deployment: artifact_id=${artifactId} pages_build_version=${buildVersion} (commit ${context.sha}, run ${context.runId} attempt ${process.env.GITHUB_RUN_ATTEMPT})`);
-            const oidcToken = await core.getIDToken();
-            const created = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
-              owner, repo,
-              artifact_id: artifactId,
-              pages_build_version: buildVersion,
-              oidc_token: oidcToken,
-            });
-            const deploymentId = created.data.id || created.data.status_url.split('/').pop();
-            core.info(`Created deployment ${deploymentId}`);
-            core.setOutput('page_url', created.data.page_url);
-            const deadline = Date.now() + 8 * 60 * 1000;
-            let status = '';
-            while (Date.now() < deadline) {
-              await new Promise((resolve) => setTimeout(resolve, 5000));
-              let res;
-              try {
-                res = await github.request('GET /repos/{owner}/{repo}/pages/deployments/{deploymentId}', { owner, repo, deploymentId });
-              } catch (error) {
-                core.warning(`Status request failed: ${error.message}`);
-                continue;
-              }
-              status = res.data.status;
-              core.info(`Current status: ${status}`);
-              if (status === 'succeed') {
-                core.info('Reported success!');
-                return;
-              }
-              // Terminal states only. deployment_attempt_error, unknown_status
-              // and not_found are temporary (Pages retries), so keep polling.
-              if (['deployment_failed', 'deployment_content_failed', 'deployment_cancelled', 'deployment_lost'].includes(status)) {
-                core.setFailed(`Pages deployment ${deploymentId} ended with status ${status}`);
-                return;
-              }
-            }
-            try {
-              await github.request('POST /repos/{owner}/{repo}/pages/deployments/{deploymentId}/cancel', { owner, repo, deploymentId });
-              core.info(`Canceled deployment ${deploymentId}`);
-            } catch (error) {
-              core.warning(`Could not cancel deployment ${deploymentId}: ${error.message}`);
-            }
-            core.setFailed(`Pages deployment ${deploymentId} did not succeed within 8 minutes (last status: ${status})`);
+          artifact_name: github-pages-${{ github.run_attempt }}
 
       # A green deploy step is not proof the feed changed: the stale-feed
       # incident above reported success. Poll the live feed until this tag's

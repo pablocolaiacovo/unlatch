@@ -293,6 +293,12 @@ git tag -a v1.0.0 -m "Unlatch 1.0.0"
 git push origin v1.0.0
 ```
 
+The stable tag goes on a different commit than its last beta, so it gets its own build number and
+its own feed item; the beta's item stays in the feed on the `beta` channel. Use the next commit on
+`main` after the beta. If nothing else has landed, merge a small docs or changelog change through a
+pull request first. The release workflow refuses to deploy the feed for a tag whose commit is
+already deployed.
+
 The tag must be annotated (`-a`), and pushed explicitly. `git push --tags` is discouraged: it pushes
 every local tag, including experiments you meant to keep to yourself.
 
@@ -308,12 +314,15 @@ previous one succeeds:
    sha256 digest), starts from the live feed, and runs `Scripts/update-appcast.sh`. That script
    signs the zip with the EdDSA key and adds one item with `generate_appcast --maximum-versions 0`,
    so every older item is kept. A `-beta.N` tag's item goes on the `beta` channel; a stable item has
-   no channel. A stable tag on the same commit as its last beta shares that beta's build number, so
-   its item replaces the beta item. The script fails if the new signature does not verify against
+   no channel. A stable tag goes on a different commit than its last beta, so it has its own build
+   number and its item is added next to the beta's, which stays in the feed on the `beta` channel.
+   The script fails if the new signature does not verify against
    the bundle's `SUPublicEDKey`.
 4. **`deploy-feed`** re-fetches the live feed and refuses to deploy if the new one would drop or
-   demote a live item, comparing items by `sparkle:version` and channel. It then publishes
-   `appcast.xml` to GitHub Pages at <https://pablocolaiacovo.github.io/unlatch/appcast.xml>.
+   demote a live item, comparing items by `sparkle:version` and channel. It also refuses to deploy
+   if another tag already deployed the same commit to Pages. It then publishes `appcast.xml` to
+   GitHub Pages at <https://pablocolaiacovo.github.io/unlatch/appcast.xml> and polls the live feed
+   for up to 13 minutes, failing if the tag's item is not there.
 
 The feed is updated after the release exists, so it never points at a missing asset. Once the run
 finishes:
@@ -347,9 +356,8 @@ finishes:
   `<edSignature>` from the enclosure, and `verify-ed-signature.swift` exits 0.
 - An install with a lower `CFBundleVersion` that should receive this release is offered it by
   "Check for Updates…": an earlier beta for a beta, and an earlier beta or the previous stable
-  release (v1.1 or later) for a stable release. Not the beta built from the same commit: it shares
-  the build number and correctly reports that it is up to date. The update window shows the new
-  version and its notes; installing it is not required for this check.
+  release (v1.1 or later) for a stable release. The update window shows the new version and its
+  notes; installing it is not required for this check.
 
 **If `appcast` or `deploy-feed` fails,** the release is public but installed copies are not told
 about it. Fix the cause, then open the run and use **Re-run this job** on `appcast`; GitHub re-runs
@@ -367,13 +375,12 @@ an earlier attempt's `deploy-feed` had already uploaded its Pages artifact. Dele
 (`gh api -X DELETE repos/pablocolaiacovo/unlatch/actions/artifacts/<id>`),
 or ship the next version instead.
 
-`deploy-feed` creates the Pages deployment through the Pages API (`actions/github-script`) instead
-of `actions/deploy-pages`, with a `pages_build_version` that is unique per run attempt. It then
-polls the live feed for up to 13 minutes and fails if the tag's item is not there. Pages
-deduplicates deployments on that build version, and `deploy-pages` always sends the commit SHA, so
-a stable tag on its beta's commit (v1.1.0 on v1.1.0-beta.5's) reported a successful deploy but left
-the old feed live. Re-running `appcast` on a tag cut before this change repeats that, so it cannot
-repair such a tag; ship the next version instead.
+Pages deduplicates deployments on the commit SHA: a second deploy of a commit reports success but
+the first one stays live. `deploy-feed` therefore fails before deploying if another tag already
+deployed the commit, and fails after deploying if the live feed does not carry the tag's item. v1.1.0
+was tagged on v1.1.0-beta.5's commit and hit this; re-running `appcast` on it cannot repair it, so
+ship the next version. If the check trips, do not re-run: clean up the tag as described below and
+tag a different commit.
 
 - Never use **Re-run all jobs**: `publish` fails because the release already exists.
 - Do not use **Re-run failed jobs** when only `deploy-feed` failed: it redeploys the feed artifact
