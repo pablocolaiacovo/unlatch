@@ -417,8 +417,9 @@ jobs:
     needs: appcast
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    # Covers the post-deploy feed check, which polls for up to 13 minutes.
-    timeout-minutes: 20
+    # Covers about 1 minute before the deploy, up to 8 minutes waiting for it,
+    # and the post-deploy feed check, which polls for up to 13 minutes.
+    timeout-minutes: 25
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -544,10 +545,18 @@ jobs:
                 core.info('Reported success!');
                 return;
               }
-              if (/fail|cancel|lost|error|timed_out/.test(status)) {
+              // Terminal states only. deployment_attempt_error, unknown_status
+              // and not_found are temporary (Pages retries), so keep polling.
+              if (['deployment_failed', 'deployment_content_failed', 'deployment_cancelled', 'deployment_lost'].includes(status)) {
                 core.setFailed(`Pages deployment ${deploymentId} ended with status ${status}`);
                 return;
               }
+            }
+            try {
+              await github.request('POST /repos/{owner}/{repo}/pages/deployments/{deploymentId}/cancel', { owner, repo, deploymentId });
+              core.info(`Canceled deployment ${deploymentId}`);
+            } catch (error) {
+              core.warning(`Could not cancel deployment ${deploymentId}: ${error.message}`);
             }
             core.setFailed(`Pages deployment ${deploymentId} did not succeed within 8 minutes (last status: ${status})`);
 
