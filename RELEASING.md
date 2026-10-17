@@ -367,6 +367,12 @@ an earlier attempt's `deploy-feed` had already uploaded its Pages artifact. Dele
 (`gh api -X DELETE repos/pablocolaiacovo/unlatch/actions/artifacts/<id>`),
 or ship the next version instead.
 
+`deploy-feed` gives Pages a build version that is unique per run attempt and then polls the live
+feed for up to 13 minutes, failing if the tag's item is not there. Before that fix Pages
+deduplicated on the commit SHA: a stable tag on its beta's commit (v1.1.0 on v1.1.0-beta.5's)
+reported a successful deploy but left the old feed live. Re-running `appcast` on a tag cut before
+the fix repeats that, so it cannot repair such a tag; ship the next version instead.
+
 - Never use **Re-run all jobs**: `publish` fails because the release already exists.
 - Do not use **Re-run failed jobs** when only `deploy-feed` failed: it redeploys the feed artifact
   from the earlier `appcast` run, which may be stale.
