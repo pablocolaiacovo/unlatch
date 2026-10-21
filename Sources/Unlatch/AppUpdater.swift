@@ -37,8 +37,11 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private var canCheckObservation: NSKeyValueObservation?
     @ObservationIgnored private var automaticChecksObservation: NSKeyValueObservation?
 
+    #if DEBUG
     /// Assigns the three stored values and never creates a Sparkle object.
-    /// Only the debug-only preview factory below uses it.
+    /// Its only caller is the preview factory at the bottom of the file, so both are compiled
+    /// out of release builds. It stays in the class body because a designated initializer
+    /// cannot live in an extension.
     private init(
         availability: UpdaterAvailability, shortVersion: String?,
         canCheck: Bool, updateAvailable: Bool
@@ -49,6 +52,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         self.updateAvailable = updateAvailable
         super.init()
     }
+    #endif
 
     init(availability: UpdaterAvailability, shortVersion: String?) {
         self.availability = availability
