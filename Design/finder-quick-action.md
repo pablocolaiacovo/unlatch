@@ -67,7 +67,7 @@ default PDF viewer. Everything works with today's ad-hoc signed, non-sandboxed b
 | `Sources/Unlatch/AppDelegate.swift` | Own a `FinderHandoff`, set `NSApp.servicesProvider`, wire `onPanelConfirmed`, forward `application(_:open:)` | `macos-developer` |
 | `Resources/Info.plist.template` | Add `NSServices` and `CFBundleDocumentTypes` | `macos-developer` |
 | `Tests/UnlatchTests/ExternalOpenTests.swift` | New: pure helpers, plus `AppModel` hold-and-resume behaviour | `macos-developer` |
-| `Tests/UnlatchTests/FinderHandoffTests.swift` | New: `connect(to:)` never delivers inline, cold-launch bursts coalesce, `discardPending()` | `macos-developer` |
+| `Tests/UnlatchTests/FinderHandoffTests.swift` | New: `connect(to:)` never delivers inline and restarts the coalescing timer, cold-launch bursts coalesce, `discardPending()` | `macos-developer` |
 | `Tests/UnlatchTests/InfoPlistTemplateTests.swift` | Extend the existing file (Sparkle guards, `loadTemplate()`): Services and document-type guards, and the selector cross-check | `macos-developer` |
 | `README.md` | "Unlocking from Finder" under "Using the app" | `macos-developer` |
 | `.github/workflows/release.yml` | One step: `/System/Library/CoreServices/pbs -read_bundle` and plist assertions on the packaged app | `devops` |
@@ -165,10 +165,11 @@ import AppKit
 final class FinderHandoff: NSObject {
     init(coalescingDelay: Duration = .milliseconds(250))
 
-    /// Called once by AppDelegate after StatusItemController exists. Never
-    /// delivers inline: files that arrived earlier (on a cold launch, AppKit
-    /// calls application(_:open:) before applicationDidFinishLaunching,
-    /// verified in §2.8) are delivered by a later coalescing flush.
+    /// Called once by AppDelegate after StatusItemController exists. Stores
+    /// deliver and, if the buffer is non-empty (on a cold launch, AppKit calls
+    /// application(_:open:) before applicationDidFinishLaunching, verified in
+    /// §2.8), restarts the coalescing timer with the full delay. Never
+    /// delivers inline.
     func connect(to deliver: @escaping @MainActor ([URL]) -> Void)
 
     /// Open With, `open -a`, a drop on the app icon.
@@ -196,6 +197,10 @@ Behaviour:
   `public.file-url` items on it, one per file (verified). If the result is empty, it sets
   `error.pointee = "Unlatch couldn't read the selected files." as NSString` and returns. Otherwise it
   calls `receive(_:)`. It returns immediately, so the Services request never waits on PDF work.
+- **Logging.** `unlockPDFs` and `AppDelegate.application(_:open:)` each log one line on entry,
+  following the app's existing `NSLog("Unlatch: …")` convention: `NSLog("Unlatch: hand-off received
+  %d file(s) via %@", urls.count, "Services")` (or `"open"`). Manual check 5 relies on it to tell
+  when AppKit dispatched a request relative to a modal panel (§2.4).
 - **`receive(_:)`** adds the URLs to an `IncomingFiles` buffer (§2.4) and restarts a coalescing
   timer: it cancels the previous `Task`, then starts `Task { try? await Task.sleep(for: delay);
   guard !Task.isCancelled else { return }; flush() }`. `flush()` does nothing until `connect` has
@@ -205,20 +210,26 @@ Behaviour:
   call would replace the first batch (`AppModel.load` is last-wins by design). 250 ms is not
   noticeable next to an app launch or a popover animation. The Services path goes through the same
   buffer for uniformity.
-- **`connect(to:)`** stores `deliver` and **never calls `flush()` or `deliver` inline**. If a
-  coalescing `Task` is pending, `connect` leaves it alone and that task flushes when it fires. If
-  none is pending but the buffer is non-empty (the timer already fired while `deliver` was still
-  `nil`, so its `flush()` did nothing), `connect` starts a fresh coalescing timer with the full
-  delay. Two reasons:
-  - **No popover in the launch turn.** `connect` runs inside `applicationDidFinishLaunching`, in the
-    same turn that `StatusItemController` creates the status item. An inline flush would call
-    `load` → `onLoad` → `presentAndFocus()` before the button has been laid out in the menu bar.
-    Deferring it to a later turn lets the status item settle first.
-  - **Coalescing across launch.** On a cold Open With, part of a split burst (the 5 of 5 plus 4) can
-    arrive before `didFinishLaunching` and the rest just after. An inline flush in `connect` would
-    deliver the 5, then the 4 would arrive and start a second batch. `load` is last-wins, so only
-    the last 4 files would load. With the rule above, the 4 restart the same timer and all 9 are
-    delivered in one call.
+- **`connect(to:)`** has one rule: it stores `deliver`, and if the buffer is non-empty it
+  restarts the coalescing timer with the full delay, the same cancel-and-start that `receive` does.
+  It **never calls `flush()` or `deliver` inline**, and it has no branch on the timer's state. An
+  earlier timer may still be pending, or may already have fired while `deliver` was `nil` (its
+  `flush()` then did nothing). In both cases the buffer is still full, the old timer (if any) is
+  cancelled, and the restarted one delivers. This gives two properties:
+  - **At least one full delay after the status item exists.** `connect` runs inside
+    `applicationDidFinishLaunching`, right after `StatusItemController` creates the status item.
+    Because the timer is restarted rather than inherited, the earliest delivery is one full
+    `coalescingDelay` after `connect`. It is never in the launch turn, and never sooner because an
+    earlier timer happened to be about to fire. An inline flush would call `load` → `onLoad` →
+    `presentAndFocus()` before the button has been laid out in the menu bar.
+  - **It still coalesces 5 plus 4.** On a cold Open With, part of a split burst (the 5) can arrive
+    before `didFinishLaunching` and the rest (the 4) just after. `connect` restarts the timer for
+    the 5, then the 4 go through `receive`, which restarts the same timer again. One flush delivers
+    all 9 in one call. An inline flush in `connect` would deliver the 5 and let the 4 start a second
+    batch, and since `load` is last-wins only the 4 would load.
+
+  The cost is at most one extra delay (250 ms) on a cold launch with files already buffered, which
+  is not noticeable next to the launch itself.
 - **`discardPending()`** cancels the pending `Task` and empties the buffer. It never delivers.
 
 `AppDelegate` changes:
@@ -245,6 +256,7 @@ func applicationDidFinishLaunching(_ notification: Notification) {
 
 // New.
 func application(_ application: NSApplication, open urls: [URL]) {
+    NSLog("Unlatch: hand-off received %d file(s) via %@", urls.count, "open")
     finderHandoff.receive(urls)
 }
 ```
@@ -284,15 +296,20 @@ Why holding is needed: `submitPassword()` and `save()` each `await` a detached t
 back into `files`, `step`, `savedURLs`, and `savedTo`. Today nothing can call `load(_:)` while
 `step == .working`, because the working step has no controls. Finder can, so without a guard a
 finished save would mark rows of the *new* batch and jump it to `.done`. The same applies to an
-`NSOpenPanel`: `browse()` and `chooseOtherFolder()` run it modally, and an Apple event or Services
-request can still be handled during the modal session.
+`NSOpenPanel`: `browse()` and `chooseOtherFolder()` run it modally, and the design assumes AppKit
+may still dispatch a Services request or an `odoc` Apple event (`application(_:open:)`) during the
+modal session. That assumption is unverified (§2.8). The rules below are safe whether AppKit
+dispatches such requests during the modal session or queues them until `runModal()` returns, and
+manual check 5 records which one happens.
 
 `AppModel` additions:
 
 ```swift
 /// True while browse() or chooseOtherFolder() runs its modal NSOpenPanel.
 private(set) var isPresentingPanel = false
-@ObservationIgnored private var heldExternalFiles = IncomingFiles()
+/// The newest request received while busy. Each hold replaces it rather than
+/// adding to it (newest wins, §3.4). private(set) so tests can read it.
+@ObservationIgnored private(set) var heldExternalFiles = IncomingFiles()
 /// Called when the user confirms browse()'s panel. AppDelegate wires it to
 /// FinderHandoff.discardPending() so URLs still in the hand-off's
 /// coalescing buffer can't replace the panel's selection.
@@ -304,34 +321,55 @@ private(set) var isPresentingPanel = false
 func openFromOutside(_ urls: [URL])
 
 /// Loads held files if the model is no longer busy. Called where busy
-/// periods end: after the awaits in submitPassword() and save(), and after
-/// each panel closes.
+/// periods end: after the awaits in submitPassword() and save(), after
+/// chooseOtherFolder()'s panel closes, and when browse()'s panel is
+/// cancelled. A confirmed browse() discards held files instead.
 func resumeExternalOpen()
 ```
 
 Rules:
 
 - **`.loadNow`**: `load(urls)`, which already calls `onLoad` and so `presentAndFocus()`.
-- **`.holdUntilIdle` because of `.working`**: add to `heldExternalFiles` and call `onLoad?()` so
-  the popover opens on the spinner. The user sees the request was received.
-- **`.holdUntilIdle` because of a panel**: add to `heldExternalFiles` only. The panel is already in
-  front.
-- **`browse()`**: sets `isPresentingPanel` around `runModal()`. If the user confirms, everything
-  received before the panel closed is discarded, wherever it is waiting: `heldExternalFiles` is
-  emptied and `onPanelConfirmed?()` empties `FinderHandoff`'s buffer and cancels its timer. Then
-  the panel's selection is loaded. This matters because a hand-off that arrived during the modal
-  session may still be in the 250 ms buffer when `runModal()` returns (or the timer may not have
-  fired at all inside the modal run loop; the design doesn't depend on which). Without the discard,
-  its flush would call `openFromOutside` → `load` a moment later and replace the user's pick.
-  Everything runs on the main actor and `runModal()` returns synchronously, so "in a buffer when
-  the panel returns" means exactly "received before the user confirmed". A hand-off received
-  *after* the panel closes is newer than the pick and replaces it, the normal newest-wins rule
-  (§3.4). If the user cancels, `resumeExternalOpen()` loads held files. Files still in the hand-off
-  buffer are delivered by its timer as usual.
+- **`.holdUntilIdle` because of `.working`**: replace `heldExternalFiles` with the new URLs and
+  call `onLoad?()` so the popover opens on the spinner. The user sees the request was received.
+- **`.holdUntilIdle` because of a panel**: replace `heldExternalFiles` with the new URLs only. The
+  panel is already in front.
+- **Replace, not merge.** Each `openFromOutside` call is one delivery from `FinderHandoff`, which
+  has already merged a burst that Launch Services split. Two holds are therefore two separate
+  requests, and the newer one wins, consistent with last-wins `load(_:)` and §3.4. Concretely the
+  hold empties `heldExternalFiles` and then adds the new URLs, so `IncomingFiles` still drops
+  duplicates and non-file URLs within the request.
+- **`browse()`**: sets `isPresentingPanel` around `runModal()`.
+  - **Cancel**: `resumeExternalOpen()` loads held files. Files still in the hand-off buffer are
+    delivered by its timer as usual.
+  - **Confirm**: everything received before the panel closed is discarded, wherever it is waiting:
+    `heldExternalFiles` is emptied and `onPanelConfirmed?()` empties `FinderHandoff`'s buffer and
+    cancels its timer. Then the panel's selection is loaded. Without the discard, a buffered
+    hand-off's flush would call `openFromOutside` → `load` a moment later and replace the user's
+    pick.
+
+  What the user sees on a confirm depends on when AppKit hands over a request made while the panel
+  is up, which is unverified (§2.8):
+  - **Dispatched during the modal session.** `unlockPDFs` or `application(_:open:)` runs inside
+    `runModal()` and the URLs go into the hand-off buffer. The coalescing `Task` is a main-actor
+    job, and main-queue jobs run in the modal run-loop mode, so its timer can fire while the panel
+    is up. The flush then lands in `heldExternalFiles`, because `isPresentingPanel` is true. If the
+    user confirms within 250 ms, the URLs are still in the hand-off buffer instead. Either way the
+    confirm discards them: the request (set A) is dropped and the panel's selection (set B) loads.
+    Everything runs on the main actor and `runModal()` returns synchronously, so "waiting somewhere
+    when the panel returns" means exactly "received before the user confirmed".
+  - **Queued until `runModal()` returns.** The request is handled only after the confirm has
+    discarded and loaded set B. It reaches the hand-off buffer as a request newer than the pick,
+    and its flush replaces set B with set A about 250 ms later. That is the normal newest-wins rule
+    (§3.4) and is acceptable: from the app's point of view the request did arrive after the pick.
+
+  A hand-off received after the panel closes is newer than the pick and replaces it, by the same
+  rule.
 - **`chooseOtherFolder()`**: sets `isPresentingPanel` around `runModal()`, then
-  `resumeExternalOpen()`.
+  `resumeExternalOpen()` on both confirm and cancel. Whether resuming after a confirmed folder pick
+  is intended is open question 5.
 - **End of `submitPassword()`'s and `save()`'s tasks**: `resumeExternalOpen()`, so the newest
-  request wins. After a save this replaces the done step. The files were written, but the
+  request wins. Only the newest request held during the work is kept (replace, above). After a save this replaces the done step. The files were written, but the
   "Saved" confirmation for the previous batch isn't shown. That window is normally under a second,
   so this is accepted rather than queueing a second flow (§3.4).
 - **Mid-flow, not busy** (`.password` with a half-typed password, `.destination`, `.done`): the new
@@ -445,6 +483,13 @@ apart from a baseline `swift build` and `swift test` on `main`, both clean.
   -1719), so Finder's menus couldn't be read. Secondary sources say plain Services sit at the bottom
   of the menu, or in a Services submenu when there are more than a few, while Quick Actions has its
   own submenu [Six Colors].
+- **Whether AppKit dispatches a Services request or an `odoc` Apple event while
+  `NSOpenPanel.runModal()` is running**, or queues it until the modal session ends. Nobody has
+  checked this. §2.4's discard on confirm is safe either way, but the visible result of manual
+  check 5b differs: set B stays if requests are dispatched during the modal session, and set A
+  replaces it about 250 ms after the confirm if they are queued. Check 5 records which happens.
+  (That main-actor `Task` jobs run while the panel is up is not in question: they go through the
+  main queue, which the modal run-loop mode services.)
 - Whether Finder's multi-file Open With arrives in one `application(_:open:)` call. Coalescing
   makes the answer irrelevant, including on a cold launch (§2.3, manual check 2b).
 - Whether handing files over through Services or Open With triggers a Files and Folders (TCC) prompt
@@ -546,6 +591,11 @@ Queueing would preserve every done screen, but it needs a visible queue ("2 more
 and turns a single-batch popover into a multi-batch one. Newest-wins matches what `load(_:)`
 already does for the picker, and only the narrow `.working` window needs holding. **Newest wins.**
 
+The same rule applies to held files: a request held while busy replaces any request held before it
+(§2.4), and the newest held request loads when the work ends. The only merge is inside
+`FinderHandoff`, which coalesces a burst that Launch Services split from one user action, because
+that is one request, not two.
+
 ### 3.5 No Xcode project
 
 When #14 was filed it listed #7 (packaging the app bundle) as a dependency, on the expectation that
@@ -573,7 +623,11 @@ nothing is blocking. Neither the chosen design nor the deferred extension needs 
   `onLoad` synchronously, so counting `onLoad` calls observes it without awaiting classification.
   - From `.idle`, `openFromOutside([u])` calls `onLoad` once.
   - With `step = .working`, `openFromOutside([u])` calls `onLoad` once (the popover opens on the
-    spinner), leaves `files` unchanged, and holds `u`.
+    spinner), leaves `files` unchanged, and holds `u` (`heldExternalFiles.urls == [u]`).
+  - **A newer hold replaces the older one.** With `step = .working`, `openFromOutside([a])` then
+    `openFromOutside([b])` leaves `heldExternalFiles.urls == [b]`, not `[a, b]` (§2.4, §3.4). Then
+    setting `step = .password` and calling `resumeExternalOpen()` fires `onLoad` and empties
+    `heldExternalFiles`.
   - Setting `step = .password` and then calling `resumeExternalOpen()` loads, so `onLoad` fires
     again. A second `resumeExternalOpen()` does nothing.
   - `openFromOutside([])` does nothing.
@@ -596,22 +650,35 @@ mention this design next to `Design/sparkle-updates.md`. Add:
 - `CFBundleDocumentTypes` has one PDF entry: role `Viewer`, rank `Alternate`, and `LSItemContentTypes
   == ["com.adobe.pdf"]`.
 
-`FinderHandoffTests.swift` (`@MainActor`, with `FinderHandoff(coalescingDelay: .milliseconds(50))`
-and a recording `deliver` closure that appends each call's `[URL]` to an array):
+`FinderHandoffTests.swift`. Every case is a `@MainActor @Test`. Each builds a `FinderHandoff`
+with a short real delay and a recording `deliver` closure (or a small `@MainActor` recorder class)
+that appends each call's `[URL]` to an array. There is no injectable clock: the tests use the real
+`Task.sleep` delay. **Positive checks** poll in 20 ms `Task.sleep` steps for up to 2 s until the
+expected call appears. **Negative checks** sleep for a fixed window and then expect no new call.
 
-- **`connect` never delivers inline.** `receive([a, b])`, then `connect(to: record)`, then
+- **`connect` never delivers inline** (delay 50 ms). `receive([a, b])`, `connect(to: record)`, then
   `#expect(calls.isEmpty)` on the very next line. This is deterministic: nothing can run between
-  the two statements on the main actor.
-- **Cold-launch burst coalesces.** `receive` 5 URLs, `connect(to: record)`, `receive` 4 more, then
-  poll (`Task.sleep` in 20 ms steps, up to 2 s) until `calls` is non-empty. Expect exactly one call,
-  with all 9 URLs in order. Sleep another 200 ms and expect still one call.
-- **Timer already fired before `connect`.** `receive([a])`, sleep 200 ms (the timer fires with no
-  `deliver`), `connect(to: record)`, `#expect(calls.isEmpty)`, then poll: one call with `[a]`.
-- **`discardPending()`.** After `connect`, `receive([a])`, `discardPending()`, sleep 200 ms: no
-  call. A later `receive([b])` delivers `[b]` alone.
+  the two statements on the main actor. Then poll: exactly one call, `[a, b]`.
+- **`connect` delivers files buffered before it when no timer is pending** (delay 50 ms).
+  `receive([a])`, then a fixed 200 ms wait so the first timer fires while `deliver` is `nil` and
+  does nothing. `connect(to: record)`, `#expect(calls.isEmpty)`, then poll: one call with `[a]`.
+  Without the restart in `connect`, nothing would ever deliver `[a]`, so this case fails if the rule
+  is missing.
+- **`connect` restarts the timer with the full delay** (delay 400 ms). `receive([a])`, wait 300 ms,
+  `connect(to: record)`, then a fixed 200 ms negative window: no call. An inherited timer would
+  have fired about 100 ms after `connect`, and the restarted one fires about 400 ms after it, so the
+  window sits between the two with about 100 ms of margin on the inherited side and 200 ms on the
+  restarted side. Then poll: exactly one call with `[a]`.
+- **Cold-launch burst coalesces** (delay 50 ms). `receive` 5 URLs, `connect(to: record)`, `receive`
+  4 more, then poll until `calls` is non-empty. Expect exactly one call with all 9 URLs in order.
+  Then a fixed 200 ms negative window: still one call.
+- **`discardPending()`** (delay 50 ms). After `connect`, `receive([a])`, `discardPending()`, then a
+  fixed 200 ms negative window: no call. A later `receive([b])` is polled for and delivers `[b]`
+  alone.
 
-The polling bounds are generous next to the 50 ms delay, so these don't depend on scheduler
-timing. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh` don't change.
+The 2 s polling bound is generous next to the delays, so positive checks don't depend on scheduler
+timing. The negative windows are at least four times the 50 ms delay, except in the restart case,
+where the margins are stated above. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh` don't change.
 
 ### CI (`devops`, `release.yml` `build-and-package`)
 
@@ -660,12 +727,23 @@ print(NSPerformService(CommandLine.arguments[1], pb))   // "Unlock with Unlatch"
 4. **Selection rules.** With a PDF plus a `.txt` selected, the entry and Open With > Unlatch don't
    appear. Open With > Unlatch on two PDFs gives one batch of two. Preview stays the default for
    double-click.
-5. **Panel open.** Use two disjoint sets of PDFs: set A for `perform`, set B for the panel.
+5. **Panel open.** Use two disjoint sets of PDFs: set A for `perform`, set B for the panel. In a
+   second Terminal window, run `log stream --process Unlatch --predicate 'eventMessage BEGINSWITH
+   "Unlatch: hand-off"'` to watch the hand-off log line (§2.3). This check also answers the §2.8
+   question of whether AppKit dispatches requests during a modal panel.
    - a. Click "Choose PDFs…". While the panel is up, run `./perform "Unlock with Unlatch" A1.pdf
-     A2.pdf` from Terminal, wait two seconds, then **cancel** the panel. Set A loads.
-   - b. Click "Choose PDFs…", run the same `perform`, wait two seconds, select set B, and
-     **confirm**. Set B loads. Wait another two seconds: the popover still shows set B, and set A
-     never appears.
+     A2.pdf` from Terminal and wait two seconds. **Record** whether the hand-off line (`via
+     Services`, from `unlockPDFs`; `via open` if it came through `application(_:open:)`) is logged
+     while the panel is still up, and whether `perform` prints before the panel closes. Then
+     **cancel** the panel. Set A loads in either case: held and resumed if the request was
+     dispatched during the panel, or delivered by the hand-off timer if it was queued.
+   - b. Click "Choose PDFs…", run the same `perform`, wait two seconds, and **record** the same two
+     things. Then select set B and **confirm**. Expected result, by what was recorded:
+     - **Logged while the panel was up** (dispatched during the modal session): set B loads. Wait
+       another two seconds: the popover still shows set B, and set A never appears.
+     - **Logged only after the confirm** (queued until `runModal()` returns): set B loads, then set
+       A replaces it about 250 ms later. That is newest-wins (§3.4) and passes.
+     Post the recorded outcome on #14 with the T2 PR.
    - c. With set B loaded on the password step, run `perform` with set A again. Set A replaces it
      (newest wins, §3.4).
 6. **Clean machine (beta smoke test, RELEASING.md step 3).** After the README's first-launch steps,
@@ -709,6 +787,10 @@ Suggested title: "Prepare the popover flow to receive PDFs from outside the app"
   `openFromOutside(_:)`, and `resumeExternalOpen()`. Set `isPresentingPanel` around both
   `runModal()` calls, call `resumeExternalOpen()` at the four points in §2.4, and on a confirmed
   `browse()` empty `heldExternalFiles` and call `onPanelConfirmed?()` before `load(panel.urls)`.
+  Each hold replaces `heldExternalFiles` rather than adding to it.
+- Handle open question 7 (a superseded batch's Save stays live while the new batch loads) once it
+  is decided. T1 is not done until a load from a step that shows Save can't let the old batch's
+  save write into the new one.
 - `Tests/UnlatchTests/ExternalOpenTests.swift` as in §4.
 - Nothing calls `openFromOutside` yet.
 
@@ -725,10 +807,12 @@ Suggested title: "Unlock PDFs from Finder's right-click menu".
 
 Depends on T1, and on M1 for the `NSIconName` decision.
 
-- Add `Sources/Unlatch/FinderHandoff.swift` (§2.3), including `discardPending()` and the rule that
-  `connect(to:)` never delivers inline.
+- Add `Sources/Unlatch/FinderHandoff.swift` (§2.3), including `discardPending()`, the `connect(to:)`
+  rule (store `deliver`, restart the timer if the buffer is non-empty, never deliver inline), and
+  the hand-off log line in `unlockPDFs`.
 - `AppDelegate` wiring (§2.3): the three new lines after the existing
-  `StatusItemController(model: model, updater: updater)` call, plus `application(_:open:)`.
+  `StatusItemController(model: model, updater: updater)` call, plus `application(_:open:)` with its
+  log line.
 - `Resources/Info.plist.template`: the §2.2 keys, with comments. Add `NSIconName` only if M1 says
   so.
 - Extend `Tests/UnlatchTests/InfoPlistTemplateTests.swift` with the §4 Services, document-type,
@@ -745,7 +829,8 @@ Acceptance criteria:
   `nonisolated(unsafe)` or `@unchecked Sendable` added.
 - The `FinderHandoffTests` pass, in particular: after `receive` of 5 URLs, `connect`, and
   `receive` of 4 more, `deliver` is not called inline and is then called exactly once with all 9.
-- With a `package-app.sh` bundle in `/Applications`, manual checks 2 (both 2a and 2b) to 5 pass.
+- With a `package-app.sh` bundle in `/Applications`, manual checks 2 (both 2a and 2b) to 5 pass,
+  and check 5's recorded dispatch behaviour is in the PR.
   Paste the
   `/System/Library/CoreServices/pbs -dump | grep -A12 com.pablocolaiacovo.unlatch` output and a
   screenshot of the context menu into the PR.
@@ -791,7 +876,8 @@ Depends on T2 only. Land it before the first v1.2 beta if possible (see the plan
 
 ## 6. Open questions
 
-1. **`needs-decision`: Is a Services entry enough for "Finder Quick Action"?** The entry shows in
+1. **Resolved 2026-10-09 (was `needs-decision`): Is a Services entry enough for "Finder Quick
+   Action"?** The entry shows in
    Finder's right-click menu under Services (or possibly Quick Actions, per M1), not as a guaranteed
    Quick Actions or Preview-pane item.
    **Recommendation:** yes. Ship Services and Open With in v1.2. `project-owner` files a Backlog
@@ -801,12 +887,14 @@ Depends on T2 only. Land it before the first v1.2 beta if possible (see the plan
 2. **List Unlatch in Open With for PDFs (`Alternate` rank)?**
    **Recommendation:** yes. It's a second Finder route at no signing cost, it never changes the
    default viewer (verified), and it is what makes `open -a` and drops on the app icon work.
-3. **`needs-decision`: Drop #14's dependency on #8 and rewrite its last checkbox.**
+3. **Resolved 2026-10-09 (was `needs-decision`): Drop #14's dependency on #8 and rewrite its last
+   checkbox.**
    **Recommendation:** yes. Replace "verify the extension is registered from a signed, notarized
    bundle" with "verify the Finder entry from a browser-downloaded release on a clean machine (T4),
    and again under Developer ID when #8 lands". The chosen mechanism has no Team ID or notarization
    dependency (§2.6, §2.7), so v1.2 doesn't need to wait on a paid membership. Keep #14 in v1.2.
-   `project-owner` edits the issue text once this is decided.
+   `project-owner` has since edited the issue text accordingly; it now reads as quoted at the top
+   of this document.
 4. **Menu item wording.**
    **Recommendation:** "Unlock with Unlatch". It names the action and the app, the way Services
    entries are expected to, and fits the README's language. "Remove PDF Password" was considered,
@@ -817,6 +905,32 @@ Services entry plus Open With is enough for #14 in v1.2, and the Quick Action ap
 follow-up is filed only if M1 shows the entry does not land in Quick Actions. #14 no longer depends
 on #8, and its last checkbox is rewritten as in question 3. The menu item reads "Unlock with
 Unlatch".
+
+### Raised in review, not yet decided
+
+These came up in the 2026-10-21 re-review of PR #56. None has a decision yet, and this document
+does not make one.
+
+5. **Confirming `chooseOtherFolder()` resumes held files.** As designed (§2.4),
+   `chooseOtherFolder()` calls `resumeExternalOpen()` after its panel closes whether the user
+   confirms or cancels. On a confirm, held files then load and replace the batch the user just
+   chose a folder for. That does not match `browse()`, where a confirm discards anything received
+   during the panel. Is that intended, or should a confirmed folder pick discard held files (or
+   keep holding them) the way a confirmed `browse()` does?
+6. **Manual check 5 coverage.** Check 5 drives only the Services entry (`perform`) during the
+   "Choose PDFs…" panel. It does not cover Open With (`application(_:open:)`) arriving during a
+   panel, and it does not cover the "Choose folder…" panel from `chooseOtherFolder()`. Should check
+   5 grow cases for those, or is the Services case enough to stand for them?
+7. **A superseded batch's Save stays live while the new batch loads.** This is a gap the design
+   introduces, not one on `main`: today `load(_:)` only starts from the idle step, which has no
+   Save button. With this design, `openFromOutside` (`.loadNow`) and `resumeExternalOpen()` can
+   call `load(_:)` from `.destination`, and from other steps that show Save. `load` changes `step`
+   only after classification finishes, so until then the old batch's Save is still enabled. A
+   click in that window starts `save()` for the old batch, and its completion can write into the
+   new batch, which is exactly what Goal 3 rules out. T1 must handle it. Possible fixes include
+   disabling Save while a load is in flight, or having `save()` ignore its result when the batch
+   it started with has been superseded (for example by checking `loadGeneration`). Which one is
+   open.
 
 ## Sources
 
