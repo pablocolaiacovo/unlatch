@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The 372 pt popover panel: header, current step, the persistent file rows
 /// section, and a footer with an ellipsis menu (installed version, update
-/// check, Open at Login), the "Update Available" button when there is one,
+/// check, Check Automatically, Open at Login), the "Update Available" button when there is one,
 /// and the Quit control.
 struct PopoverView: View {
     @Bindable var model: AppModel
@@ -63,10 +63,12 @@ struct PopoverView: View {
     /// row itself (Design/sparkle-updates.md §2.4.2).
     private var footer: some View {
         let update = updateFooterPresentation(for: updater.buttonState)
+        let automatic = automaticChecksMenuItem(
+            availability: updater.availability, isOn: updater.automaticallyChecksForUpdates)
         return HStack(spacing: 6) {
             if update.showsUpdateIndicator { updateAvailableButton }
             Spacer()
-            moreMenu(update)
+            moreMenu(update, automaticChecks: automatic)
                 .overlay(alignment: .topTrailing) {
                     if update.showsUpdateIndicator { updateDot }
                 }
@@ -76,12 +78,15 @@ struct PopoverView: View {
         .frame(height: 26)
     }
 
-    /// Version (a disabled item), the update item, and Open at Login. Open at
+    /// Version (a disabled item), the update item, Check Automatically, and Open at
+    /// Login. Check Automatically mirrors Sparkle's setting the same way. Open at
     /// Login shows the system's login item state, not a stored preference; see
     /// `loginItemControl(for:)`. A menu item does not flip itself on click, so
     /// the checkmark always reads `model.loginItem.isOn`.
     @ViewBuilder
-    private func moreMenu(_ update: UpdateFooterPresentation) -> some View {
+    private func moreMenu(
+        _ update: UpdateFooterPresentation, automaticChecks: AutomaticChecksMenuItem?
+    ) -> some View {
         let control = model.loginItem
         let menu = Menu {
             Text(Self.versionText)
@@ -89,6 +94,14 @@ struct PopoverView: View {
             if let title = update.menuItemTitle {
                 Button(title) { updater.checkForUpdates() }
                     .disabled(!update.menuItemEnabled)
+            }
+            if let automaticChecks {
+                Toggle(
+                    automaticChecks.title,
+                    isOn: Binding(
+                        get: { automaticChecks.isChecked },
+                        set: { updater.setAutomaticallyChecksForUpdates($0) })
+                )
             }
             Toggle(
                 "Open at Login",
