@@ -75,7 +75,9 @@ if [[ -n "$CURRENT" ]]; then
   # A beta must never replace a stable item for the same build: that would
   # demote a live stable release to the beta channel. Defensive: since #77 a
   # stable tag has its own commit and build number, so this only trips on a
-  # beta and stable tag that share a commit, which release.yml now refuses.
+  # beta and stable tag that share a commit. release.yml refuses that when the
+  # earlier tag's Pages deploy succeeded, but not in the cases listed in
+  # Scripts/check-pages-commit.sh, so this guard still matters.
   if [[ -n "$CHANNEL" ]]; then
     STABLE_SAME_BUILD="$(xmllint --xpath "count(//item[*[local-name()='version'][.='$BUILD'] and not(*[local-name()='channel'])])" "$CURRENT")"
     [[ "$STABLE_SAME_BUILD" == "0" ]] || die "the current feed already has a stable item for build $BUILD; refusing to replace it with beta $TAG"
