@@ -315,7 +315,7 @@ func rowInfo(for file: LoadedFile, done: Bool) -> RowInfo {
                 : "No open password — permissions only")
     case .plain:
         return RowInfo(
-            badge: "i", tone: .warning,
+            badge: "i", tone: .neutral,
             note: done && file.unlocked
                 ? "Not encrypted — copied as-is"
                 : "Not encrypted — nothing to unlock")

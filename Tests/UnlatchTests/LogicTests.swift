@@ -118,11 +118,22 @@ private func file(
 @Test func plainRowPendingAndDone() {
     let pending = rowInfo(for: file(.plain), done: false)
     #expect(pending == RowInfo(
-        badge: "i", tone: .warning, note: "Not encrypted — nothing to unlock"))
+        badge: "i", tone: .neutral, note: "Not encrypted — nothing to unlock"))
 
     let done = rowInfo(for: file(.plain, unlocked: true), done: true)
     #expect(done == RowInfo(
-        badge: "i", tone: .warning, note: "Not encrypted — copied as-is"))
+        badge: "i", tone: .neutral, note: "Not encrypted — copied as-is"))
+}
+
+@Test func plainRowsAreNeutralWhileOwnerRowsStayWarning() {
+    for done in [false, true] {
+        let plain = rowInfo(for: file(.plain, unlocked: done), done: done)
+        #expect(plain.badge == "i")
+        #expect(plain.tone == .neutral)
+        let owner = rowInfo(for: file(.owner, unlocked: done), done: done)
+        #expect(owner.badge == "i")
+        #expect(owner.tone == .warning)
+    }
 }
 
 @Test func plainAndOwnerNotesAreDistinct() {
