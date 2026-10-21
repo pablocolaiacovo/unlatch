@@ -32,6 +32,7 @@ enum PopoverFixture: String, CaseIterable, Sendable {
             model.files = [
                 Self.file("Bank statement 2026-09.pdf", .encrypted),
                 Self.file("Lease agreement.pdf", .owner),
+                Self.file("Meeting notes.pdf", .plain),
             ]
             model.destination = .suffix
             model.step = .destination
@@ -45,6 +46,7 @@ enum PopoverFixture: String, CaseIterable, Sendable {
             var files = [
                 Self.file("Bank statement 2026-09.pdf", .encrypted),
                 Self.file("Payslip September.pdf", .encrypted),
+                Self.file("Meeting notes.pdf", .plain),
             ]
             for index in files.indices { files[index].unlocked = true }
             model.files = files
