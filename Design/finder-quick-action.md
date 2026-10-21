@@ -5,9 +5,13 @@ The maintainer's comments on the issue frame it:
 
 - Dropping PDFs on the menu bar icon is not viable (#15), so a Finder entry is the planned
   Finder-integrated way into Unlatch.
-- On 2026-10-09 the issue moved from v1.1 to v1.2. It needs this design first, and its last
-  checkbox asks for verification "from a signed, notarized bundle", which looks like a dependency on
-  #8 (Developer ID). #8 is deferred in Backlog behind a paid membership.
+- On 2026-10-09 the issue moved from v1.1 to v1.2, pending this design. At the time its last
+  checkbox asked for verification "from a signed, notarized bundle", a dependency on #8 (Developer
+  ID), which is deferred in Backlog behind a paid membership.
+- After this design, the maintainer accepted its open questions (2026-10-09, §6). The issue now
+  reads: "Verify the Finder entry from a browser-downloaded release on a clean machine, and again
+  under Developer ID when #8 lands", and its "Depends on" section says nothing is blocking, #7 is
+  closed, and #8 is not a prerequisite.
 
 This design finds that the recommended mechanism does **not** need #8, an app extension, an Xcode
 project, entitlements, or any change to the signing order in `Scripts/package-app.sh`. A true
@@ -35,7 +39,8 @@ default PDF viewer. Everything works with today's ad-hoc signed, non-sandboxed b
    inside-out signing from PR #52, and the release workflow's signature checks stay valid
    unchanged.
 5. The issue's registration check becomes concrete and runnable under ad-hoc signing: a headless CI
-   check (`pbs -read_bundle`) plus a clean-machine check in the beta smoke test.
+   check (`/System/Library/CoreServices/pbs -read_bundle`) plus a clean-machine check in the beta
+   smoke test. `pbs` is not on `PATH`, so every command in this document uses its full path.
 
 ### Non-goals
 
@@ -57,14 +62,15 @@ default PDF viewer. Everything works with today's ad-hoc signed, non-sandboxed b
 | File | Change | Owner |
 | --- | --- | --- |
 | `Sources/Unlatch/Logic.swift` | Add `IncomingFiles`, `ExternalOpenAction`, `externalOpenAction(step:isPresentingPanel:)` | `macos-developer` |
-| `Sources/Unlatch/AppModel.swift` | Add `openFromOutside(_:)`, `resumeExternalOpen()`, `isPresentingPanel`, and the held-files buffer. Call `resumeExternalOpen()` where work ends | `macos-developer` |
+| `Sources/Unlatch/AppModel.swift` | Add `openFromOutside(_:)`, `resumeExternalOpen()`, `isPresentingPanel`, `onPanelConfirmed`, and the held-files buffer. Call `resumeExternalOpen()` where work ends | `macos-developer` |
 | `Sources/Unlatch/FinderHandoff.swift` | New: the Services provider, the cold-launch buffer, and burst coalescing | `macos-developer` |
-| `Sources/Unlatch/AppDelegate.swift` | Own a `FinderHandoff`, set `NSApp.servicesProvider`, forward `application(_:open:)` | `macos-developer` |
+| `Sources/Unlatch/AppDelegate.swift` | Own a `FinderHandoff`, set `NSApp.servicesProvider`, wire `onPanelConfirmed`, forward `application(_:open:)` | `macos-developer` |
 | `Resources/Info.plist.template` | Add `NSServices` and `CFBundleDocumentTypes` | `macos-developer` |
 | `Tests/UnlatchTests/ExternalOpenTests.swift` | New: pure helpers, plus `AppModel` hold-and-resume behaviour | `macos-developer` |
-| `Tests/UnlatchTests/InfoPlistTemplateTests.swift` | Extend, or create if Sparkle's T2 hasn't landed: Services and document-type guards, and the selector cross-check | `macos-developer` |
+| `Tests/UnlatchTests/FinderHandoffTests.swift` | New: `connect(to:)` never delivers inline, cold-launch bursts coalesce, `discardPending()` | `macos-developer` |
+| `Tests/UnlatchTests/InfoPlistTemplateTests.swift` | Extend the existing file (Sparkle guards, `loadTemplate()`): Services and document-type guards, and the selector cross-check | `macos-developer` |
 | `README.md` | "Unlocking from Finder" under "Using the app" | `macos-developer` |
-| `.github/workflows/release.yml` | One step: `pbs -read_bundle` and plist assertions on the packaged app | `devops` |
+| `.github/workflows/release.yml` | One step: `/System/Library/CoreServices/pbs -read_bundle` and plist assertions on the packaged app | `devops` |
 | `RELEASING.md` | One line in the step 3 smoke test | `project-owner` |
 
 `Scripts/package-app.sh` does not change. `Package.swift` does not change. `UnlatchCore`,
@@ -140,8 +146,9 @@ Notes:
 - **No `NSKeyEquivalent`.** Users can assign one in System Settings > Keyboard > Keyboard
   Shortcuts > Services > Files and Folders, which is also where they can turn the entry off.
 
-The two version placeholders are unaffected. If Sparkle's T2 has landed, its `SU*` keys sit next to
-these with no interaction.
+The two version placeholders are unaffected. The Sparkle `SU*` keys already in the template sit next
+to these with no interaction, and the existing Sparkle guards in
+`Tests/UnlatchTests/InfoPlistTemplateTests.swift` keep passing unchanged.
 
 ### 2.3 The hand-off: `FinderHandoff`
 
@@ -158,14 +165,20 @@ import AppKit
 final class FinderHandoff: NSObject {
     init(coalescingDelay: Duration = .milliseconds(250))
 
-    /// Called once by AppDelegate after StatusItemController exists. Files
-    /// that arrived earlier are delivered then: on a cold launch, AppKit
-    /// calls application(_:open:) before applicationDidFinishLaunching
-    /// (verified, §2.8).
+    /// Called once by AppDelegate after StatusItemController exists. Never
+    /// delivers inline: files that arrived earlier (on a cold launch, AppKit
+    /// calls application(_:open:) before applicationDidFinishLaunching,
+    /// verified in §2.8) are delivered by a later coalescing flush.
     func connect(to deliver: @escaping @MainActor ([URL]) -> Void)
 
     /// Open With, `open -a`, a drop on the app icon.
     func receive(_ urls: [URL])
+
+    /// Drops buffered URLs and cancels the pending flush. AppModel calls it
+    /// (through onPanelConfirmed) when the user confirms the "Choose PDFs…"
+    /// panel, so a hand-off received before that point can't replace the
+    /// panel's selection (§2.4).
+    func discardPending()
 
     /// Services entry point. The selector must match NSMessage "unlockPDFs"
     /// in Resources/Info.plist.template.
@@ -192,7 +205,21 @@ Behaviour:
   call would replace the first batch (`AppModel.load` is last-wins by design). 250 ms is not
   noticeable next to an app launch or a popover animation. The Services path goes through the same
   buffer for uniformity.
-- **`connect(to:)`** stores `deliver` and calls `flush()` if anything is buffered.
+- **`connect(to:)`** stores `deliver` and **never calls `flush()` or `deliver` inline**. If a
+  coalescing `Task` is pending, `connect` leaves it alone and that task flushes when it fires. If
+  none is pending but the buffer is non-empty (the timer already fired while `deliver` was still
+  `nil`, so its `flush()` did nothing), `connect` starts a fresh coalescing timer with the full
+  delay. Two reasons:
+  - **No popover in the launch turn.** `connect` runs inside `applicationDidFinishLaunching`, in the
+    same turn that `StatusItemController` creates the status item. An inline flush would call
+    `load` → `onLoad` → `presentAndFocus()` before the button has been laid out in the menu bar.
+    Deferring it to a later turn lets the status item settle first.
+  - **Coalescing across launch.** On a cold Open With, part of a split burst (the 5 of 5 plus 4) can
+    arrive before `didFinishLaunching` and the rest just after. An inline flush in `connect` would
+    deliver the 5, then the 4 would arrive and start a second batch. `load` is last-wins, so only
+    the last 4 files would load. With the rule above, the 4 restart the same timer and all 9 are
+    delivered in one call.
+- **`discardPending()`** cancels the pending `Task` and empties the buffer. It never delivers.
 
 `AppDelegate` changes:
 
@@ -201,19 +228,31 @@ private let finderHandoff = FinderHandoff()
 
 func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
-    statusItemController = StatusItemController(model: model)
+    let info = Bundle.main.infoDictionary
+    let updater = AppUpdater(
+        availability: updaterAvailability(
+            bundleURL: Bundle.main.bundleURL,
+            feedURL: info?["SUFeedURL"] as? String,
+            publicEDKey: info?["SUPublicEDKey"] as? String),
+        shortVersion: info?["CFBundleShortVersionString"] as? String)
+    self.updater = updater
+    statusItemController = StatusItemController(model: model, updater: updater)
+    // New: after StatusItemController, which sets model.onLoad.
     NSApp.servicesProvider = finderHandoff
+    model.onPanelConfirmed = { [finderHandoff] in finderHandoff.discardPending() }
     finderHandoff.connect { [model] urls in model.openFromOutside(urls) }
 }
 
+// New.
 func application(_ application: NSApplication, open urls: [URL]) {
     finderHandoff.receive(urls)
 }
 ```
 
-Setting `servicesProvider` in `applicationDidFinishLaunching` is enough. On a cold launch through
-the Services entry, the request arrived after `didFinishLaunching` (verified). If Sparkle's T3 has
-landed, these lines sit next to the updater setup. They don't interact.
+The three new lines go after the existing `StatusItemController(model:updater:)` call, because
+`StatusItemController.init` is what sets `model.onLoad`. The updater setup is unchanged and doesn't
+interact with them. Setting `servicesProvider` in `applicationDidFinishLaunching` is enough: on a
+cold launch through the Services entry, the request arrived after `didFinishLaunching` (verified).
 
 ### 2.4 Pure helpers (`Logic.swift`) and `AppModel`
 
@@ -254,6 +293,10 @@ request can still be handled during the modal session.
 /// True while browse() or chooseOtherFolder() runs its modal NSOpenPanel.
 private(set) var isPresentingPanel = false
 @ObservationIgnored private var heldExternalFiles = IncomingFiles()
+/// Called when the user confirms browse()'s panel. AppDelegate wires it to
+/// FinderHandoff.discardPending() so URLs still in the hand-off's
+/// coalescing buffer can't replace the panel's selection.
+@ObservationIgnored var onPanelConfirmed: (@MainActor () -> Void)?
 
 /// Entry point for files from Finder. Same effect as choosing them with
 /// browse(): replaces the current batch and opens the popover. Holds them
@@ -273,9 +316,18 @@ Rules:
   the popover opens on the spinner. The user sees the request was received.
 - **`.holdUntilIdle` because of a panel**: add to `heldExternalFiles` only. The panel is already in
   front.
-- **`browse()`**: sets `isPresentingPanel` around `runModal()`. If the user confirms, the panel's
-  selection is loaded and held files are discarded, because the panel is the action the user
-  completed last. If they cancel, `resumeExternalOpen()`.
+- **`browse()`**: sets `isPresentingPanel` around `runModal()`. If the user confirms, everything
+  received before the panel closed is discarded, wherever it is waiting: `heldExternalFiles` is
+  emptied and `onPanelConfirmed?()` empties `FinderHandoff`'s buffer and cancels its timer. Then
+  the panel's selection is loaded. This matters because a hand-off that arrived during the modal
+  session may still be in the 250 ms buffer when `runModal()` returns (or the timer may not have
+  fired at all inside the modal run loop; the design doesn't depend on which). Without the discard,
+  its flush would call `openFromOutside` → `load` a moment later and replace the user's pick.
+  Everything runs on the main actor and `runModal()` returns synchronously, so "in a buffer when
+  the panel returns" means exactly "received before the user confirmed". A hand-off received
+  *after* the panel closes is newer than the pick and replaces it, the normal newest-wins rule
+  (§3.4). If the user cancels, `resumeExternalOpen()` loads held files. Files still in the hand-off
+  buffer are delivered by its timer as usual.
 - **`chooseOtherFolder()`**: sets `isPresentingPanel` around `runModal()`, then
   `resumeExternalOpen()`.
 - **End of `submitPassword()`'s and `save()`'s tasks**: `resumeExternalOpen()`, so the newest
@@ -346,14 +398,15 @@ hardened runtime and timestamp come for free.
 ### 2.8 Verified during design (Swift 6.4, Xcode 27.0 27A266a, macOS 27.0.1, this Mac)
 
 I checked these with throwaway bundles in `/tmp/fqa-exp`, then unregistered them and deleted them
-(`pluginkit`, `pbs -dump`, and `lsregister -dump` show no leftovers). The repository was not touched,
+(`pluginkit`, `/System/Library/CoreServices/pbs -dump`, and `lsregister -dump` show no
+leftovers). The repository was not touched,
 apart from a baseline `swift build` and `swift test` on `main`, both clean.
 
 **Verified:**
 
 1. An ad-hoc signed (`flags=0x2(adhoc)`, `TeamIdentifier=not set`), non-sandboxed `LSUIElement`
-   app with the `NSServices` entry from §2.2 shows up in `pbs -dump` after `lsregister -f` and
-   `pbs -update`. It needed no entitlements.
+   app with the `NSServices` entry from §2.2 shows up in `/System/Library/CoreServices/pbs -dump`
+   after `lsregister -f` and `/System/Library/CoreServices/pbs -update`. It needed no entitlements.
 2. `NSPerformService("Unlock with …", pasteboard)` with two PDF file URLs, while the app was **not
    running**, launched it. Order of events: `applicationWillFinishLaunching`, then
    `applicationDidFinishLaunching` (where `servicesProvider` was set), then one provider call with
@@ -370,8 +423,8 @@ apart from a baseline `swift build` and `swift test` on `main`, both clean.
    bundles under `/tmp` as `in-temp-dir` and leaves them out of Open With, so this check needs a
    non-temporary path.
 6. A quarantined (`com.apple.quarantine` set), never-launched copy's service is registered by `pbs`.
-7. `pbs -read_bundle <app>` prints the parsed service entries **without registering** them. It is
-   usable as a CI check.
+7. `/System/Library/CoreServices/pbs -read_bundle <app>` prints the parsed service entries
+   **without registering** them. It is usable as a CI check.
 8. App extension feasibility, for §3.2:
    - An appex hand-built with `swiftc -parse-as-library -application-extension … -Xlinker -e
      -Xlinker _NSExtensionMain` (Xcode's own `LD_ENTRY_POINT` for app extensions, from
@@ -393,7 +446,7 @@ apart from a baseline `swift build` and `swift test` on `main`, both clean.
   of the menu, or in a Services submenu when there are more than a few, while Quick Actions has its
   own submenu [Six Colors].
 - Whether Finder's multi-file Open With arrives in one `application(_:open:)` call. Coalescing
-  makes the answer irrelevant.
+  makes the answer irrelevant, including on a cold launch (§2.3, manual check 2b).
 - Whether handing files over through Services or Open With triggers a Files and Folders (TCC) prompt
   for `~/Desktop`, `~/Documents`, or `~/Downloads`, compared with choosing them in the picker.
 - Registration on a clean Mac after a browser download and the README's first-launch steps.
@@ -495,8 +548,10 @@ already does for the picker, and only the narrow `.working` window needs holding
 
 ### 3.5 No Xcode project
 
-The issue's "depends on #7" note expected an extension to force an Xcode project. Neither the chosen
-design nor the deferred extension needs one (§2.8). SwiftPM stays the only build system.
+When #14 was filed it listed #7 (packaging the app bundle) as a dependency, on the expectation that
+an extension would force an Xcode project. #7 is now closed, and #14's "Depends on" section says
+nothing is blocking. Neither the chosen design nor the deferred extension needs an Xcode project
+(§2.8). SwiftPM stays the only build system.
 
 ## 4. Testing strategy
 
@@ -523,9 +578,10 @@ design nor the deferred extension needs one (§2.8). SwiftPM stays the only buil
     again. A second `resumeExternalOpen()` does nothing.
   - `openFromOutside([])` does nothing.
 
-`InfoPlistTemplateTests.swift`. Extend Sparkle T2's file if it exists. Otherwise create it with the
-same approach: read the template via `#filePath`, substitute the two placeholders, and parse with
-`PropertyListSerialization`.
+`InfoPlistTemplateTests.swift`: extend the existing file, which already holds the Sparkle guards,
+and reuse its private `loadTemplate()` helper (it reads the template via `#filePath`, substitutes
+the two placeholders, and parses with `PropertyListSerialization`). Update its header comment to
+mention this design next to `Design/sparkle-updates.md`. Add:
 
 - `NSServices` has exactly one entry, with:
   - `NSMessage == "unlockPDFs"`.
@@ -540,17 +596,31 @@ same approach: read the template via `#filePath`, substitute the two placeholder
 - `CFBundleDocumentTypes` has one PDF entry: role `Viewer`, rank `Alternate`, and `LSItemContentTypes
   == ["com.adobe.pdf"]`.
 
-`FinderHandoff`'s timer isn't unit-tested. Its logic is `IncomingFiles` plus one `Task.sleep`, and
-manual check 2 covers it. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh`
-don't change.
+`FinderHandoffTests.swift` (`@MainActor`, with `FinderHandoff(coalescingDelay: .milliseconds(50))`
+and a recording `deliver` closure that appends each call's `[URL]` to an array):
+
+- **`connect` never delivers inline.** `receive([a, b])`, then `connect(to: record)`, then
+  `#expect(calls.isEmpty)` on the very next line. This is deterministic: nothing can run between
+  the two statements on the main actor.
+- **Cold-launch burst coalesces.** `receive` 5 URLs, `connect(to: record)`, `receive` 4 more, then
+  poll (`Task.sleep` in 20 ms steps, up to 2 s) until `calls` is non-empty. Expect exactly one call,
+  with all 9 URLs in order. Sleep another 200 ms and expect still one call.
+- **Timer already fired before `connect`.** `receive([a])`, sleep 200 ms (the timer fires with no
+  `deliver`), `connect(to: record)`, `#expect(calls.isEmpty)`, then poll: one call with `[a]`.
+- **`discardPending()`.** After `connect`, `receive([a])`, `discardPending()`, sleep 200 ms: no
+  call. A later `receive([b])` delivers `[b]` alone.
+
+The polling bounds are generous next to the 50 ms delay, so these don't depend on scheduler
+timing. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh` don't change.
 
 ### CI (`devops`, `release.yml` `build-and-package`)
 
 A "Verify Finder hand-off" step after "Verify signature":
 
-- `pbs -read_bundle dist/Unlatch.app` output contains `NSMessage = unlockPDFs`,
-  `NSPortName = Unlatch`, and `com.adobe.pdf`. Capture it into a variable and then grep (no `pbs |
-  grep -q` under pipefail, as PR #52 learned).
+- `/System/Library/CoreServices/pbs -read_bundle dist/Unlatch.app` output contains
+  `NSMessage = unlockPDFs`, `NSPortName = Unlatch`, and `com.adobe.pdf`. `pbs` is not on the
+  runner's `PATH`, so call it by full path. Capture the output into a variable and then grep (no
+  `pbs | grep -q` under pipefail, as PR #52 learned).
 - PlistBuddy: `:CFBundleDocumentTypes:0:LSHandlerRank` is `Alternate`.
 - `dist/Unlatch.app/Contents/PlugIns` does not exist. This guards the "no nested code" assumption
   this design relies on, so a later extension has to update this step on purpose.
@@ -575,18 +645,29 @@ print(NSPerformService(CommandLine.arguments[1], pb))   // "Unlock with Unlatch"
    submenu, or Quick Actions. Repeat with `NSIconName = NSActionTemplate` added to the entry
    (rebuild, `/System/Library/CoreServices/pbs -update`, relaunch Finder with `killall Finder`).
    Attach screenshots to #14.
-2. **Cold launch.** Quit Unlatch. Select three PDFs (one password-protected, one owner-restricted,
-   one damaged) and choose the entry. Unlatch launches, the popover opens under the icon with three
-   rows, and it goes to the password step.
+2. **Cold launch.**
+   - a. **Services.** Quit Unlatch. Select three PDFs (one password-protected, one owner-restricted,
+     one damaged) and choose the entry. Unlatch launches, the popover opens under the icon with
+     three rows, and it goes to the password step.
+   - b. **Cold Open With and `open -a`, multiple files.** Quit Unlatch. Select nine PDFs in Finder
+     and choose Open With > Unlatch. Unlatch launches, the popover opens anchored under the menu bar
+     icon (not at a screen corner or detached), and it lists **all nine** files, not a subset.
+     Quit again and repeat from Terminal with
+     `open -a /Applications/Unlatch.app ~/pdfs/{1..9}.pdf`. Same result.
 3. **Warm and mid-flow.** Repeat with the popover closed, then open on the destination step. The new
    batch replaces the old. Start a save of a large PDF and invoke the entry during the spinner: the
    new batch loads when the save finishes.
 4. **Selection rules.** With a PDF plus a `.txt` selected, the entry and Open With > Unlatch don't
    appear. Open With > Unlatch on two PDFs gives one batch of two. Preview stays the default for
    double-click.
-5. **Panel open.** Click "Choose PDFs…" and, while the panel is up, run `perform` from Terminal.
-   Cancel the panel and the held files load. Repeat and confirm the panel instead: the panel's
-   selection wins.
+5. **Panel open.** Use two disjoint sets of PDFs: set A for `perform`, set B for the panel.
+   - a. Click "Choose PDFs…". While the panel is up, run `./perform "Unlock with Unlatch" A1.pdf
+     A2.pdf` from Terminal, wait two seconds, then **cancel** the panel. Set A loads.
+   - b. Click "Choose PDFs…", run the same `perform`, wait two seconds, select set B, and
+     **confirm**. Set B loads. Wait another two seconds: the popover still shows set B, and set A
+     never appears.
+   - c. With set B loaded on the password step, run `perform` with set A again. Set A replaces it
+     (newest wins, §3.4).
 6. **Clean machine (beta smoke test, RELEASING.md step 3).** After the README's first-launch steps,
    the entry appears without logging out and works on a PDF in `~/Downloads`. Record whether a Files
    and Folders prompt appears and when. If Sparkle is in the same beta line, repeat after an in-app
@@ -598,9 +679,13 @@ print(NSPerformService(CommandLine.arguments[1], pb))   // "Unlock with Unlatch"
 
 ```
 M1 (spike, maintainer) ─┐
-T1 (logic) ─────────────┴─► T2 (Finder entry + README) ─► T4 (beta smoke test) ─► T5 (RELEASING)
-                             T3 (devops CI check, after T2)
+T1 (logic) ─────────────┴─► T2 (Finder entry + README) ─┬─► T3 (devops CI check) ─► T4 (beta smoke test)
+                                                         └─► T5 (RELEASING line)
 ```
+
+T3 and T5 each depend only on T2 and can land in either order. T4 depends on T2 and T3. T5 should
+land before the first v1.2 beta so the smoke-test line is in RELEASING.md when T4 runs, but it isn't
+a hard dependency: T4 runs manual checks 6 and 7 from this document either way.
 
 Each PR ends with a clean `swift build` and a passing `swift test`, with no new warnings. PRs use
 `Part of #14`, except T2, which uses `Closes #14` (it carries the user-facing change). Labels are
@@ -610,17 +695,20 @@ Each PR ends with a clean `swift build` and a passing `swift test`, with no new 
 ### M1 (maintainer, GUI): placement spike
 
 Run manual check 1 on a local build of T2's branch, or on any build with the §2.2 keys. It takes
-about 15 minutes, and the result decides whether `NSIconName` goes in T2. It also informs Open
-question 1. The issue keeps `needs-decision` until Open questions 1 and 3 are answered.
+about 15 minutes, and the result decides whether `NSIconName` goes in T2. Open questions 1 and 3,
+the two that needed a decision, were resolved by the maintainer on 2026-10-09 (§6), so the issue no
+longer needs `needs-decision`. Under that decision, M1's result also decides whether `project-owner`
+files the Quick Action app extension follow-up (only if the entry does not land in Quick Actions).
 
 ### T1 (`macos-developer`): Hold and resume files handed to the app from outside
 
 Suggested title: "Prepare the popover flow to receive PDFs from outside the app".
 
 - `Logic.swift`: add `IncomingFiles`, `ExternalOpenAction`, and `externalOpenAction(...)` (§2.4).
-- `AppModel`: add `isPresentingPanel`, `heldExternalFiles`, `openFromOutside(_:)`, and
-  `resumeExternalOpen()`. Set `isPresentingPanel` around both `runModal()` calls, and call
-  `resumeExternalOpen()` at the four points in §2.4.
+- `AppModel`: add `isPresentingPanel`, `heldExternalFiles`, `onPanelConfirmed`,
+  `openFromOutside(_:)`, and `resumeExternalOpen()`. Set `isPresentingPanel` around both
+  `runModal()` calls, call `resumeExternalOpen()` at the four points in §2.4, and on a confirmed
+  `browse()` empty `heldExternalFiles` and call `onPanelConfirmed?()` before `load(panel.urls)`.
 - `Tests/UnlatchTests/ExternalOpenTests.swift` as in §4.
 - Nothing calls `openFromOutside` yet.
 
@@ -637,11 +725,16 @@ Suggested title: "Unlock PDFs from Finder's right-click menu".
 
 Depends on T1, and on M1 for the `NSIconName` decision.
 
-- Add `Sources/Unlatch/FinderHandoff.swift` (§2.3).
-- `AppDelegate` wiring (§2.3).
+- Add `Sources/Unlatch/FinderHandoff.swift` (§2.3), including `discardPending()` and the rule that
+  `connect(to:)` never delivers inline.
+- `AppDelegate` wiring (§2.3): the three new lines after the existing
+  `StatusItemController(model: model, updater: updater)` call, plus `application(_:open:)`.
 - `Resources/Info.plist.template`: the §2.2 keys, with comments. Add `NSIconName` only if M1 says
-  so. Fix the stale "UnlatchApp.swift's AppDelegate" comment if Sparkle's T2 hasn't already.
-- `InfoPlistTemplateTests.swift` additions (§4).
+  so.
+- Extend `Tests/UnlatchTests/InfoPlistTemplateTests.swift` with the §4 Services, document-type,
+  and selector cross-check tests, reusing its `loadTemplate()`. The existing Sparkle tests stay as
+  they are.
+- Add `Tests/UnlatchTests/FinderHandoffTests.swift` (§4).
 - `README.md`, "Using the app": a short "Unlocking from Finder" paragraph. It covers the entry's
   name and where it appears (from M1), Open With > Unlatch, that Unlatch opens if it isn't running,
   and where to turn the entry off.
@@ -650,9 +743,12 @@ Acceptance criteria:
 
 - Build and tests pass, with no new warnings under strict concurrency, and with no
   `nonisolated(unsafe)` or `@unchecked Sendable` added.
-- With a `package-app.sh` bundle in `/Applications`, manual checks 2 to 5 pass. Paste the
-  `pbs -dump | grep -A12 com.pablocolaiacovo.unlatch` output and a screenshot of the context menu
-  into the PR.
+- The `FinderHandoffTests` pass, in particular: after `receive` of 5 URLs, `connect`, and
+  `receive` of 4 more, `deliver` is not called inline and is then called exactly once with all 9.
+- With a `package-app.sh` bundle in `/Applications`, manual checks 2 (both 2a and 2b) to 5 pass.
+  Paste the
+  `/System/Library/CoreServices/pbs -dump | grep -A12 com.pablocolaiacovo.unlatch` output and a
+  screenshot of the context menu into the PR.
 - `Scripts/package-app.sh` is unchanged and its signature verification passes. The bundle has no
   `Contents/PlugIns`.
 
@@ -662,7 +758,9 @@ Suggested title: "Verify the Finder entry in every packaged release".
 
 Depends on T2.
 
-- Add the "Verify Finder hand-off" step (§4 CI) to `release.yml` `build-and-package`.
+- Add the "Verify Finder hand-off" step (§4 CI) to `release.yml` `build-and-package`. Invoke
+  `pbs` as `/System/Library/CoreServices/pbs -read_bundle dist/Unlatch.app`; it is not on the
+  runner's `PATH`.
 - Use `::error::` annotations, matching the existing steps.
 
 Acceptance criteria:
@@ -686,7 +784,7 @@ Acceptance criteria: the findings comment exists. If TCC or placement differs fr
 
 ### T5 (`project-owner`): Smoke-test line in RELEASING.md
 
-Depends on T2.
+Depends on T2 only. Land it before the first v1.2 beta if possible (see the plan diagram).
 
 - Step 3: "Right-click a PDF in Finder and choose Unlock with Unlatch, with Unlatch quit first. It
   launches and shows the file."
