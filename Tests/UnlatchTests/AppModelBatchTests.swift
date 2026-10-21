@@ -4,8 +4,8 @@ import Testing
 @testable import Unlatch
 
 // A new load must never let the previous batch act on it: its Save has to
-// disappear as soon as the load starts, and a save that finishes after the
-// load must not apply its result. Today a load only starts from the idle step,
+// disappear as soon as the load starts, and a save that finishes after a
+// newer load or a reset must not apply its result. Today a load only starts from the idle step,
 // but the Finder hand-off (Design/finder-quick-action.md, Goal 3) can start one
 // from any step.
 
@@ -72,34 +72,32 @@ private func destinationModel(with url: URL) -> AppModel {
     #expect(model.step == .destination)
 }
 
-@MainActor @Test func aSaveThatFinishesAfterANewLoadIsDropped() async throws {
+@MainActor @Test func aSaveThatFinishesAfterAResetIsDropped() async throws {
     let workspace = try Workspace()
     defer { workspace.remove() }
-    let old = try workspace.plainPDF(named: "old.pdf")
-    let new = try workspace.plainPDF(named: "new.pdf")
-    let oldOutput = workspace.folder.appending(path: "old-unlocked.pdf")
-    let model = destinationModel(with: old)
+    let file = try workspace.plainPDF(named: "file.pdf")
+    let output = workspace.folder.appending(path: "file-unlocked.pdf")
+    let model = destinationModel(with: file)
 
     model.save()
     // One yield lets the save task start its detached write. Then block the
-    // main actor, without yielding, until the write is on disk, so the save's
-    // completion is usually still queued when the load below bumps the
-    // generation. Other main-actor tests running in parallel can let the
-    // completion land first; then the load must clear what it left instead.
-    // Either way, nothing of the old save may survive the new batch.
+    // main actor, without yielding, until the write is on disk: the save's
+    // completion can't run before the reset below bumps the generation.
+    // A reset is used rather than a load because nothing lands afterwards to
+    // overwrite what an unguarded completion would leave behind.
     await Task.yield()
     let deadline = Date.now.addingTimeInterval(5)
-    while !FileManager.default.fileExists(atPath: oldOutput.path), Date.now < deadline {
+    while !FileManager.default.fileExists(atPath: output.path), Date.now < deadline {
         usleep(1_000)
     }
-    #expect(FileManager.default.fileExists(atPath: oldOutput.path))
-    usleep(100_000)
+    #expect(FileManager.default.fileExists(atPath: output.path))
 
-    model.load([new])
+    model.reset()
+    // Give the queued completion time to run.
+    try await Task.sleep(for: .milliseconds(200))
 
-    #expect(try await waitUntil { model.files.map(\.url) == [new] })
-    #expect(model.step == .destination)
+    #expect(model.step == .idle)
+    #expect(model.files.isEmpty)
     #expect(model.savedURLs.isEmpty)
     #expect(model.savedTo.isEmpty)
-    #expect(model.files.allSatisfy { !$0.unlocked && $0.failure == nil })
 }
