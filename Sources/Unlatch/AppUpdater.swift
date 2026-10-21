@@ -14,6 +14,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     let availability: UpdaterAvailability
     /// Mirrors `SPUUpdater.canCheckForUpdates` (KVO).
     private(set) var canCheckForUpdates = false
+    /// Mirrors `SPUUpdater.automaticallyChecksForUpdates` (KVO, plus a re-read each time the
+    /// popover opens). Persisted by Sparkle as `SUEnableAutomaticChecks`.
+    private(set) var automaticallyChecksForUpdates = false
     /// A scheduled check found an update that Sparkle is holding without a window, and the user
     /// hasn't looked at it yet. Drives the footer indicator and the dot on the menu bar icon.
     private(set) var updateAvailable = false
@@ -32,9 +35,13 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private let shortVersion: String?
     @ObservationIgnored private var controller: SPUStandardUpdaterController?
     @ObservationIgnored private var canCheckObservation: NSKeyValueObservation?
+    @ObservationIgnored private var automaticChecksObservation: NSKeyValueObservation?
 
+    #if DEBUG
     /// Assigns the three stored values and never creates a Sparkle object.
-    /// Only the debug-only preview factory below uses it.
+    /// Its only caller is the preview factory at the bottom of the file, so both are compiled
+    /// out of release builds. It stays in the class body because a designated initializer
+    /// cannot live in an extension.
     private init(
         availability: UpdaterAvailability, shortVersion: String?,
         canCheck: Bool, updateAvailable: Bool
@@ -45,6 +52,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         self.updateAvailable = updateAvailable
         super.init()
     }
+    #endif
 
     init(availability: UpdaterAvailability, shortVersion: String?) {
         self.availability = availability
@@ -65,7 +73,31 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
                 self?.canCheckForUpdates = value
             }
         }
+        automaticChecksObservation = controller.updater.observe(
+            \.automaticallyChecksForUpdates, options: [.initial]
+        ) { [weak self] _, _ in
+            // No `.new`: KVO would call Sparkle's main-thread-only getter on the notifying
+            // thread, and a `defaults write` from another process can notify off the main
+            // thread. Always re-read on the main actor instead.
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { self?.refreshAutomaticChecks() }
+            } else {
+                Task { @MainActor in self?.refreshAutomaticChecks() }
+            }
+        }
         controller.startUpdater()
+    }
+
+    /// The menu toggle's setter. Sparkle writes user defaults and raises KVO synchronously on the
+    /// main thread, and that updates the mirror. Does nothing when no controller exists.
+    func setAutomaticallyChecksForUpdates(_ on: Bool) {
+        controller?.updater.automaticallyChecksForUpdates = on
+    }
+
+    /// Re-reads the live value from Sparkle on the main thread. Does nothing without a controller.
+    func refreshAutomaticChecks() {
+        guard let controller else { return }
+        automaticallyChecksForUpdates = controller.updater.automaticallyChecksForUpdates
     }
 
     /// Both footer entry points (the menu item and the "Update Available"
