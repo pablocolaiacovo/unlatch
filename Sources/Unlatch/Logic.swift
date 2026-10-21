@@ -5,18 +5,19 @@ import UnlatchCore
 // Pure app logic, kept off the main actor and free of UI types so it can be
 // unit-tested directly. The view model calls into these functions.
 
-/// The design's three file kinds, folded down from `Classification`.
-/// `.notEncrypted` joins `.ownerRestricted` under `owner`: both are usable
-/// files with no open password. Owner files are copied to the destination
-/// byte-for-byte (see `saveJobs`), so the "Copied as-is — opens without a
-/// password" copy is literally true for either.
+/// The file kinds the popover distinguishes, mapped from `Classification`.
+/// `.notEncrypted` (`plain`) and `.ownerRestricted` (`owner`) are both usable
+/// files with no open password, and both are copied to the destination
+/// byte-for-byte (see `saveJobs`). They stay separate kinds only so the row
+/// note can say which one it is: a plain file has no permissions to speak of.
 enum FileKind: Equatable, Sendable {
-    case encrypted, owner, corrupt
+    case encrypted, owner, plain, corrupt
 
     init(_ classification: Classification) {
         switch classification {
         case .userLocked: self = .encrypted
-        case .ownerRestricted, .notEncrypted: self = .owner
+        case .ownerRestricted: self = .owner
+        case .notEncrypted: self = .plain
         case .unreadable: self = .corrupt
         }
     }
@@ -312,6 +313,12 @@ func rowInfo(for file: LoadedFile, done: Bool) -> RowInfo {
             note: done && file.unlocked
                 ? "Copied as-is — opens without a password"
                 : "No open password — permissions only")
+    case .plain:
+        return RowInfo(
+            badge: "i", tone: .warning,
+            note: done && file.unlocked
+                ? "Not encrypted — copied as-is"
+                : "Not encrypted — nothing to unlock")
     case .encrypted:
         if done && file.unlocked {
             return RowInfo(badge: "✓", tone: .success, note: "Unlocked")
