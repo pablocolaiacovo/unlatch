@@ -3,11 +3,15 @@
   Removes every <item> whose sparkle:version (element or enclosure attribute)
   equals the "build" parameter, and copies everything else unchanged.
 
-  Why: a stable tag on the same commit as its last beta has the same
-  CFBundleVersion. generate_appcast matches items by version and would update
-  the beta item in place, keeping its beta channel tag and notes, so stable
-  users would never be offered the release. Dropping the old item first makes
-  generate_appcast write a fresh one. See Design/sparkle-updates.md, 2.6.
+  Why: generate_appcast matches items by version. If the feed already has an
+  item for this build, it would update that item in place, keeping its channel
+  tag and notes. Dropping the old item first makes generate_appcast write a
+  fresh one. In normal use there is no such item: since #77 a stable tag goes
+  on a different commit than its last beta, so it has its own CFBundleVersion,
+  and release.yml refuses a tag whose commit another tag already deployed. The
+  drop stays as a defensive step, for example for a re-run of the same tag. It
+  was written for a stable tag on its beta's commit, the flow #77 superseded;
+  see Design/sparkle-updates.md, 2.6.
 
   Usage: xsltproc with the string parameter "build" set to the build number,
   this stylesheet, and the current appcast.xml.
