@@ -95,10 +95,13 @@ struct PopoverSnapshotTests {
         assertPopoverSnapshot(fixture.makeModel(), named: fixture.rawValue)
     }
 
+    #if DEBUG
     /// The footer's "Update Available" button, with no Sparkle object behind it.
+    /// Debug only, like `AppUpdater.previewingUpdateAvailable()`.
     @Test func footerUpdateAvailable() {
         assertPopoverSnapshot(
             PopoverFixture.idle.makeModel(), updater: .previewingUpdateAvailable(),
             named: "footerUpdateAvailable")
     }
+    #endif
 }
