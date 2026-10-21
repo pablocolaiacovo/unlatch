@@ -187,3 +187,24 @@ func attentionAndSessionEndClearTheIndicator(event: UpdateReminderEvent, current
             == .updateAvailable)
     #expect(updateIndicatorShown(after: .userAttention, current: found) == false)
 }
+
+// MARK: - automaticChecksMenuItem
+
+@Test(arguments: [true, false])
+func automaticChecksItemIsShownWhenTheUpdaterIsEnabled(isOn: Bool) {
+    #expect(
+        automaticChecksMenuItem(availability: .enabled, isOn: isOn)
+            == AutomaticChecksMenuItem(title: "Check Automatically", isChecked: isOn))
+}
+
+@Test(arguments: [
+    UpdaterDisabledReason.notAnAppBundle, .missingFeedURL, .insecureFeedURL, .missingPublicKey,
+])
+func automaticChecksItemIsHiddenWhenTheUpdaterIsDisabled(reason: UpdaterDisabledReason) {
+    #expect(automaticChecksMenuItem(availability: .disabled(reason), isOn: true) == nil)
+    #expect(automaticChecksMenuItem(availability: .disabled(reason), isOn: false) == nil)
+}
+
+@Test func automaticChecksTitleHasNoEllipsis() {
+    #expect(AutomaticChecksMenuItem.checkAutomaticallyTitle == "Check Automatically")
+}

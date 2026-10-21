@@ -1858,3 +1858,237 @@ raised (each as recommended):
   merged, so T10 tests both together.
 
 No questions from these decisions remain open.
+
+## Addendum: Check Automatically toggle (#71)
+
+### A.1 Summary
+
+A "Check Automatically" checkmark item in the popover's ellipsis menu, between "Check for
+Updates…" and "Open at Login". It is bound to `SPUUpdater.automaticallyChecksForUpdates`, so the
+user can reverse the answer they gave Sparkle's second-launch prompt in either direction without
+using Terminal. Sparkle persists the value as `SUEnableAutomaticChecks` in the app's user
+defaults, and Unlatch adds no preference of its own. The item is hidden whenever
+`UpdaterAvailability` is not `.enabled`.
+
+Out of scope, as the issue says: the check interval (`SUScheduledCheckInterval` stays 86400),
+`automaticallyDownloadsUpdates`, any change to the permission prompt, and a settings window.
+`Resources/Info.plist.template` does not change. `InfoPlistTemplateTests` already asserts that
+`SUEnableAutomaticChecks` is absent, and adding it would suppress the prompt.
+
+### A.2 Verified in Sparkle 2.10.0 (`.build/checkouts/Sparkle/Sparkle`)
+
+- `SPUUpdater.h`: `@property (nonatomic) BOOL automaticallyChecksForUpdates;`. The header says
+  it is "KVO compliant" and "must be called on the main thread", that setting it "will persist in
+  the host bundle's user defaults", and that the update cycle is reset after a short delay, so no
+  `resetUpdateCycle()` call is needed.
+- `SPUUpdater.m`: the getter and setter forward to `SPUUpdaterSettings`, and KVO comes from
+  `keyPathsForValuesAffectingAutomaticallyChecksForUpdates` → `updaterSettings.automaticallyChecksForUpdates`.
+  The second-launch prompt's answer goes through the same setter
+  (`[self setAutomaticallyChecksForUpdates:response.automaticUpdateChecks]`, line 471), so it
+  raises KVO on the main thread.
+- `SPUUpdaterSettings.m`: the settings object observes `SUEnableAutomaticChecks` on the host's
+  `NSUserDefaults` through `SUHost observeChangesFromUserDefaultKeys:changeHandler:`. When the
+  stored value changes, for example after a `defaults write` while the app is running, it calls
+  `willChange`/`didChange`. **The thread for that path is not guaranteed.** Foundation delivers
+  `NSUserDefaults` KVO for changes from another process on whatever thread receives the change,
+  and Sparkle does not hop to the main thread. The existing `canCheckForUpdates` handler uses
+  `MainActor.assumeIsolated`, which would trap there, so the new handler must not copy it
+  unchanged (A.3).
+- `SPUUpdater.m` lines 400 to 420: the second-launch prompt is skipped once
+  `SUEnableAutomaticChecks` exists in user defaults. If the user turns the toggle on or off before
+  the second launch, Sparkle treats that as their answer and does not ask. This is correct
+  behaviour and needs no code. While the key is unset, the getter returns `NO`, so the item shows
+  unchecked before the prompt has been answered.
+
+### A.3 `AppUpdater` (`Sources/Unlatch/AppUpdater.swift`)
+
+New members (all main-actor isolated, like the rest of the class):
+
+```swift
+/// Mirrors `SPUUpdater.automaticallyChecksForUpdates` (KVO, plus a re-read each time the
+/// popover opens). Persisted by Sparkle as `SUEnableAutomaticChecks`.
+private(set) var automaticallyChecksForUpdates = false
+
+@ObservationIgnored private var automaticChecksObservation: NSKeyValueObservation?
+
+/// The menu toggle's setter. Sparkle writes user defaults and raises KVO synchronously on the
+/// main thread, and that updates the mirror. Does nothing when no controller exists.
+func setAutomaticallyChecksForUpdates(_ on: Bool)
+
+/// Re-reads the live value from Sparkle on the main thread. Does nothing without a controller.
+func refreshAutomaticChecks()
+```
+
+KVO wiring, in `init(availability:shortVersion:)` next to `canCheckObservation` and before
+`controller.startUpdater()`:
+
+```swift
+automaticChecksObservation = controller.updater.observe(
+    \.automaticallyChecksForUpdates, options: [.initial, .new]
+) { [weak self] _, change in
+    let value = change.newValue ?? false
+    if Thread.isMainThread {
+        MainActor.assumeIsolated { self?.automaticallyChecksForUpdates = value }
+    } else {
+        // A `defaults write` from another process can arrive off the main thread (A.2).
+        // Re-read on the main actor instead of trusting `value`, so that out-of-order
+        // hops cannot leave a stale value behind.
+        Task { @MainActor in self?.refreshAutomaticChecks() }
+    }
+}
+```
+
+- `.initial` fires synchronously on the main thread during `observe`, so the mirror is correct
+  before the popover is first shown.
+- The handler copies a `Bool` and never sends the `SPUUpdater` anywhere. `AppUpdater` is a
+  `@MainActor` class and therefore `Sendable`, so capturing `weak self` in the `Task` is allowed.
+- Setter path: `setAutomaticallyChecksForUpdates(_:)` runs
+  `controller?.updater.automaticallyChecksForUpdates = on`. KVO then updates the mirror
+  synchronously. Do not assign the mirror directly as well: KVO stays the single writer on the
+  main thread, and `refreshAutomaticChecks()` is the only other one.
+- A second safety net: `StatusItemController.presentAndFocus()` calls
+  `updater.refreshAutomaticChecks()` next to the existing `model.refreshLoginItem()`, before
+  `popover.show`. That guarantees the acceptance criterion ("reflects the current value when the
+  menu opens") however Foundation delivers an external change. The popover's footer is the only
+  way to reach the menu, so refreshing on popover open is enough.
+- The debug-only `previewingUpdateAvailable()` and `snapshotDisabled()` factories need no change.
+  The mirror defaults to `false`, and the snapshot tests never open the menu.
+
+### A.4 Pure presentation (`Sources/Unlatch/Logic.swift`)
+
+Put this after `updateFooterPresentation(for:)`:
+
+```swift
+/// The "Check Automatically" item in the ellipsis menu (#71).
+struct AutomaticChecksMenuItem: Equatable, Sendable {
+    let title: String
+    let isChecked: Bool
+
+    static let checkAutomaticallyTitle = "Check Automatically"
+}
+
+/// `nil` (the item is left out) unless availability is `.enabled`, matching how the update item
+/// is hidden. Otherwise `checkAutomaticallyTitle`, checked when `isOn` is true. Always enabled:
+/// the setting is independent of `canCheckForUpdates` and of an update session in progress.
+func automaticChecksMenuItem(
+    availability: UpdaterAvailability, isOn: Bool
+) -> AutomaticChecksMenuItem?
+```
+
+Returning an optional matches `UpdateFooterPresentation.menuItemTitle: String?`, where `nil`
+means "not in the menu". This function takes `availability` rather than `UpdateButtonState`,
+because `.checkDisabled` (Sparkle is busy) must not disable or hide this item.
+
+### A.5 The menu item (`Sources/Unlatch/Views/PopoverView.swift`)
+
+`footer` computes the item next to `update` and passes it in. Reading
+`updater.automaticallyChecksForUpdates` there makes Observation re-render the footer when the
+mirror changes:
+
+```swift
+let automatic = automaticChecksMenuItem(
+    availability: updater.availability, isOn: updater.automaticallyChecksForUpdates)
+...
+moreMenu(update, automaticChecks: automatic)
+```
+
+In `moreMenu(_:automaticChecks:)`, directly after the update `Button` and before "Open at Login":
+
+```swift
+if let automaticChecks {
+    Toggle(
+        automaticChecks.title,
+        isOn: Binding(
+            get: { automaticChecks.isChecked },
+            set: { updater.setAutomaticallyChecksForUpdates($0) })
+    )
+}
+```
+
+This is the Open at Login pattern: the `Binding` getter shows Sparkle's state and the setter
+asks Sparkle to change it. A menu item does not flip itself, so the checkmark only changes when
+the mirror does. No new `Divider`: the menu remains Version / divider / the update items / Open
+at Login (see Open question A.9). Update the doc comment on `moreMenu` to list the new item.
+
+### A.6 Edge cases
+
+- **`swift run`, or a bundle with no feed or key.** There is no controller, so
+  `automaticChecksMenuItem` returns `nil` and the item is hidden. The setter and the refresh are
+  no-ops.
+- **Toggled while Sparkle's permission prompt is on screen.** The prompt's answer, given later,
+  overwrites the toggle through the same setter, and KVO updates the checkmark. Acceptable,
+  because the last explicit choice wins.
+- **Toggled during an update session.** Sparkle only resets the cycle when no session is in
+  progress (`SPUUpdater.m` around line 1030), so a held "Update Available" session is not
+  disturbed.
+- **Turning it off while an update is already held.** The indicator stays until the session ends,
+  because turning checks off only stops future scheduled checks. No change to `updateAvailable`.
+- **`defaults write … SUEnableAutomaticChecks` while the app runs.** Sparkle's defaults observer
+  raises KVO (possibly off the main thread, A.3). In any case the re-read on popover open covers
+  it.
+
+### A.7 Testing
+
+Unit tests in `Tests/UnlatchTests/UpdaterLogicTests.swift`, under a new
+`// MARK: - automaticChecksMenuItem` section:
+
+1. `.enabled`, `isOn: true` gives title "Check Automatically" and `isChecked == true`.
+2. `.enabled`, `isOn: false` gives `isChecked == false`.
+3. Parameterised over every `UpdaterDisabledReason` (`.notAnAppBundle`, `.missingFeedURL`,
+   `.insecureFeedURL`, `.missingPublicKey`) × `isOn` in `[true, false]`: the result is `nil`.
+4. The title constant is exactly `"Check Automatically"` and has no trailing ellipsis. It toggles
+   in place and opens no window, unlike "Check for Updates…".
+
+No new fixtures, no snapshot changes (the menu is closed in every snapshot), and no change to
+`InfoPlistTemplateTests`. Its existing absence assertion is the guard against regressing the
+prompt.
+
+`AppUpdater`'s KVO wiring cannot be unit-tested without a real `.app` bundle (no controller
+exists under the test runner). Manual check on a packaged build (`Scripts/package-app.sh`):
+
+1. `defaults delete com.pablocolaiacovo.unlatch SUEnableAutomaticChecks`, then launch: the item
+   shows unchecked. Quit, relaunch, answer the prompt "Check Automatically": the item is now
+   checked without reopening the app.
+2. Uncheck it, then `defaults read com.pablocolaiacovo.unlatch SUEnableAutomaticChecks` → `0`.
+   Quit and relaunch: still unchecked, and no prompt.
+3. With the app running and the popover closed, run
+   `defaults write com.pablocolaiacovo.unlatch SUEnableAutomaticChecks -bool YES`, then open the
+   popover and the menu: checked. Watch Console for a Sparkle "must be called on the main thread"
+   log or a crash. Neither should appear.
+4. `swift run Unlatch`: the item is absent, as is "Check for Updates…".
+
+### A.8 Tasks
+
+**T11 (`macos-developer`): Check Automatically toggle.** One PR, branch
+`feature/check-automatically`, `Closes #71`, labels `enhancement` and `area:app`.
+
+1. `Logic.swift`: add `AutomaticChecksMenuItem` and `automaticChecksMenuItem(availability:isOn:)`
+   (A.4), and the tests from A.7 in `UpdaterLogicTests.swift`. Acceptance: `swift test` passes
+   with the new tests.
+2. `AppUpdater.swift`: add the mirror, the observation, `setAutomaticallyChecksForUpdates(_:)`,
+   and `refreshAutomaticChecks()` (A.3). Call `updater.refreshAutomaticChecks()` in
+   `StatusItemController.presentAndFocus()` next to `model.refreshLoginItem()`. Acceptance: clean
+   `swift build` under Swift 6 strict concurrency, with no new warnings.
+3. `PopoverView.swift`: compute the item in `footer`, pass it to `moreMenu(_:automaticChecks:)`,
+   add the `Toggle` (A.5), and update the doc comments. Acceptance: snapshot tests pass unchanged.
+4. `README.md`, "Updates" section: replace "there is no setting in the app to change that;
+   **Check for Updates…** still works, or turn automatic checks back on in Terminal:" and the
+   `defaults write` block with text that names the toggle. Suggested wording: "If you say no,
+   Unlatch never checks on its own, and **Check for Updates…** still works. To change your answer
+   later, in either direction, choose **Check Automatically** in the ellipsis (…) menu." Drop the
+   `defaults write` block (Open question A.9). Add **Check Automatically** to the list of
+   ellipsis-menu items in the Open at Login paragraph above it as well.
+5. Run the manual checks in A.7 on a packaged build and report the results in the PR.
+   Acceptance: `swift build` is clean and `swift test` passes, with the output in the PR.
+
+### A.9 Open questions
+
+1. **Keep the `defaults write` fallback in the README?** Recommendation: **remove it.** Once the
+   toggle exists, the in-app control covers both directions, and a Terminal command in user docs
+   suggests the UI is incomplete. The command still works for anyone who knows it.
+2. **A divider between the update items and Open at Login?** Recommendation: **no divider.** The
+   menu has four items, and Open at Login sits naturally with the other app-level options. This is
+   a UX call; adding one later is a one-line change.
+
+Neither blocks implementation. T11 can proceed on the recommendations unless the maintainer says
+otherwise.
