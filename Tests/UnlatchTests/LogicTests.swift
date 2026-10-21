@@ -18,9 +18,12 @@ private func scratchURL(ext: String = "pdf") -> URL {
     #expect(FileKind(.userLocked) == .encrypted)
 }
 
-@Test func ownerRestrictedAndPlainMapToOwner() {
+@Test func ownerRestrictedMapsToOwner() {
     #expect(FileKind(.ownerRestricted) == .owner)
-    #expect(FileKind(.notEncrypted) == .owner)
+}
+
+@Test func notEncryptedMapsToPlain() {
+    #expect(FileKind(.notEncrypted) == .plain)
 }
 
 @Test func unreadableMapsToCorrupt() {
@@ -36,6 +39,7 @@ private func scratchURL(ext: String = "pdf") -> URL {
 
 @Test func usableWithoutEncryptedGoesToDestination() {
     #expect(step(afterLoading: [.owner]) == .destination)
+    #expect(step(afterLoading: [.plain]) == .destination)
     #expect(step(afterLoading: [.owner, .corrupt]) == .destination)
 }
 
@@ -109,6 +113,23 @@ private func file(
     let done = rowInfo(for: file(.owner, unlocked: true), done: true)
     #expect(done == RowInfo(
         badge: "i", tone: .warning, note: "Copied as-is — opens without a password"))
+}
+
+@Test func plainRowPendingAndDone() {
+    let pending = rowInfo(for: file(.plain), done: false)
+    #expect(pending == RowInfo(
+        badge: "i", tone: .warning, note: "Not encrypted — nothing to unlock"))
+
+    let done = rowInfo(for: file(.plain, unlocked: true), done: true)
+    #expect(done == RowInfo(
+        badge: "i", tone: .warning, note: "Not encrypted — copied as-is"))
+}
+
+@Test func plainAndOwnerNotesAreDistinct() {
+    #expect(rowInfo(for: file(.plain), done: false).note
+        != rowInfo(for: file(.owner), done: false).note)
+    #expect(rowInfo(for: file(.plain, unlocked: true), done: true).note
+        != rowInfo(for: file(.owner, unlocked: true), done: true).note)
 }
 
 @Test func corruptRowAlwaysSkipped() {
@@ -220,16 +241,18 @@ private func file(
     let batch = [
         file(.encrypted),
         file(.owner),
+        file(.plain),
         file(.corrupt),
         file(.encrypted, skipped: true),
     ]
     let jobs = saveJobs(
         for: batch, option: .desktop,
         desktopFolder: desktop, chosenFolder: nil, password: "pw")
-    #expect(jobs.count == 2)
+    #expect(jobs.count == 3)
     #expect(jobs[0].action == .unlock(password: "pw"))
-    // Owner files are copied byte-for-byte, never rewritten through unlock().
+    // Owner and plain files are copied byte-for-byte, never rewritten through unlock().
     #expect(jobs[1].action == .copy)
+    #expect(jobs[2].action == .copy)
 }
 
 @Test func copyJobPreservesBytesExactly() throws {
