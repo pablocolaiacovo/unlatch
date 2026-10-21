@@ -78,21 +78,17 @@ results: an unlocked copy for password-protected files, an unchanged copy for th
 
 To have Unlatch start with your Mac, open the **ellipsis (…) menu** at the bottom of the popover
 and check **Open at Login**. It follows System Settings > General > Login Items, so turning
-Unlatch off there unchecks it too. The same menu shows the installed version and **Check for
-Updates…**.
+Unlatch off there unchecks it too. The same menu shows the installed version, **Check for
+Updates…**, and **Check Automatically**.
 
 ## Updates
 
 Unlatch updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle
 asks whether it may check for updates automatically. If you allow it, Unlatch checks once a day, in
 the background, a signed feed at `https://pablocolaiacovo.github.io/unlatch/appcast.xml`, and it only
-installs an update whose EdDSA signature verifies. If you say no, Unlatch never checks on its own and
-there is no setting in the app to change that; **Check for Updates…** still works, or turn automatic
-checks back on in Terminal:
-
-```sh
-defaults write com.pablocolaiacovo.unlatch SUEnableAutomaticChecks -bool YES
-```
+installs an update whose EdDSA signature verifies. If you say no, Unlatch never checks on its own, and
+**Check for Updates…** still works. To change your answer later, in either direction, choose
+**Check Automatically** in the ellipsis (…) menu.
 
 When a check finds an update, nothing opens on its own. A dot appears on the menu bar icon, and
 the popover footer shows a blue **Update Available** button and a dot on the ellipsis (…) menu,
