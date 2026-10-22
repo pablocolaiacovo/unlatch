@@ -26,7 +26,7 @@ resolves them in the view's locale.
 
 - Package manifest: `defaultLocalization: "en"`, plus `resources: [.process("Resources")]` on the
   `Unlatch` target.
-- Every user-facing string is localized. That covers popover steps, buttons, row notes, header and done
+- Every user-facing string is localized. That covers popover steps, buttons, row notes and done
   counts, destination options and hints, footer, ellipsis menu items and their help text, status item
   tooltip and accessibility value, the open panel's prompt, and the hidden main menu (§2.9).
 - Plurals and interpolated counts and file names go through the catalog, never through English word
@@ -199,7 +199,6 @@ are:
 extension DestinationOption { var label: LocalizedStringResource { get } }
 extension SaveFailure       { var note: LocalizedStringResource { get } }
 
-func headerNote(fileCount: Int) -> LocalizedStringResource
 func passwordTitle(encryptedCount: Int) -> LocalizedStringResource
 func passwordSubtitle(encrypted: [LoadedFile]) -> LocalizedStringResource
 func doneTitle(savedCount: Int, failedCount: Int = 0) -> LocalizedStringResource
@@ -240,20 +239,20 @@ struct AutomaticChecksMenuItem: Equatable, Sendable {
 }
 ```
 
-`AppModel`: `headerText` becomes `LocalizedStringResource`, and `savedTo: String` becomes
+`AppModel`: `savedTo: String` becomes
 `savedTo: LocalizedStringResource?` (`nil` for nothing saved; `DoneStepView` tests `!= nil` instead of
 `!isEmpty`). `PopoverView.versionText` becomes a resource. `FooterButton.title` becomes
 `LocalizedStringResource`.
 
 #### Plurals and interpolation rules
 
-1. A count that is shown goes into the key as an interpolation, `"\(count) files"`, which the
-   catalog sees as `%lld files`. The catalog carries plural variations wherever a language needs
+1. A count that is shown goes into the key as an interpolation, `"\(count) files need a password"`,
+   which the catalog sees as `%lld files need a password`. The catalog carries plural variations wherever a language needs
    them. Spanish needs some where English does not. For example, `"%lld saved, %lld failed"` must
    agree in Spanish ("1 guardado" against "2 guardados"), so it gets per-argument substitutions in
    `es` while staying a plain string in `en`.
 2. The code branches on a count only where the sentences differ in meaning, or where the count is not
-   shown. Those are: 0 files gives "Remove PDF passwords". One encrypted file gives "This PDF needs a
+   shown. Those are: one encrypted file gives "This PDF needs a
    password". One saved file gives "Saved". One failure gives "Couldn't save — the file failed". And
    `destinationQuestion` picks "…the unlocked file go?" or "…the unlocked files go?". These branches
    already exist; each branch gets its own key.
@@ -454,8 +453,8 @@ func en(_ resource: LocalizedStringResource) -> String { resolved(resource, "en"
 func es(_ resource: LocalizedStringResource) -> String { resolved(resource, "es") }
 ```
 
-Existing English assertions become, for example, `#expect(en(headerNote(fileCount: 0)) == "Remove
-PDF passwords")`. They pin English explicitly instead of relying on the runner having no language.
+Existing English assertions become, for example, `#expect(en(passwordTitle(encryptedCount: 1)) ==
+"This PDF needs a password")`. They pin English explicitly instead of relying on the runner having no language.
 Struct comparisons such as `#expect(info == RowInfo(badge: "•", tone: .neutral, note: "Password
 protected"))` change to compare `info.badge`, `info.tone`, and `en(info.note)` separately. Two
 resources compare equal only if they have the same key, arguments, bundle, and locale, so comparing
@@ -513,8 +512,6 @@ any runner (§2.7), and Spanish cases set `es` explicitly.
 | Logic.swift | Couldn’t be read — not saved | row note | — | Logic |
 | Logic.swift | Couldn’t write the file — not saved | row note | — | Logic |
 | Logic.swift | Couldn’t be copied — not saved | row note | — | Logic |
-| Logic.swift | Remove PDF passwords | header note | — | Logic `headerNote` |
-| Logic.swift | 1 file / N files | header note | P | Logic, one key `%lld files` with plural variations |
 | Logic.swift | This PDF needs a password | step title | — | Logic `passwordTitle` |
 | Logic.swift | N files need a password (N > 1) | step title | P | Logic `%lld files need a password` |
 | Logic.swift | We’ll try the same password on all of them. Anything that doesn’t match gets skipped. | step subtitle | — | Logic `passwordSubtitle` |
@@ -595,7 +592,6 @@ Some example translations, for direction only. The maintainer, a native speaker,
 | --- | --- |
 | Choose PDFs… | Elegir PDF… |
 | Unlock | Desbloquear |
-| `%lld files` (one / other) | %lld archivo / %lld archivos |
 | `%lld saved, %lld failed` | `%#@saved@, %#@failed@` with "%arg guardado / guardados", "%arg falló / fallaron" |
 | Check Automatically | Comprobar automáticamente (Sparkle's own `es` wording) |
 
@@ -724,7 +720,7 @@ next to an unnoticed clipped row note in Spanish (§2.8).
 
 - Every existing English assertion is wrapped with `en(…)`. Its expected English text is unchanged.
 - New Spanish assertions with exact expected strings, for every function that has a plural, an
-  interpolation, or a code-side branch: `headerNote` (0, 1, 2), `passwordTitle` (1, 3),
+  interpolation, or a code-side branch: `passwordTitle` (1, 3),
   `passwordSubtitle` (one file, which returns the file name unchanged in both languages, and a batch),
   `doneTitle` (all six branches, with `(1, 1)`, `(2, 1)`, `(1, 3)` for agreement), `doneSummary` (one
   path, several folders, each option), `destinationQuestion` (1, 2), and `versionLabel`. The exact

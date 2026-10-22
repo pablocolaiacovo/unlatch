@@ -255,18 +255,6 @@ func abbreviatedPath(_ url: URL) -> String {
     (url.path as NSString).abbreviatingWithTildeInPath
 }
 
-/// Header right side: "Remove PDF passwords" with no files, else a count.
-func headerNote(fileCount: Int) -> LocalizedStringResource {
-    guard fileCount > 0 else {
-        return LocalizedStringResource(
-            "Remove PDF passwords", bundle: .unlatch,
-            comment: "Header, right side, when no files are loaded: what the app does.")
-    }
-    return LocalizedStringResource(
-        "\(fileCount) files", bundle: .unlatch,
-        comment: "Header, right side: how many files are loaded. The value is a number, and 1 needs the singular.")
-}
-
 func passwordTitle(encryptedCount: Int) -> LocalizedStringResource {
     guard encryptedCount > 1 else {
         return LocalizedStringResource(

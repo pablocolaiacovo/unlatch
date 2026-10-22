@@ -16,47 +16,6 @@
         }
       }
     },
-    "%lld files" : {
-      "comment" : "Header, right side: how many files are loaded. The value is a number, and 1 needs the singular.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld file"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld files"
-                }
-              }
-            }
-          }
-        },
-        "es" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld archivo"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld archivos"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "%lld files in %lld folders" : {
       "comment" : "Done step summary for a batch saved into several folders: file count, then folder count. Both values are always 2 or more.",
       "localizations" : {
@@ -525,17 +484,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rehacer"
-          }
-        }
-      }
-    },
-    "Remove PDF passwords" : {
-      "comment" : "Header, right side, when no files are loaded: what the app does.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quitar contraseñas"
           }
         }
       }
