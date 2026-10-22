@@ -36,9 +36,11 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to GitHub: open the **...** menu on the issue, pull request, or comment concerned, choose **Report content**, and report it to GitHub Support. To report an account rather than a single post, use **Block or report** on that user's profile. These reports are reviewed by GitHub staff under the [GitHub Community Guidelines](https://docs.github.com/en/site-policy/github-terms/github-community-guidelines). This repository is owned by a personal account, so GitHub does not pass the reports on to the maintainer, and there is currently no private channel for reaching the maintainer about conduct.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to the maintainer by email at [34_roto.bromaban@icloud.com](mailto:34_roto.bromaban@icloud.com). Include links to the issues, pull requests, or comments concerned.
 
-The repository maintainer, [@pablocolaiacovo](https://github.com/pablocolaiacovo), is the community leader responsible for enforcement, and will act under the guidelines below on unacceptable behavior they see in the repository's issues, pull requests, and comments.
+Behavior can also be reported to GitHub: open the **...** menu on the issue, pull request, or comment concerned, choose **Report content**, and report it to GitHub Support. To report an account rather than a single post, use **Block or report** on that user's profile. These reports are reviewed by GitHub staff under the [GitHub Community Guidelines](https://docs.github.com/en/site-policy/github-terms/github-community-guidelines). This repository is owned by a personal account, so GitHub does not pass these reports on to the maintainer; use the email address above to reach the maintainer.
+
+The repository maintainer, [@pablocolaiacovo](https://github.com/pablocolaiacovo), is the community leader responsible for enforcement, and will act under the guidelines below on reports sent to that address and on unacceptable behavior they see in the repository's issues, pull requests, and comments.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
