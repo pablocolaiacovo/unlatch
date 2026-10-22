@@ -33,6 +33,16 @@
 #   Sparkle skips all of that, so this script works before and after the
 #   dependency lands. See Design/sparkle-updates.md, section 2.3.
 #
+# Resources:
+#   If the build produced .build/release/UnlatchCore_Unlatch.bundle (the
+#   Unlatch target's resources, i.e. the compiled string catalog), the script
+#   copies it into Contents/Resources, where Bundle.module looks first, and
+#   signs it before the app. A build without it skips all of that. It fails if
+#   the bundle has no es.lproj/Localizable.strings: that means the catalog
+#   shipped uncompiled, so the app would be English-only. This needs Swift
+#   Build, hence the pinned --build-system below. See
+#   Design/spanish-localization.md, section 2.3.
+#
 # Version:
 #   CFBundleShortVersionString comes from `git describe --tags`, leading "v"
 #   stripped. CFBundleVersion is the commit count on HEAD, which only grows
@@ -52,6 +62,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 APP_NAME="Unlatch"
+# Must match `name:` in Package.swift: SwiftPM names a target's resource bundle
+# <package>_<target>.
+PACKAGE_NAME="UnlatchCore"
 DIST_DIR="$REPO_ROOT/dist"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 ZIP_PATH="$DIST_DIR/$APP_NAME.zip"
@@ -80,7 +93,8 @@ rm -rf "$DIST_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
 echo "==> Building release binary (arm64 + x86_64)"
-swift build -c release --product "$APP_NAME" --arch arm64 --arch x86_64
+swift build -c release --product "$APP_NAME" --arch arm64 --arch x86_64 \
+    --build-system swiftbuild
 
 BUILT_BINARY="$REPO_ROOT/.build/release/$APP_NAME"
 if [[ ! -f "$BUILT_BINARY" ]]; then
@@ -153,6 +167,18 @@ if grep -q '@rpath/Sparkle.framework/' <<<"$LINKED_LIBS"; then
     sign "$FW/Versions/B/Autoupdate"
     sign "$FW/Versions/B/Updater.app"
     sign "$FW"
+fi
+
+RESOURCE_BUNDLE_SRC="$REPO_ROOT/.build/release/${PACKAGE_NAME}_${APP_NAME}.bundle"
+if [[ -d "$RESOURCE_BUNDLE_SRC" ]]; then
+    echo "==> Embedding ${PACKAGE_NAME}_${APP_NAME}.bundle"
+    RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/${PACKAGE_NAME}_${APP_NAME}.bundle"
+    ditto "$RESOURCE_BUNDLE_SRC" "$RESOURCE_BUNDLE"
+    # A raw catalog means the native build system ran: the app would be English-only.
+    [[ -f "$RESOURCE_BUNDLE/Contents/Resources/es.lproj/Localizable.strings" ]] \
+        || { echo "error: $RESOURCE_BUNDLE has no compiled es.lproj (was it built with --build-system swiftbuild?)" >&2; exit 1; }
+    echo "==> Signing resource bundle (SIGN_IDENTITY=$SIGN_IDENTITY)"
+    sign "$RESOURCE_BUNDLE"
 fi
 
 echo "==> Signing app (SIGN_IDENTITY=$SIGN_IDENTITY)"
