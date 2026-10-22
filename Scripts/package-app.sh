@@ -41,7 +41,12 @@
 #   the bundle has no es.lproj/Localizable.strings: that means the catalog
 #   shipped uncompiled, so the app would be English-only. This needs Swift
 #   Build, hence the pinned --build-system below. See
-#   Design/spanish-localization.md, section 2.3.
+#   Design/spanish-localization.md, section 2.3. Separately, every
+#   Resources/*.lproj directory (the app's own strings, e.g. the Finder
+#   Services menu title in ServicesMenu.strings, which macOS reads from the
+#   main bundle and not from the module bundle) is copied into
+#   Contents/Resources before the app is signed; none present skips it. The app
+#   signature seals Contents/Resources, so these need no signature of their own.
 #
 # Version:
 #   CFBundleShortVersionString comes from `git describe --tags`, leading "v"
@@ -179,6 +184,21 @@ if [[ -d "$RESOURCE_BUNDLE_SRC" ]]; then
         || { echo "error: $RESOURCE_BUNDLE has no compiled es.lproj (was it built with --build-system swiftbuild?)" >&2; exit 1; }
     echo "==> Signing resource bundle (SIGN_IDENTITY=$SIGN_IDENTITY)"
     sign "$RESOURCE_BUNDLE"
+fi
+
+# Main-bundle localizations (e.g. ServicesMenu.strings for the Finder Services
+# menu title, Apple QA1605). Sealed by the app signature below. nullglob makes
+# an unmatched pattern expand to nothing, so no lproj directories skips the step.
+shopt -s nullglob
+LPROJ_DIRS=("$REPO_ROOT"/Resources/*.lproj)
+shopt -u nullglob
+if (( ${#LPROJ_DIRS[@]} > 0 )); then
+    echo "==> Embedding main-bundle localizations"
+    for LPROJ in "${LPROJ_DIRS[@]}"; do
+        if [[ -d "$LPROJ" ]]; then
+            ditto "$LPROJ" "$APP_BUNDLE/Contents/Resources/$(basename "$LPROJ")"
+        fi
+    done
 fi
 
 echo "==> Signing app (SIGN_IDENTITY=$SIGN_IDENTITY)"
