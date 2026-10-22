@@ -59,6 +59,18 @@ final class AppModel {
     /// can show the popover and make it key before the step changes.
     @ObservationIgnored var onLoad: (@MainActor () -> Void)?
 
+    /// True while browse() or chooseOtherFolder() runs its modal NSOpenPanel.
+    /// No view reads it, so it is not observed; it stays settable (not
+    /// private) because the tests set it to simulate an open panel.
+    @ObservationIgnored var isPresentingPanel = false
+    /// The newest request received while busy. Each hold replaces it rather
+    /// than adding to it (newest wins). private(set) so tests can read it.
+    @ObservationIgnored private(set) var heldExternalFiles = IncomingFiles()
+    /// Called when the user confirms browse()'s or chooseOtherFolder()'s
+    /// panel, so whatever the outside hand-off still buffers can't replace the
+    /// user's pick.
+    @ObservationIgnored var onPanelConfirmed: (@MainActor () -> Void)?
+
     var encryptedFiles: [LoadedFile] { files.filter { $0.kind == .encrypted } }
     var usableFiles: [LoadedFile] { files.filter { $0.kind != .corrupt && !$0.skipped } }
     /// Files `save()` attempted and that did not write, for the done step's title.
@@ -85,9 +97,55 @@ final class AppModel {
         panel.canChooseDirectories = false
         panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
-        if panel.runModal() == .OK {
-            load(panel.urls)
+        isPresentingPanel = true
+        let response = panel.runModal()
+        isPresentingPanel = false
+        browsePanelClosed(urls: response == .OK ? panel.urls : nil)
+    }
+
+    /// What browse() does once its panel closes; `nil` means cancelled. A
+    /// confirm discards files held from outside, a cancel loads them.
+    func browsePanelClosed(urls: [URL]?) {
+        guard let urls, !urls.isEmpty else {
+            resumeExternalOpen()
+            return
         }
+        discardExternalFiles()
+        load(urls)
+    }
+
+    /// Entry point for files from outside the app (Finder). Same effect as
+    /// choosing them with browse(): replaces the current batch and opens the
+    /// popover. Holds them instead while work is in flight; the newest hold
+    /// replaces any older one.
+    func openFromOutside(_ urls: [URL]) {
+        var incoming = IncomingFiles()
+        incoming.add(urls)
+        guard !incoming.isEmpty else { return }
+        switch externalOpenAction(step: step, isPresentingPanel: isPresentingPanel) {
+        case .loadNow:
+            load(incoming.take())
+        case .holdUntilIdle:
+            heldExternalFiles = incoming
+            // Behind a panel, the panel is already in front. On the spinner,
+            // open the popover so the user sees the request arrived.
+            if !isPresentingPanel { onLoad?() }
+        }
+    }
+
+    /// Loads held files if the model is no longer busy. Called where busy
+    /// periods end: after the awaits in submitPassword() and save(), after a
+    /// classification lands, and when a panel is cancelled.
+    func resumeExternalOpen() {
+        guard !heldExternalFiles.isEmpty,
+            externalOpenAction(step: step, isPresentingPanel: isPresentingPanel) == .loadNow
+        else { return }
+        load(heldExternalFiles.take())
+    }
+
+    private func discardExternalFiles() {
+        heldExternalFiles = IncomingFiles()
+        onPanelConfirmed?()
     }
 
     func load(_ urls: [URL]) {
@@ -112,6 +170,8 @@ final class AppModel {
             savedURLs = []
             savedTo = nil
             step = Unlatch.step(afterLoading: classified.map(\.kind))
+            // A request that arrived while this classification ran was held.
+            resumeExternalOpen()
         }
     }
 
@@ -126,6 +186,9 @@ final class AppModel {
         let generation = loadGeneration
         step = .working
         Task {
+            // Runs on every exit, including a dropped result, so a request
+            // held meanwhile is never stranded.
+            defer { resumeExternalOpen() }
             let matched = await Task.detached {
                 Set(targets.filter { passwordWorks(attempt, for: $0) })
             }.value
@@ -159,10 +222,23 @@ final class AppModel {
         panel.prompt = "Choose"
         panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
-        if panel.runModal() == .OK, let url = panel.url {
-            chosenFolder = url
-            destination = .other
+        isPresentingPanel = true
+        let response = panel.runModal()
+        isPresentingPanel = false
+        folderPanelClosed(url: response == .OK ? panel.url : nil)
+    }
+
+    /// What chooseOtherFolder() does once its panel closes; `nil` means
+    /// cancelled. A confirm discards files held from outside and applies the
+    /// folder, a cancel loads the held files.
+    func folderPanelClosed(url: URL?) {
+        guard let url else {
+            resumeExternalOpen()
+            return
         }
+        discardExternalFiles()
+        chosenFolder = url
+        destination = .other
     }
 
     func save() {
@@ -175,6 +251,7 @@ final class AppModel {
         let generation = loadGeneration
         step = .working
         Task {
+            defer { resumeExternalOpen() }
             // The concrete Error thrown by executeSaveJob is not Sendable, so
             // it's mapped to SaveFailure inside the detached closure — only
             // that Sendable outcome crosses back to the main actor.

@@ -9,45 +9,6 @@ import Testing
 // but the Finder hand-off (Design/finder-quick-action.md, Goal 3) can start one
 // from any step.
 
-/// A temporary folder holding copies of the plain fixture, so suffix saves
-/// write next to them and nothing touches the fixtures themselves.
-private struct Workspace {
-    let folder: URL
-
-    init() throws {
-        folder = FileManager.default.temporaryDirectory
-            .appending(path: "AppModelBatchTests-\(UUID().uuidString)", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    }
-
-    func plainPDF(named name: String) throws -> URL {
-        let fixture = URL(filePath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appending(path: "UnlatchCoreTests/Fixtures/plain.pdf")
-        let copy = folder.appending(path: name)
-        try FileManager.default.copyItem(at: fixture, to: copy)
-        return copy
-    }
-
-    func remove() {
-        try? FileManager.default.removeItem(at: folder)
-    }
-}
-
-/// Polls on the main actor, yielding between checks, until `condition` holds.
-@MainActor
-private func waitUntil(
-    timeout: Duration = .seconds(5), _ condition: () -> Bool
-) async throws -> Bool {
-    let deadline = ContinuousClock.now + timeout
-    while !condition() {
-        if ContinuousClock.now >= deadline { return false }
-        try await Task.sleep(for: .milliseconds(5))
-    }
-    return true
-}
-
 @MainActor
 private func destinationModel(with url: URL) -> AppModel {
     let model = AppModel(loginItemService: FixedLoginItem(status: .unavailable))
