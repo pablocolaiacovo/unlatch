@@ -315,7 +315,7 @@ func rowInfo(for file: LoadedFile, done: Bool) -> RowInfo {
                 : "No open password — permissions only")
     case .plain:
         return RowInfo(
-            badge: "i", tone: .warning,
+            badge: "i", tone: .neutral,
             note: done && file.unlocked
                 ? "Not encrypted — copied as-is"
                 : "Not encrypted — nothing to unlock")
@@ -526,6 +526,25 @@ func updateFooterPresentation(for state: UpdateButtonState) -> UpdateFooterPrese
             menuItemTitle: UpdateFooterPresentation.updateAvailableTitle, menuItemEnabled: true,
             showsUpdateIndicator: true)
     }
+}
+
+/// The "Check Automatically" item in the ellipsis menu (#71).
+struct AutomaticChecksMenuItem: Equatable, Sendable {
+    let title: String
+    let isChecked: Bool
+
+    static let checkAutomaticallyTitle = "Check Automatically"
+}
+
+/// `nil` (the item is left out) unless availability is `.enabled`, matching how the update item
+/// is hidden. Otherwise `checkAutomaticallyTitle`, checked when `isOn` is true. Always enabled:
+/// the setting is independent of `canCheckForUpdates` and of an update session in progress.
+func automaticChecksMenuItem(
+    availability: UpdaterAvailability, isOn: Bool
+) -> AutomaticChecksMenuItem? {
+    guard availability == .enabled else { return nil }
+    return AutomaticChecksMenuItem(
+        title: AutomaticChecksMenuItem.checkAutomaticallyTitle, isChecked: isOn)
 }
 
 /// What Sparkle's standard user driver reports about the update on offer.
