@@ -35,6 +35,7 @@ default PDF viewer. Everything works with today's ad-hoc signed, non-sandboxed b
    second password or destination UI.
 3. Files that arrive while Unlatch is busy (a password check or save is running, or an `NSOpenPanel`
    is up) are held and loaded when that work finishes, never mixed into the in-flight batch.
+   Confirming either panel discards them instead (§2.4).
 4. No new bundle, executable, entitlement, or nested code signature. `Scripts/package-app.sh`, its
    inside-out signing from PR #52, and the release workflow's signature checks stay valid
    unchanged.
@@ -177,8 +178,9 @@ final class FinderHandoff: NSObject {
 
     /// Drops buffered URLs and cancels the pending flush. AppModel calls it
     /// (through onPanelConfirmed) when the user confirms the "Choose PDFs…"
-    /// panel, so a hand-off received before that point can't replace the
-    /// panel's selection (§2.4).
+    /// or "Choose folder…" panel, so a hand-off received before that point
+    /// can't replace the panel's selection or the batch the folder was
+    /// chosen for (§2.4).
     func discardPending()
 
     /// Services entry point. The selector must match NSMessage "unlockPDFs"
@@ -310,9 +312,10 @@ private(set) var isPresentingPanel = false
 /// The newest request received while busy. Each hold replaces it rather than
 /// adding to it (newest wins, §3.4). private(set) so tests can read it.
 @ObservationIgnored private(set) var heldExternalFiles = IncomingFiles()
-/// Called when the user confirms browse()'s panel. AppDelegate wires it to
-/// FinderHandoff.discardPending() so URLs still in the hand-off's
-/// coalescing buffer can't replace the panel's selection.
+/// Called when the user confirms browse()'s or chooseOtherFolder()'s panel.
+/// AppDelegate wires it to FinderHandoff.discardPending() so URLs still in
+/// the hand-off's coalescing buffer can't replace the panel's selection or
+/// the batch the folder was chosen for.
 @ObservationIgnored var onPanelConfirmed: (@MainActor () -> Void)?
 
 /// Entry point for files from Finder. Same effect as choosing them with
@@ -321,9 +324,9 @@ private(set) var isPresentingPanel = false
 func openFromOutside(_ urls: [URL])
 
 /// Loads held files if the model is no longer busy. Called where busy
-/// periods end: after the awaits in submitPassword() and save(), after
-/// chooseOtherFolder()'s panel closes, and when browse()'s panel is
-/// cancelled. A confirmed browse() discards held files instead.
+/// periods end: after the awaits in submitPassword() and save(), and when
+/// browse()'s or chooseOtherFolder()'s panel is cancelled. A confirmed
+/// browse() or chooseOtherFolder() discards held files instead.
 func resumeExternalOpen()
 ```
 
@@ -365,9 +368,20 @@ Rules:
 
   A hand-off received after the panel closes is newer than the pick and replaces it, by the same
   rule.
-- **`chooseOtherFolder()`**: sets `isPresentingPanel` around `runModal()`, then
-  `resumeExternalOpen()` on both confirm and cancel. Whether resuming after a confirmed folder pick
-  is intended is open question 5.
+- **`chooseOtherFolder()`**: sets `isPresentingPanel` around `runModal()`, and handles the panel
+  closing the same way as `browse()` (maintainer decision, 2026-10-21, open question 5). A confirm
+  is `runModal()` returning `.OK` with a non-nil `panel.url`. Anything else is a cancel.
+  - **Cancel**: `resumeExternalOpen()` loads held files. Files still in the hand-off buffer are
+    delivered by its timer as usual.
+  - **Confirm**: `heldExternalFiles` is emptied and `onPanelConfirmed?()` empties `FinderHandoff`'s
+    buffer and cancels its timer. Then the chosen folder is applied (`chosenFolder`, `destination =
+    .other`). Without the discard, held or buffered files would load and replace the batch the user
+    just chose a folder for.
+
+  The two dispatch cases above apply unchanged, with the folder pick in place of set B: a request
+  dispatched during the modal session is discarded by the confirm, and a request queued until
+  `runModal()` returns is newer than the pick and replaces the batch about 250 ms later
+  (newest wins, §3.4).
 - **End of `submitPassword()`'s and `save()`'s tasks**: `resumeExternalOpen()`, so the newest
   request wins. Only the newest request held during the work is kept (replace, above). After a save this replaces the done step. The files were written, but the
   "Saved" confirmation for the previous batch isn't shown. That window is normally under a second,
@@ -517,6 +531,9 @@ apart from a baseline `swift build` and `swift test` on `main`, both clean.
   anchors to a hidden button. That's an existing limitation. It's noted for manual check 3 and not
   solved here.
 - **Popover already open on another step**: replaced (§2.4). **Busy**: held, then loaded.
+- **Hand-off while "Choose PDFs…" or "Choose folder…" is up**: held. Cancelling the panel loads it.
+  Confirming either panel discards it, along with anything still in the hand-off buffer, and then
+  applies the panel's result (§2.4).
 - **Service invoked during a Sparkle update session**: Sparkle's window is separate. The popover
   opens on top as it would from a click. Nothing special.
 - **User disables the entry** in System Settings > Keyboard > Keyboard Shortcuts > Services: Open
@@ -592,9 +609,10 @@ and turns a single-batch popover into a multi-batch one. Newest-wins matches wha
 already does for the picker, and only the narrow `.working` window needs holding. **Newest wins.**
 
 The same rule applies to held files: a request held while busy replaces any request held before it
-(§2.4), and the newest held request loads when the work ends. The only merge is inside
-`FinderHandoff`, which coalesces a burst that Launch Services split from one user action, because
-that is one request, not two.
+(§2.4), and the newest held request loads when the work ends. The exception is a confirmed
+"Choose PDFs…" or "Choose folder…" panel, which discards the held request instead (§2.4). The only
+merge is inside `FinderHandoff`, which coalesces a burst that Launch Services split from one user
+action, because that is one request, not two.
 
 ### 3.5 No Xcode project
 
@@ -631,6 +649,15 @@ nothing is blocking. Neither the chosen design nor the deferred extension needs 
   - Setting `step = .password` and then calling `resumeExternalOpen()` loads, so `onLoad` fires
     again. A second `resumeExternalOpen()` does nothing.
   - `openFromOutside([])` does nothing.
+  - `runModal()` can't be driven from a unit test, so T1 factors what `chooseOtherFolder()` does
+    after its panel closes into an internal method the tests call directly, for example
+    `folderPanelClosed(url:)`, where `nil` means cancelled. The name is T1's call. With
+    `isPresentingPanel = true`, `openFromOutside([a])` holds `a`, then `isPresentingPanel = false`:
+    - **Cancelled folder pick resumes.** Closing `chooseOtherFolder()`'s panel with `nil` fires
+      `onLoad` and empties `heldExternalFiles`.
+    - **Confirmed folder pick discards.** Closing it with a folder URL empties `heldExternalFiles`,
+      calls `onPanelConfirmed` once, does not call `onLoad`, and sets `chosenFolder` to that URL and
+      `destination` to `.other`.
 
 `InfoPlistTemplateTests.swift`: extend the existing file, which already holds the Sparkle guards,
 and reuse its private `loadTemplate()` helper (it reads the template via `#filePath`, substitutes
@@ -785,8 +812,11 @@ Suggested title: "Prepare the popover flow to receive PDFs from outside the app"
 - `Logic.swift`: add `IncomingFiles`, `ExternalOpenAction`, and `externalOpenAction(...)` (§2.4).
 - `AppModel`: add `isPresentingPanel`, `heldExternalFiles`, `onPanelConfirmed`,
   `openFromOutside(_:)`, and `resumeExternalOpen()`. Set `isPresentingPanel` around both
-  `runModal()` calls, call `resumeExternalOpen()` at the four points in §2.4, and on a confirmed
-  `browse()` empty `heldExternalFiles` and call `onPanelConfirmed?()` before `load(panel.urls)`.
+  `runModal()` calls, and call `resumeExternalOpen()` at the four points in §2.4 (the ends of
+  `submitPassword()`'s and `save()`'s tasks, and a cancelled `browse()` or `chooseOtherFolder()`
+  panel). Both panels discard on a confirm: empty `heldExternalFiles` and call
+  `onPanelConfirmed?()`, then `load(panel.urls)` for `browse()` or apply the chosen folder for
+  `chooseOtherFolder()`.
   Each hold replaces `heldExternalFiles` rather than adding to it.
 - Handle open question 7 (a superseded batch's Save stays live while the new batch loads) once it
   is decided. T1 is not done until a load from a step that shows Save can't let the old batch's
@@ -906,17 +936,20 @@ follow-up is filed only if M1 shows the entry does not land in Quick Actions. #1
 on #8, and its last checkbox is rewritten as in question 3. The menu item reads "Unlock with
 Unlatch".
 
-### Raised in review, not yet decided
+### Raised in review
 
-These came up in the 2026-10-21 re-review of PR #56. None has a decision yet, and this document
-does not make one.
+These came up in the 2026-10-21 re-review of PR #56. Question 5 was resolved by the maintainer on
+2026-10-21. Questions 6 and 7 have no decision yet, and this document does not make one.
 
-5. **Confirming `chooseOtherFolder()` resumes held files.** As designed (§2.4),
+5. **Resolved by the maintainer on 2026-10-21: Confirming `chooseOtherFolder()` resumes held
+   files.** As designed (§2.4),
    `chooseOtherFolder()` calls `resumeExternalOpen()` after its panel closes whether the user
    confirms or cancels. On a confirm, held files then load and replace the batch the user just
    chose a folder for. That does not match `browse()`, where a confirm discards anything received
    during the panel. Is that intended, or should a confirmed folder pick discard held files (or
    keep holding them) the way a confirmed `browse()` does?
+   **Maintainer's decision (2026-10-21):** "a confirmed chooseOtherFolder() discards held files,
+   the same as a confirmed browse()." §2.4, §2.9, §4, and T1 follow it.
 6. **Manual check 5 coverage.** Check 5 drives only the Services entry (`perform`) during the
    "Choose PDFs…" panel. It does not cover Open With (`application(_:open:)`) arriving during a
    panel, and it does not cover the "Choose folder…" panel from `chooseOtherFolder()`. Should check
