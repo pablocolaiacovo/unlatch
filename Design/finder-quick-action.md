@@ -33,8 +33,8 @@ default PDF viewer. Everything works with today's ad-hoc signed, non-sandboxed b
    running app. If the app isn't running, invoking the entry launches it.
 2. One entry point into the existing flow: every outside source ends in `AppModel.load(_:)`. No
    second password or destination UI.
-3. Files that arrive while Unlatch is busy (a password check or save is running, or an `NSOpenPanel`
-   is up) are held and loaded when that work finishes, never mixed into the in-flight batch.
+3. Files that arrive while Unlatch is busy (a password check, a save, or a classification started
+   from a non-idle step is running, or an `NSOpenPanel` is up) are held and loaded when that work finishes, never mixed into the in-flight batch.
    Confirming either panel discards them instead (§2.4).
 4. No new bundle, executable, entitlement, or nested code signature. `Scripts/package-app.sh`, its
    inside-out signing from PR #52, and the release workflow's signature checks stay valid
@@ -285,8 +285,9 @@ struct IncomingFiles: Equatable, Sendable {
 /// What to do with files that arrive from outside the popover.
 enum ExternalOpenAction: Equatable, Sendable {
     case loadNow
-    /// A password check or save is in flight (`.working`), or an NSOpenPanel
-    /// is up. Loading now would let that work's completion write into the
+    /// A password check, a save, or a classification started from a non-idle
+    /// step is in flight (all show `.working`), or an NSOpenPanel is up.
+    /// Loading now would let that work's completion write into the
     /// new batch, so hold the files until it finishes.
     case holdUntilIdle
 }
@@ -660,7 +661,10 @@ nothing is blocking. Neither the chosen design nor the deferred extension needs 
   so counting `onLoad` calls observes it without awaiting classification, and most cases need no
   fixtures. Cases that await a classification, a password check, or a save use small copies of
   `Tests/UnlatchCoreTests/Fixtures/plain.pdf` and `user-locked.pdf` in a temporary folder, following
-  `AppModelBatchTests`, so nothing writes next to the fixtures themselves.
+  `AppModelBatchTests`, so nothing writes next to the fixtures themselves. The shared helpers,
+  `Workspace` (`plainPDF(named:)`, `userLockedPDF(named:)`) and `waitUntil`, live in
+  `Tests/UnlatchTests/AppModelTestSupport.swift`, and `AppModelBatchTests` and `ExternalOpenTests`
+  both use them.
   - From `.idle`, `openFromOutside([u])` calls `onLoad` once.
   - With `step = .working`, `openFromOutside([u])` calls `onLoad` once (the popover opens on the
     spinner), leaves `files` unchanged, and holds `u` (`heldExternalFiles.urls == [u]`).
@@ -686,12 +690,18 @@ nothing is blocking. Neither the chosen design nor the deferred extension needs 
   - With copied fixtures, from the `openFromOutside` entry point (open question 7, addressed by #85):
     - **Opening from `.destination` leaves it right away.** `step` is `.working` before
       classification lands, so the old batch's Save is gone.
-    - **A save in flight never writes into the new batch.** Files that arrive during `save()` are
-      held, and once the save ends they load with no `unlocked` rows, no failures, and empty
-      `savedURLs` and `savedTo`.
+    - **A save in flight holds files until it finishes** (`aSaveInFlightHoldsFilesUntilItFinishes`).
+      Files that arrive during `save()` are held, and once the save ends they load with no
+      `unlocked` rows, no failures, and empty `savedURLs` and `savedTo`. This guards the hold
+      (resume point 2). The generation check that drops a stale save's result is covered by #85's
+      tests in `AppModelBatchTests`.
     - **Files held during a classification load when it lands.** A `load(_:)` from a non-idle step
       is in flight, `openFromOutside` holds the new files, and they replace the batch once the first
-      classification lands.
+      classification lands (resume point 3).
+    - **Files held during a password check load when it ends**
+      (`filesHeldDuringAPasswordCheckLoadWhenItEnds`). A wrong password is submitted for a copy of
+      `user-locked.pdf`, `openFromOutside([new])` is held while the check runs, and the `defer` in
+      `submitPassword()` loads it when the check fails (resume point 1).
 
 `InfoPlistTemplateTests.swift`: extend the existing file, which already holds the Sparkle guards,
 and reuse its private `loadTemplate()` helper (it reads the template via `#filePath`, substitutes
@@ -739,8 +749,8 @@ expected call appears. **Negative checks** sleep for a fixed window and then exp
 
 The 2 s polling bound is generous next to the delays, so positive checks don't depend on scheduler
 timing. The negative windows are at least four times the 50 ms delay, except in the restart case,
-where the margins are stated above. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh` don't change. The
-`AppModel` cases above copy existing fixtures and need no new ones.
+where the margins are stated above. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh` don't change. Some
+`AppModel` cases above copy existing fixtures; none need new ones.
 
 ### CI (`devops`, `release.yml` `build-and-package`)
 
