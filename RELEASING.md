@@ -307,10 +307,11 @@ every local tag, including experiments you meant to keep to yourself.
 `.github/workflows/release.yml` runs on the pushed tag as five jobs. The first two run side by
 side; each later one starts only after the ones before it succeed:
 
-1. **`build-and-package`** packages and ad-hoc signs through `Scripts/package-app.sh`, verifies the
-   signature, the embedded Sparkle framework, and the version, zips, and launches the unzipped copy.
-   **`check-feed-commit`** runs `Scripts/check-pages-commit.sh` and fails if another tag already
-   deployed the tag's commit to Pages (see below). A re-run of the same tag is not blocked.
+1. **`build-and-package`** and **`check-feed-commit`**, side by side. `build-and-package`
+   packages and ad-hoc signs through `Scripts/package-app.sh`, verifies the signature, the embedded
+   Sparkle framework, and the version, zips, and launches the unzipped copy. `check-feed-commit`
+   runs `Scripts/check-pages-commit.sh` and fails if another tag already deployed the tag's commit
+   to Pages (see below). A re-run of the same tag is not blocked.
 2. **`publish`** creates the GitHub Release with notes generated from squashed PR titles. It runs
    only when both jobs above passed, so a tag that fails the commit check leaves no release, no
    feed artifact, and no Pages deploy behind.
@@ -324,10 +325,10 @@ side; each later one starts only after the ones before it succeed:
    the bundle's `SUPublicEDKey`.
 4. **`deploy-feed`** re-fetches the live feed and refuses to deploy if the new one would drop or
    demote a live item, comparing items by `sparkle:version` and channel. It runs the same-commit
-   check again as a backstop, for a deploy that landed after `publish` or a re-run days later. It
-   then publishes `appcast.xml` to
-   GitHub Pages at <https://pablocolaiacovo.github.io/unlatch/appcast.xml> and polls the live feed
-   for up to 13 minutes, failing if the tag's item is not there.
+   check again as a backstop, for another tag's deploy that landed after `publish`, including
+   before a re-run of `appcast` days later. It then publishes `appcast.xml` to GitHub Pages at
+   <https://pablocolaiacovo.github.io/unlatch/appcast.xml> and polls the live feed for up to 13
+   minutes, failing if the tag's item is not there.
 
 The feed is updated after the release exists, so it never points at a missing asset. Once the run
 finishes:
@@ -388,15 +389,19 @@ deployment for it, on another tag, has `success` as its latest status.
 
 - **`check-feed-commit` fails** (the usual case): nothing was published. Do not re-run. Delete the
   tag (`git push origin :refs/tags/<tag>`, and `git tag -d <tag>` locally), then tag the next
-  commit on `main` as step 4 describes.
+  commit on `main` with the same version, as step 4 describes. Reusing the version is safe here
+  because no release or feed item ever existed for it; the rule against moving a published tag
+  (end of this step) applies once `publish` has run.
 - **The backstop in `deploy-feed` fails:** another deploy of the commit landed after `publish`, so
-  the release exists. Do not re-run: clean up the release and tag as described below and tag a
-  different commit.
+  the release was public. Do not re-run: delete the release and tag as described below ("No feed
+  item yet"), then ship the next version (`vX.Y.Z+1`) from a different commit. Do not reuse the
+  deleted version.
 
 Two cases slip past both checks: a tag whose Pages deploy went through but whose verify step then
 failed (its deployment ends as `failure` and is not counted), and two tags pushed to one commit at
 the same time. `deploy-feed`'s post-deploy check catches both, after up to 13 minutes, by failing
-when the live feed does not carry the tag's item.
+when the live feed does not carry the tag's item. Re-running cannot fix it, as with v1.1.0: ship
+the next version.
 
 - Never use **Re-run all jobs**: `publish` fails because the release already exists.
 - Do not use **Re-run failed jobs** when only `deploy-feed` failed: it redeploys the feed artifact

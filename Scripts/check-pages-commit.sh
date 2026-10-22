@@ -70,7 +70,7 @@ if [[ -n "$CLASH" ]]; then
   if [[ "$STAGE" == before-publish ]]; then
     MSG="$MSG No release, feed item, or Pages deploy was created, so the only cleanup is deleting the tag: git push origin :refs/tags/$TAG"
   else
-    MSG="$MSG The release already exists: clean up $TAG as RELEASING.md describes before tagging again."
+    MSG="$MSG The release already exists: delete the release and $TAG as RELEASING.md describes, then ship the next version from a different commit. Do not reuse $TAG."
   fi
   die "$MSG"
 fi
