@@ -42,6 +42,50 @@
     <!-- Scheduled checks once a day; Sparkle's own prompt still asks first. -->
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
+    <!-- Finder hand-off (issue #14, Design/finder-quick-action.md). A Services
+         entry, not an app extension: no sandbox, no entitlements, no nested code.
+         NSMessage must match FinderHandoff's @objc selector
+         unlockPDFs(_:userData:error:); InfoPlistTemplateTests checks it.
+         NSRequiredContext must be present, even empty, or macOS registers the
+         service but never shows it. -->
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Unlock with Unlatch</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>unlockPDFs</string>
+            <key>NSPortName</key>
+            <string>Unlatch</string>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>com.adobe.pdf</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+        </dict>
+    </array>
+    <!-- Lists Unlatch under Finder's Open With for PDFs and routes `open -a`
+         and Open With to application(_:open:). Alternate rank: Unlatch is a
+         secondary handler and never becomes the default PDF viewer. -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>PDF Document</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.adobe.pdf</string>
+            </array>
+        </dict>
+    </array>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Pablo Colaiacovo</string>
     <key>NSHighResolutionCapable</key>

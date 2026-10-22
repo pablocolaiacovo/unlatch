@@ -33,8 +33,9 @@ default PDF viewer. Everything works with today's ad-hoc signed, non-sandboxed b
    running app. If the app isn't running, invoking the entry launches it.
 2. One entry point into the existing flow: every outside source ends in `AppModel.load(_:)`. No
    second password or destination UI.
-3. Files that arrive while Unlatch is busy (a password check or save is running, or an `NSOpenPanel`
-   is up) are held and loaded when that work finishes, never mixed into the in-flight batch.
+3. Files that arrive while Unlatch is busy (a password check, a save, or a classification started
+   from a non-idle step is running, or an `NSOpenPanel` is up) are held and loaded when that work finishes, never mixed into the in-flight batch.
+   Confirming either panel discards them instead (§2.4).
 4. No new bundle, executable, entitlement, or nested code signature. `Scripts/package-app.sh`, its
    inside-out signing from PR #52, and the release workflow's signature checks stay valid
    unchanged.
@@ -177,8 +178,9 @@ final class FinderHandoff: NSObject {
 
     /// Drops buffered URLs and cancels the pending flush. AppModel calls it
     /// (through onPanelConfirmed) when the user confirms the "Choose PDFs…"
-    /// panel, so a hand-off received before that point can't replace the
-    /// panel's selection (§2.4).
+    /// or "Choose folder…" panel, so a hand-off received before that point
+    /// can't replace the panel's selection or the batch the folder was
+    /// chosen for (§2.4).
     func discardPending()
 
     /// Services entry point. The selector must match NSMessage "unlockPDFs"
@@ -283,8 +285,9 @@ struct IncomingFiles: Equatable, Sendable {
 /// What to do with files that arrive from outside the popover.
 enum ExternalOpenAction: Equatable, Sendable {
     case loadNow
-    /// A password check or save is in flight (`.working`), or an NSOpenPanel
-    /// is up. Loading now would let that work's completion write into the
+    /// A password check, a save, or a classification started from a non-idle
+    /// step is in flight (all show `.working`), or an NSOpenPanel is up.
+    /// Loading now would let that work's completion write into the
     /// new batch, so hold the files until it finishes.
     case holdUntilIdle
 }
@@ -306,13 +309,16 @@ manual check 5 records which one happens.
 
 ```swift
 /// True while browse() or chooseOtherFolder() runs its modal NSOpenPanel.
-private(set) var isPresentingPanel = false
+/// Internal and settable, not private(set), because tests set it to stand in
+/// for a panel that is up.
+@ObservationIgnored var isPresentingPanel = false
 /// The newest request received while busy. Each hold replaces it rather than
 /// adding to it (newest wins, §3.4). private(set) so tests can read it.
 @ObservationIgnored private(set) var heldExternalFiles = IncomingFiles()
-/// Called when the user confirms browse()'s panel. AppDelegate wires it to
-/// FinderHandoff.discardPending() so URLs still in the hand-off's
-/// coalescing buffer can't replace the panel's selection.
+/// Called when the user confirms browse()'s or chooseOtherFolder()'s panel.
+/// AppDelegate wires it to FinderHandoff.discardPending() so URLs still in
+/// the hand-off's coalescing buffer can't replace the panel's selection or
+/// the batch the folder was chosen for.
 @ObservationIgnored var onPanelConfirmed: (@MainActor () -> Void)?
 
 /// Entry point for files from Finder. Same effect as choosing them with
@@ -320,10 +326,12 @@ private(set) var isPresentingPanel = false
 /// instead while work is in flight (externalOpenAction).
 func openFromOutside(_ urls: [URL])
 
-/// Loads held files if the model is no longer busy. Called where busy
-/// periods end: after the awaits in submitPassword() and save(), after
-/// chooseOtherFolder()'s panel closes, and when browse()'s panel is
-/// cancelled. A confirmed browse() discards held files instead.
+/// Loads held files if the model is no longer busy. Called at the five
+/// points where a busy period ends: the ends of submitPassword()'s and
+/// save()'s tasks (in a defer, so every exit resumes), when a classification
+/// lands in load(_:), and when browse()'s or chooseOtherFolder()'s panel is
+/// cancelled. A confirmed browse() or chooseOtherFolder() discards held files
+/// instead.
 func resumeExternalOpen()
 ```
 
@@ -365,13 +373,39 @@ Rules:
 
   A hand-off received after the panel closes is newer than the pick and replaces it, by the same
   rule.
-- **`chooseOtherFolder()`**: sets `isPresentingPanel` around `runModal()`, then
-  `resumeExternalOpen()` on both confirm and cancel. Whether resuming after a confirmed folder pick
-  is intended is open question 5.
-- **End of `submitPassword()`'s and `save()`'s tasks**: `resumeExternalOpen()`, so the newest
-  request wins. Only the newest request held during the work is kept (replace, above). After a save this replaces the done step. The files were written, but the
-  "Saved" confirmation for the previous batch isn't shown. That window is normally under a second,
-  so this is accepted rather than queueing a second flow (§3.4).
+- **`chooseOtherFolder()`**: sets `isPresentingPanel` around `runModal()`, and handles the panel
+  closing the same way as `browse()` (maintainer decision, 2026-10-21, open question 5). A confirm
+  is `runModal()` returning `.OK` with a non-nil `panel.url`. Anything else is a cancel.
+  - **Cancel**: `resumeExternalOpen()` loads held files. Files still in the hand-off buffer are
+    delivered by its timer as usual.
+  - **Confirm**: discard as for `browse()`, then apply the folder (`chosenFolder`, `destination =
+    .other`). Without the discard, held or buffered files would load and replace the batch the user
+    just chose a folder for.
+
+  The two dispatch cases above apply unchanged, with the folder pick in place of set B: a request
+  dispatched during the modal session is discarded by the confirm, and a request queued until
+  `runModal()` returns is newer than the pick and replaces the batch about 250 ms later
+  (newest wins, §3.4).
+- **Resume points.** `resumeExternalOpen()` is called at five points, the places where a busy
+  period can end. Only the newest request held during the busy period is kept (replace, above), so
+  the newest request wins.
+  1. **The end of `submitPassword()`'s task.**
+  2. **The end of `save()`'s task.** Both call it in a `defer`, so it runs on every exit of the
+     `Task`, including the early return that drops a superseded batch's result (`loadGeneration`,
+     #85). A held request is never stranded. After a save this replaces the done step. The files
+     were written, but the "Saved" confirmation for the previous batch isn't shown. That window is
+     normally under a second, so this is accepted rather than queueing a second flow (§3.4).
+  3. **When a classification lands in `load(_:)`**, after `step` is set from the result. Since #85,
+     a load started from any non-idle step shows `.working` right away, so a request that arrives
+     while that classification runs is held. Without this point it would be stranded until some
+     unrelated busy period ended.
+  4. **A cancelled `browse()` panel.**
+  5. **A cancelled `chooseOtherFolder()` panel.**
+
+  `load(_:)`'s stale early return (`guard generation == loadGeneration`) skips the resume, and that
+  is safe. Only two things bump `loadGeneration`: a newer `load(_:)`, which resumes when its own
+  classification lands, and `reset()`, which is unreachable while anything is held (files are held
+  only on `.working`, which has no controls, or behind a modal panel).
 - **Mid-flow, not busy** (`.password` with a half-typed password, `.destination`, `.done`): the new
   batch replaces the old one, the same as `load(_:)` from any source. `loadGeneration` already
   drops a stale classification.
@@ -517,6 +551,9 @@ apart from a baseline `swift build` and `swift test` on `main`, both clean.
   anchors to a hidden button. That's an existing limitation. It's noted for manual check 3 and not
   solved here.
 - **Popover already open on another step**: replaced (§2.4). **Busy**: held, then loaded.
+- **Hand-off while "Choose PDFs…" or "Choose folder…" is up**: held. Cancelling the panel loads it.
+  Confirming either panel discards it, along with anything still in the hand-off buffer, and then
+  applies the panel's result (§2.4).
 - **Service invoked during a Sparkle update session**: Sparkle's window is separate. The popover
   opens on top as it would from a click. Nothing special.
 - **User disables the entry** in System Settings > Keyboard > Keyboard Shortcuts > Services: Open
@@ -592,9 +629,10 @@ and turns a single-batch popover into a multi-batch one. Newest-wins matches wha
 already does for the picker, and only the narrow `.working` window needs holding. **Newest wins.**
 
 The same rule applies to held files: a request held while busy replaces any request held before it
-(§2.4), and the newest held request loads when the work ends. The only merge is inside
-`FinderHandoff`, which coalesces a burst that Launch Services split from one user action, because
-that is one request, not two.
+(§2.4), and the newest held request loads when the work ends. The exception is a confirmed
+"Choose PDFs…" or "Choose folder…" panel, which discards the held request instead (§2.4). The only
+merge is inside `FinderHandoff`, which coalesces a burst that Launch Services split from one user
+action, because that is one request, not two.
 
 ### 3.5 No Xcode project
 
@@ -619,8 +657,14 @@ nothing is blocking. Neither the chosen design nor the deferred extension needs 
   - `.working` gives `.holdUntilIdle`.
   - Every other `Step` with `isPresentingPanel == false` gives `.loadNow`.
   - Any step with `isPresentingPanel == true` gives `.holdUntilIdle`.
-- `AppModel`, with the existing fake `LoginItemService`, and without fixtures. `load(_:)` calls
-  `onLoad` synchronously, so counting `onLoad` calls observes it without awaiting classification.
+- `AppModel`, with the existing fake `LoginItemService`. `load(_:)` calls `onLoad` synchronously,
+  so counting `onLoad` calls observes it without awaiting classification, and most cases need no
+  fixtures. Cases that await a classification, a password check, or a save use small copies of
+  `Tests/UnlatchCoreTests/Fixtures/plain.pdf` and `user-locked.pdf` in a temporary folder, following
+  `AppModelBatchTests`, so nothing writes next to the fixtures themselves. The shared helpers,
+  `Workspace` (`plainPDF(named:)`, `userLockedPDF(named:)`) and `waitUntil`, live in
+  `Tests/UnlatchTests/AppModelTestSupport.swift`, and `AppModelBatchTests` and `ExternalOpenTests`
+  both use them.
   - From `.idle`, `openFromOutside([u])` calls `onLoad` once.
   - With `step = .working`, `openFromOutside([u])` calls `onLoad` once (the popover opens on the
     spinner), leaves `files` unchanged, and holds `u` (`heldExternalFiles.urls == [u]`).
@@ -631,6 +675,33 @@ nothing is blocking. Neither the chosen design nor the deferred extension needs 
   - Setting `step = .password` and then calling `resumeExternalOpen()` loads, so `onLoad` fires
     again. A second `resumeExternalOpen()` does nothing.
   - `openFromOutside([])` does nothing.
+  - `runModal()` can't be driven from a unit test, so T1 factors what `chooseOtherFolder()` does
+    after its panel closes into an internal method the tests call directly, for example
+    `folderPanelClosed(url:)`, where `nil` means cancelled. The name is T1's call. With
+    `isPresentingPanel = true`, `openFromOutside([a])` holds `a`, then `isPresentingPanel = false`:
+    - **Cancelled folder pick resumes.** Closing `chooseOtherFolder()`'s panel with `nil` fires
+      `onLoad` and empties `heldExternalFiles`.
+    - **Confirmed folder pick discards.** Closing it with a folder URL empties `heldExternalFiles`,
+      calls `onPanelConfirmed` once, does not call `onLoad`, and sets `chosenFolder` to that URL and
+      `destination` to `.other`.
+    - The same two cases for `browse()`, through its after-the-panel method (for example
+      `browsePanelClosed(urls:)`): a cancel resumes, and a confirm discards, calls
+      `onPanelConfirmed` once, and loads only the panel's selection.
+  - With copied fixtures, from the `openFromOutside` entry point (open question 7, addressed by #85):
+    - **Opening from `.destination` leaves it right away.** `step` is `.working` before
+      classification lands, so the old batch's Save is gone.
+    - **A save in flight holds files until it finishes** (`aSaveInFlightHoldsFilesUntilItFinishes`).
+      Files that arrive during `save()` are held, and once the save ends they load with no
+      `unlocked` rows, no failures, and empty `savedURLs` and `savedTo`. This guards the hold
+      (resume point 2). The generation check that drops a stale save's result is covered by #85's
+      tests in `AppModelBatchTests`.
+    - **Files held during a classification load when it lands.** A `load(_:)` from a non-idle step
+      is in flight, `openFromOutside` holds the new files, and they replace the batch once the first
+      classification lands (resume point 3).
+    - **Files held during a password check load when it ends**
+      (`filesHeldDuringAPasswordCheckLoadWhenItEnds`). A wrong password is submitted for a copy of
+      `user-locked.pdf`, `openFromOutside([new])` is held while the check runs, and the `defer` in
+      `submitPassword()` loads it when the check fails (resume point 1).
 
 `InfoPlistTemplateTests.swift`: extend the existing file, which already holds the Sparkle guards,
 and reuse its private `loadTemplate()` helper (it reads the template via `#filePath`, substitutes
@@ -678,7 +749,8 @@ expected call appears. **Negative checks** sleep for a fixed window and then exp
 
 The 2 s polling bound is generous next to the delays, so positive checks don't depend on scheduler
 timing. The negative windows are at least four times the 50 ms delay, except in the restart case,
-where the margins are stated above. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh` don't change.
+where the margins are stated above. `Tests/UnlatchCoreTests`, the fixtures, and `Scripts/generate-fixtures.sh` don't change. Some
+`AppModel` cases above copy existing fixtures; none need new ones.
 
 ### CI (`devops`, `release.yml` `build-and-package`)
 
@@ -785,12 +857,17 @@ Suggested title: "Prepare the popover flow to receive PDFs from outside the app"
 - `Logic.swift`: add `IncomingFiles`, `ExternalOpenAction`, and `externalOpenAction(...)` (§2.4).
 - `AppModel`: add `isPresentingPanel`, `heldExternalFiles`, `onPanelConfirmed`,
   `openFromOutside(_:)`, and `resumeExternalOpen()`. Set `isPresentingPanel` around both
-  `runModal()` calls, call `resumeExternalOpen()` at the four points in §2.4, and on a confirmed
-  `browse()` empty `heldExternalFiles` and call `onPanelConfirmed?()` before `load(panel.urls)`.
+  `runModal()` calls, and call `resumeExternalOpen()` at the five points in §2.4: the ends of
+  `submitPassword()`'s and `save()`'s tasks (in a `defer`), a classification landing in `load(_:)`,
+  and a cancelled `browse()` or `chooseOtherFolder()` panel. Both panels discard on a confirm: empty
+  `heldExternalFiles` and call
+  `onPanelConfirmed?()`, then `load(panel.urls)` for `browse()` or apply the chosen folder for
+  `chooseOtherFolder()`.
   Each hold replaces `heldExternalFiles` rather than adding to it.
-- Handle open question 7 (a superseded batch's Save stays live while the new batch loads) once it
-  is decided. T1 is not done until a load from a step that shows Save can't let the old batch's
-  save write into the new one.
+- Open question 7 (a superseded batch's Save stays live while the new batch loads) is addressed
+  by #85, which T1 relies on. T1 is not done until tests from the `openFromOutside` entry point
+  show that a load from a step that shows Save leaves that step right away, and that a save in
+  flight when files arrive can't write into the new batch (§4).
 - `Tests/UnlatchTests/ExternalOpenTests.swift` as in §4.
 - Nothing calls `openFromOutside` yet.
 
@@ -906,17 +983,21 @@ follow-up is filed only if M1 shows the entry does not land in Quick Actions. #1
 on #8, and its last checkbox is rewritten as in question 3. The menu item reads "Unlock with
 Unlatch".
 
-### Raised in review, not yet decided
+### Raised in review
 
-These came up in the 2026-10-21 re-review of PR #56. None has a decision yet, and this document
-does not make one.
+These came up in the 2026-10-21 re-review of PR #56. Question 5 was resolved by the maintainer on
+2026-10-21. Question 7 is addressed by #85. Question 6 has no decision yet, and this document does
+not make one.
 
-5. **Confirming `chooseOtherFolder()` resumes held files.** As designed (§2.4),
+5. **Resolved by the maintainer on 2026-10-21: Should confirming `chooseOtherFolder()` resume
+   held files?** As originally designed (§2.4),
    `chooseOtherFolder()` calls `resumeExternalOpen()` after its panel closes whether the user
    confirms or cancels. On a confirm, held files then load and replace the batch the user just
    chose a folder for. That does not match `browse()`, where a confirm discards anything received
    during the panel. Is that intended, or should a confirmed folder pick discard held files (or
    keep holding them) the way a confirmed `browse()` does?
+   **Maintainer's decision (2026-10-21):** "a confirmed chooseOtherFolder() discards held files,
+   the same as a confirmed browse()." §2.4, §2.9, §4, and T1 follow it.
 6. **Manual check 5 coverage.** Check 5 drives only the Services entry (`perform`) during the
    "Choose PDFs…" panel. It does not cover Open With (`application(_:open:)`) arriving during a
    panel, and it does not cover the "Choose folder…" panel from `chooseOtherFolder()`. Should check
@@ -931,6 +1012,10 @@ does not make one.
    disabling Save while a load is in flight, or having `save()` ignore its result when the batch
    it started with has been superseded (for example by checking `loadGeneration`). Which one is
    open.
+   **Addressed by #85 (merged):** `load(_:)` now leaves any non-idle step right away, so Save is gone
+   before classification lands, and `save()` and `submitPassword()` drop results from a superseded
+   batch using `loadGeneration`. T1 relies on this and adds tests from the `openFromOutside` entry
+   point (§4).
 
 ## Sources
 

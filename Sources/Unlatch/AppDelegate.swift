@@ -21,6 +21,10 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
     private var statusItemController: StatusItemController?
+    /// One instance for the process lifetime. It exists before
+    /// applicationDidFinishLaunching because on a cold launch AppKit can call
+    /// application(_:open:) first; the hand-off buffers until `connect(to:)`.
+    private let finderHandoff = FinderHandoff()
     /// Assigned once at launch and never cleared: it owns Sparkle's controller,
     /// which nothing else retains.
     private var updater: AppUpdater?
@@ -44,6 +48,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             shortVersion: info?["CFBundleShortVersionString"] as? String)
         self.updater = updater
         statusItemController = StatusItemController(model: model, updater: updater)
+        // After StatusItemController, whose init sets model.onLoad.
+        NSApp.servicesProvider = finderHandoff
+        model.onPanelConfirmed = { [finderHandoff] in finderHandoff.discardPending() }
+        finderHandoff.connect { [model] urls in model.openFromOutside(urls) }
+    }
+
+    /// Open With > Unlatch, `open -a Unlatch file.pdf`, or a drop on the app
+    /// icon. On a cold launch this runs before applicationDidFinishLaunching,
+    /// so the files wait in the hand-off's buffer.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        NSLog("Unlatch: hand-off received %d file(s) via %@", urls.count, "open")
+        finderHandoff.receive(urls)
     }
 
     /// A minimal main menu: an app menu with Quit, and a standard Edit menu

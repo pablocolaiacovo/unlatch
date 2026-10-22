@@ -81,6 +81,14 @@ and check **Open at Login**. It follows System Settings > General > Login Items,
 Unlatch off there unchecks it too. The same menu shows the installed version, **Check for
 Updates…**, and **Check Automatically**.
 
+### Unlocking from Finder
+
+Right-click one or more PDFs in Finder and choose **Unlock with Unlatch**, which appears near the
+bottom of the menu, or under a Services submenu when several services are installed. Or use
+**Open With > Unlatch**. The popover opens with those files already loaded, and Unlatch starts if it
+isn't running. To hide the Finder entry, turn it off in System Settings > Keyboard > Keyboard
+Shortcuts > Services > Files and Folders. Open With keeps working.
+
 ## Updates
 
 Unlatch updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle
