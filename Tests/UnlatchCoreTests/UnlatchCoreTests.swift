@@ -6,3 +6,8 @@ import Testing
     // Swift Testing Documentation
     // https://developer.apple.com/documentation/testing
 }
+
+#if DEBUG
+func debugOnlyHelper74() {}
+#endif
+@Test func proofReleaseBreak74() { debugOnlyHelper74() }
