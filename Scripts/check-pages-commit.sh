@@ -66,9 +66,9 @@ while read -r ID REF; do
 done <<<"$IDS"
 
 if [[ -n "$CLASH" ]]; then
-  MSG="Commit $GITHUB_SHA is already deployed to Pages by:$CLASH. Pages would accept a second deploy of the same commit, report success, and keep serving the first one. $TAG needs a different commit: tag the next commit on main (RELEASING.md step 4). Do not re-run this run."
+  MSG="Commit $GITHUB_SHA is already deployed to Pages by:$CLASH. Pages would accept a second deploy of the same commit, report success, and keep serving the first one. Do not re-run this run."
   if [[ "$STAGE" == before-publish ]]; then
-    MSG="$MSG No release, feed item, or Pages deploy was created, so the only cleanup is deleting the tag: git push origin :refs/tags/$TAG"
+    MSG="$MSG No release, feed item, or Pages deploy was created, so the only cleanup is deleting the tag (git push origin :refs/tags/$TAG), then tagging the next commit on main with the same version (RELEASING.md step 4)."
   else
     MSG="$MSG The release already exists: delete the release and $TAG as RELEASING.md describes, then ship the next version from a different commit. Do not reuse $TAG."
   fi
