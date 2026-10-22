@@ -232,9 +232,10 @@ enum SnapshotAppearance: String, CaseIterable, Sendable {
 /// `NSView` strategy, which follows the screen's backing scale and so depends on the runner.
 @MainActor
 func renderPopover(
-    _ model: AppModel, updater: AppUpdater, appearance: SnapshotAppearance
+    _ model: AppModel, updater: AppUpdater, appearance: SnapshotAppearance,
+    locale: Locale? = nil
 ) -> NSImage {
-    let controller = PopoverHostingController(model: model, updater: updater)
+    let controller = PopoverHostingController(model: model, updater: updater, locale: locale)
     let view = controller.view
     let nsAppearance = NSAppearance(named: appearance.name)
     view.appearance = nsAppearance
@@ -304,6 +305,7 @@ func assertPopoverSnapshot(
     _ model: AppModel,
     updater: AppUpdater? = nil,
     named name: String,
+    locale: Locale? = nil,
     fileID: StaticString = #fileID,
     filePath: StaticString = #filePath,
     line: UInt = #line,
@@ -329,7 +331,7 @@ func assertPopoverSnapshot(
         // Read before verifying: `failed` mode overwrites the reference on a mismatch.
         let referenceData = try? Data(contentsOf: referenceURL)
 
-        let image = renderPopover(model, updater: updater, appearance: appearance)
+        let image = renderPopover(model, updater: updater, appearance: appearance, locale: locale)
         let message = verifySnapshot(
             of: image,
             as: .image(

@@ -114,9 +114,9 @@ internal and do not get it.
 ## Snapshot tests
 
 `PopoverSnapshotTests` renders every popover step (idle, password, destination, working, done, done
-with a partial failure, and the footer with an update available) in light and dark, and compares each
-render with a reference PNG under `Tests/UnlatchTests/__Snapshots__/PopoverSnapshotTests/`. They run in
-`swift test`, inside the required `build-and-test` job. The design, including the tolerances and why
+with a partial failure, and the footer with an update available) in light and dark, and each of them in
+Spanish, and compares each render with a reference PNG under
+`Tests/UnlatchTests/__Snapshots__/PopoverSnapshotTests/`. They run in `swift test`, inside the required `build-and-test` job. The design, including the tolerances and why
 they were chosen, is [Design/snapshot-tests.md](Design/snapshot-tests.md).
 
 **CI's references are authoritative.** Rendering depends on the macOS build, the Xcode toolchain, and
