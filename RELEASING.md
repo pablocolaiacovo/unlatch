@@ -44,7 +44,8 @@ Trunk-based. `main` is always green and always releasable.
   `Design/`, or the closed pull request.
 
 CI (`.github/workflows/ci.yml`) runs `swift build` and `swift test` on every pull request and every
-push to `main`. A red `main` is fixed before anything else is merged.
+push to `main`, then compiles the package and its tests in release configuration
+(`swift build -c release --build-tests`) so code that breaks only in release cannot merge. A red `main` is fixed before anything else is merged.
 
 `main` is intended to be protected so that the `build-and-test` check (the job in `ci.yml`) must pass
 before a pull request can merge. Branch protection is configured by the maintainer in the repository
