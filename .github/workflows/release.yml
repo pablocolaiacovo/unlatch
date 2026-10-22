@@ -6,7 +6,10 @@ name: Release
 # section.
 #
 # Job chain on a tag push:
-#   build-and-package -> publish -> appcast -> deploy-feed
+#   build-and-package -+-> publish -> appcast -> deploy-feed
+#   check-feed-commit -+
+# `check-feed-commit` runs alongside the build and stops a tag whose commit
+# another tag already deployed to Pages before any release exists (see below).
 # `appcast` (macOS, holds the Sparkle signing key) and `deploy-feed` (Pages)
 # run after `publish` so the feed never points at an asset that does not exist
 # yet. If either fails, the release exists but is not announced in the app.
@@ -23,8 +26,10 @@ name: Release
 # `pages_build_version`, which actions/deploy-pages hard-wires to the commit
 # SHA: a second deploy of a commit reports success but leaves the first one
 # live. A stable tag therefore must not share a commit with an earlier tag
-# (RELEASING.md step 4). `deploy-feed` fails fast on that before deploying, and
-# after deploying verifies that the live feed carries the tag's item.
+# (RELEASING.md step 4). `check-feed-commit` fails on that before `publish`,
+# `deploy-feed` repeats the same check (Scripts/check-pages-commit.sh) right
+# before deploying, and after deploying verifies that the live feed carries the
+# tag's item.
 #
 # Triggers:
 #   - A pushed `v*` tag (the real release path). Only this path publishes.
@@ -229,9 +234,34 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Fails before `publish` if another tag already deployed this commit to
+  # Pages, so such a tag never creates a release, feed item, or Pages deploy.
+  # The rules and the edge cases it cannot see are in the script. A
+  # workflow_dispatch run has no tag, so the job is skipped like `publish`.
+  check-feed-commit:
+    name: check-feed-commit
+    if: github.event_name == 'push'
+    # Same pin as `publish`, see there.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      deployments: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: Scripts/check-pages-commit.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Check no other tag already deployed this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: Scripts/check-pages-commit.sh --stage before-publish
+
   publish:
     name: publish
-    needs: build-and-package
+    needs: [build-and-package, check-feed-commit]
     # Only a real tag push publishes. A workflow_dispatch run never has a
     # tag to attach a release to, so it always stops after verification.
     # `appcast` and `deploy-feed` below are gated the same way and run only
@@ -426,11 +456,19 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     permissions:
+      # For the sparse checkout of the same-commit guard's script.
+      contents: read
       pages: write
       id-token: write
       # Read-only, for the same-commit guard below.
       deployments: read
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: Scripts/check-pages-commit.sh
+          sparse-checkout-cone-mode: false
+
       - name: Download appcast
         uses: actions/download-artifact@v8
         with:
@@ -440,8 +478,11 @@ jobs:
       # The concurrency group serializes `appcast` but not this job, so a
       # re-run of an older tag's deploy could roll the live feed back. Right
       # before publishing, re-fetch the live feed and fail if it has an item
-      # (by sparkle:version and channel) that the artifact lacks. The only
-      # exception is the build `appcast` replaced moving from beta to stable. 404 means no feed yet (first release).
+      # (by sparkle:version and channel) that the artifact lacks. 404 means no
+      # feed yet (first release). One exception is kept as a legacy, defensive
+      # path: the build `appcast` replaced moving from beta to stable. Since
+      # #77 a stable tag goes on a different commit than its beta, so it has its
+      # own build number and a correctly cut release never takes this path.
       - name: Check the deploy does not drop a live release
         env:
           FEED_URL: ${{ needs.appcast.outputs.feed_url }}
@@ -471,8 +512,10 @@ jobs:
               return out
           new, live, replaced = items(sys.argv[1]), items(sys.argv[2]), sys.argv[3]
           # Items are (version, channel). A live item may only be absent from
-          # the artifact if it is the replaced build moving beta -> stable
-          # (the same commit tagged stable after its beta). Never stable -> beta.
+          # the artifact if it is the replaced build moving beta -> stable.
+          # Legacy and defensive: that needs a stable tag on its beta's
+          # commit, which the same-commit check refuses since #77/#78. Kept
+          # so such a feed is not rejected outright. Never stable -> beta.
           missing = sorted(
               (v, c) for (v, c) in live - new
               if not (v == replaced and c == "beta" and (v, "") in new)
@@ -484,36 +527,13 @@ jobs:
               sys.exit(1)
           PY
 
-      # Pages dedupes on `pages_build_version`, which actions/deploy-pages
-      # sets to the commit SHA, so a second deploy of a commit is accepted,
-      # reported as a success, and never served (v1.1.0 on v1.1.0-beta.5's
-      # commit). Fail before deploying if another tag already deployed this
-      # commit. Each deploy-feed run leaves a `github-pages` deployment record
-      # on the tag's ref (a failed attempt a `failure` status), so only a
-      # record with `success` as its latest status, on a different ref, counts.
-      # Records on this tag's own ref are earlier attempts of this same tag
-      # (a re-run), which must stay possible.
+      # Backstop for `check-feed-commit`, with the same script and rules:
+      # another tag's deploy of this commit may have landed since `publish`,
+      # and `appcast` (with this job) can be re-run up to 30 days later.
       - name: Check no other tag already deployed this commit
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF#refs/tags/}"
-          IDS="$(gh api --paginate "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&sha=$GITHUB_SHA&per_page=100" \
-            | jq -r --arg ref "$TAG" '.[] | select(.ref != $ref) | "\(.id) \(.ref)"')"
-          CLASH=""
-          while read -r ID REF; do
-            [ -n "$ID" ] || continue
-            STATE="$(gh api "repos/$GITHUB_REPOSITORY/deployments/$ID/statuses?per_page=1" --jq '.[0].state // "none"')"
-            echo "deployment $ID (ref $REF) of commit $GITHUB_SHA: latest status $STATE"
-            if [ "$STATE" = success ]; then CLASH="$CLASH $REF"; fi
-          done <<<"$IDS"
-          if [ -n "$CLASH" ]; then
-            echo "::error::Commit $GITHUB_SHA is already deployed to Pages by:$CLASH. Pages would accept a second deploy of the same commit, report success, and keep serving the first one. Do not re-run this job. $TAG needs a different commit than the earlier tag (the next commit on main), so clean up $TAG as RELEASING.md describes and tag again; see RELEASING.md step 4." >&2
-            exit 1
-          fi
-          echo "No other tag has deployed $GITHUB_SHA"
+        run: Scripts/check-pages-commit.sh --stage before-deploy
 
       # The name is unique per attempt: a re-run of this job (or of `appcast`,
       # which re-runs it) happens in the same run as an earlier attempt that

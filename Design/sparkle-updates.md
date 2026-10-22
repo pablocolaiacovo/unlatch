@@ -846,6 +846,12 @@ The repository is public, so Pages costs nothing. §3.1 explains why this beats 
 `generate_appcast` keeps existing items even when their archives aren't present, so the job only
 needs the new zip (verified, §2.10).
 
+> **Superseded by #77 (and #78).** The paragraph below describes the flow as designed, with a
+> stable tag on its last beta's commit. Pages dedupes deploys on the commit SHA, so that flow
+> left v1.1.0's feed unchanged (#76). RELEASING.md step 4 now puts a stable tag on a different
+> commit, so it has its own build number, and `release.yml` refuses a tag whose commit another tag
+> already deployed, before `publish`. `appcast-drop-build.xsl` stays as a defensive step.
+
 **The same-build trap (found while verifying this design).** `CFBundleVersion` is
 `git rev-list --count HEAD`. When `v1.2.0` is tagged on the same commit as `v1.2.0-beta.2`, which
 is the normal outcome of RELEASING.md's beta step, both builds have the same `CFBundleVersion`.
@@ -1335,6 +1341,8 @@ and `Scripts/generate-fixtures.sh` doesn't change. `UnlatchCoreTests` is untouch
   - A first stable release with no current feed.
   - A beta release, which adds a channel item.
   - A stable release on the same build as the beta, which must replace the beta item.
+    (Superseded by #77: a stable tag no longer shares its beta's build. The scenario still checks
+    the defensive drop in `appcast-drop-build.xsl`.)
   - A key mismatch, which must fail.
 - `release.yml` via `workflow_dispatch` on the feature branch. `build-and-package` runs every §2.8
   check. `publish`, `appcast`, and `deploy-feed` are skipped.
