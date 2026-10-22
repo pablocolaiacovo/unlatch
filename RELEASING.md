@@ -261,6 +261,8 @@ Verify on the clean machine, running macOS 15 or later:
 - No Dock icon appears; the lock status item does.
 - A password-protected PDF, an owner-restricted one, and a damaged one each behave correctly.
 - The outputs open in Preview without a password.
+- Right-click a PDF in Finder and choose "Unlock with Unlatch", at the bottom of the menu, with
+  Unlatch quit first. It launches and shows the file.
 - Get Info shows the version from the tag, not `0.0.0`.
 - "Check for Updates…" in the popover's ellipsis menu reaches the feed and reports that this build
   is up to date. A beta install follows the `beta` channel, so it is offered betas and stable
