@@ -35,7 +35,7 @@ import Testing
 }
 
 @Test func loginItemControlPointsAtSystemSettingsWhenApprovalIsNeeded() {
-    #expect(loginItemControl(for: .requiresApproval).help.contains("Login Items"))
+    #expect(en(loginItemControl(for: .requiresApproval).help).contains("Login Items"))
 }
 
 // MARK: - loginItemAction
