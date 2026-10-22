@@ -1,6 +1,10 @@
 # Unlock PDFs from Finder (issue #14)
 
 Issue: #14, "Unlock PDFs from a Finder Quick Action" (`enhancement`, `area:app`, milestone v1.2).
+
+**Status: implemented.** Every task in §5 is done, and T4 verified it on v1.2.0-beta.1. The Quick
+Action app extension follow-up is #91 (Backlog, depends on #8). Open question 6 is still open.
+
 The maintainer's comments on the issue frame it:
 
 - Dropping PDFs on the menu bar icon is not viable (#15), so a Finder entry is the planned
@@ -837,12 +841,18 @@ T3 and T5 each depend only on T2 and can land in either order. T4 depends on T2 
 land before the first v1.2 beta so the smoke-test line is in RELEASING.md when T4 runs, but it isn't
 a hard dependency: T4 runs manual checks 6 and 7 from this document either way.
 
+Design updates to this document: #92 and #95.
+
 Each PR ends with a clean `swift build` and a passing `swift test`, with no new warnings. PRs use
 `Part of #14`, except T2, which uses `Closes #14` (it carries the user-facing change). Labels are
 `project-owner`'s call. T1, T3, and T5 have no user-facing effect and probably carry
 `skip-changelog`.
 
 ### M1 (maintainer, GUI): placement spike
+
+**Done.** Result in [#14 (comment)](https://github.com/pablocolaiacovo/unlatch/issues/14#issuecomment-6330813200):
+on macOS 27.0.1 the entry appears at the bottom of the context menu. `NSIconName` had no effect, so
+it was left out. The Quick Action app extension follow-up is #91 (Backlog, depends on #8).
 
 Run manual check 1 on a local build of T2's branch, or on any build with the §2.2 keys. It takes
 about 15 minutes, and the result decides whether `NSIconName` goes in T2. Open questions 1 and 3,
@@ -851,6 +861,8 @@ longer needs `needs-decision`. Under that decision, M1's result also decides whe
 files the Quick Action app extension follow-up (only if the entry does not land in Quick Actions).
 
 ### T1 (`macos-developer`): Hold and resume files handed to the app from outside
+
+**Done in #93.**
 
 Suggested title: "Prepare the popover flow to receive PDFs from outside the app".
 
@@ -879,6 +891,8 @@ Acceptance criteria:
 - `git diff --stat Sources/UnlatchCore` is empty.
 
 ### T2 (`macos-developer`): Unlock PDFs from Finder's right-click menu
+
+**Done in #96.**
 
 Suggested title: "Unlock PDFs from Finder's right-click menu".
 
@@ -916,6 +930,8 @@ Acceptance criteria:
 
 ### T3 (`devops`): Check the Finder entry in the release workflow
 
+**Done in #100.**
+
 Suggested title: "Verify the Finder entry in every packaged release".
 
 Depends on T2.
@@ -933,6 +949,11 @@ Acceptance criteria:
 
 ### T4 (`release-manager` and the maintainer): Verify on a clean machine
 
+**Done on v1.2.0-beta.1.** In chat on 2026-10-22 the maintainer reported that the clean-machine
+smoke test on that beta passed ("Everything passes, it's ready."), covering manual checks 6 and 7
+and the upgrade test from 1.1.1-beta.1. Detailed per-check observations (exact placement, TCC
+prompts) were not recorded.
+
 Depends on T2 and T3, and on the first v1.2 beta. The maintainer approves the exact version, per
 RELEASING.md.
 
@@ -945,6 +966,8 @@ Acceptance criteria: the findings comment exists. If TCC or placement differs fr
 `macos-developer` README fix is filed before the stable tag.
 
 ### T5 (`project-owner`): Smoke-test line in RELEASING.md
+
+**Done in #94.**
 
 Depends on T2 only. Land it before the first v1.2 beta if possible (see the plan diagram).
 
