@@ -35,6 +35,13 @@ Trunk-based. `main` is always green and always releasable.
 - A PR with no user-facing effect also carries `skip-changelog`, which keeps it out of the release
   notes. Its title still follows the rule above, because it is still the commit subject on `main`.
 - Head branches are deleted automatically on merge (repository setting); nothing to do by hand.
+- A branch on GitHub that never becomes a pull request (an exploration or a throwaway experiment),
+  or whose pull request is closed without merging, is deleted from GitHub once its work is done.
+  This covers remote branches only; local branches and worktrees are each contributor's own to
+  clean up. The maintainer deletes it, or an agent does when its task says to; otherwise the agent
+  names the branch in its report so the maintainer can delete it. Deleting a branch loses its
+  unmerged commits, so anything worth keeping is recorded first, in an issue, a design doc under
+  `Design/`, or the closed pull request.
 
 CI (`.github/workflows/ci.yml`) runs `swift build` and `swift test` on every pull request and every
 push to `main`. A red `main` is fixed before anything else is merged.
