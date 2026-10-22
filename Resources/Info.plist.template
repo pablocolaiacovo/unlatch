@@ -6,6 +6,18 @@
     <string>com.pablocolaiacovo.unlatch</string>
     <key>CFBundleName</key>
     <string>Unlatch</string>
+    <!-- The languages the app ships (Sources/Unlatch/Resources/Localizable.xcstrings).
+         macOS picks the app's language from this list: without it the app is
+         English even on a Spanish Mac, and System Settings offers no per-app
+         language. Keep it in step with the catalog (InfoPlistTemplateTests
+         checks both). -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>es</string>
+    </array>
     <key>CFBundleDisplayName</key>
     <string>Unlatch</string>
     <key>CFBundleExecutable</key>
@@ -47,7 +59,12 @@
          NSMessage must match FinderHandoff's @objc selector
          unlockPDFs(_:userData:error:); InfoPlistTemplateTests checks it.
          NSRequiredContext must be present, even empty, or macOS registers the
-         service but never shows it. -->
+         service but never shows it.
+         The menu title below is the English text and the lookup key: macOS
+         translates it from Resources/<lang>.lproj/ServicesMenu.strings in the
+         app bundle (not from the resource bundle Bundle.module uses).
+         Scripts/package-app.sh copies Resources/es.lproj there;
+         InfoPlistTemplateTests checks the keys match. -->
     <key>NSServices</key>
     <array>
         <dict>

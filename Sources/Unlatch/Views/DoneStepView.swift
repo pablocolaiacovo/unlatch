@@ -23,9 +23,9 @@ struct DoneStepView: View {
             HStack(spacing: 8) {
                 Spacer()
                 if !model.savedURLs.isEmpty {
-                    Button("Show in Finder") { model.showInFinder() }
+                    Button(Strings.showInFinder) { model.showInFinder() }
                 }
-                Button("Done") { model.reset() }
+                Button(Strings.done) { model.reset() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 14)

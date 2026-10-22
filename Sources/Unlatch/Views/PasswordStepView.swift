@@ -26,7 +26,7 @@ struct PasswordStepView: View {
 
             HStack(spacing: 6) {
                 passwordField
-                Button(model.revealPassword ? "Hide" : "Show") {
+                Button(model.revealPassword ? Strings.hide : Strings.show) {
                     model.revealPassword.toggle()
                     // Re-assert focus on the now-visible twin so typing
                     // continues uninterrupted after the toggle.
@@ -40,7 +40,7 @@ struct PasswordStepView: View {
             .animation(.linear(duration: 0.4), value: model.shakeCount)
 
             if model.passwordError {
-                Text("That password didn’t work. Try again.")
+                Text(Strings.passwordDidntWork)
                     .font(.system(size: 11))
                     .foregroundStyle(Color(hex: 0xC9302C))
                     .fixedSize(horizontal: false, vertical: true)
@@ -49,8 +49,8 @@ struct PasswordStepView: View {
 
             HStack(spacing: 8) {
                 Spacer()
-                Button("Cancel") { model.reset() }
-                Button("Unlock") { model.submitPassword() }
+                Button(Strings.cancel) { model.reset() }
+                Button(Strings.unlock) { model.submitPassword() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 14)
@@ -66,11 +66,15 @@ struct PasswordStepView: View {
     /// focus mid-typing.
     private var passwordField: some View {
         ZStack {
-            SecureField("Password", text: $model.password)
+            SecureField(text: $model.password, prompt: Text(Strings.password)) {
+                Text(Strings.password)
+            }
                 .focused($focusedField, equals: .secure)
                 .opacity(model.revealPassword ? 0 : 1)
                 .allowsHitTesting(!model.revealPassword)
-            TextField("Password", text: $model.password)
+            TextField(text: $model.password, prompt: Text(Strings.password)) {
+                Text(Strings.password)
+            }
                 .focused($focusedField, equals: .plain)
                 .opacity(model.revealPassword ? 1 : 0)
                 .allowsHitTesting(model.revealPassword)

@@ -111,26 +111,6 @@
             "value" : "%#@saved@, %#@failed@"
           },
           "substitutions" : {
-            "saved" : {
-              "argNum" : 1,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg guardado"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg guardados"
-                    }
-                  }
-                }
-              }
-            },
             "failed" : {
               "argNum" : 2,
               "formatSpecifier" : "lld",
@@ -146,6 +126,26 @@
                     "stringUnit" : {
                       "state" : "translated",
                       "value" : "%arg fallaron"
+                    }
+                  }
+                }
+              }
+            },
+            "saved" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg guardado"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg guardados"
                     }
                   }
                 }
@@ -166,7 +166,17 @@
         }
       }
     },
-    "Cancel" : {},
+    "Cancel" : {
+      "comment" : "Button: abandon this batch and return to the start (password and destination steps).",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelar"
+          }
+        }
+      }
+    },
     "Check Automatically" : {
       "comment" : "Checkable menu item: whether the app looks for new versions by itself.",
       "localizations" : {
@@ -189,7 +199,28 @@
         }
       }
     },
-    "Choose PDFs…" : {},
+    "Choose" : {
+      "comment" : "Confirm button of the folder picker opened by Choose folder…",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir"
+          }
+        }
+      }
+    },
+    "Choose PDFs…" : {
+      "comment" : "Idle step: the big button that opens the file picker.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir PDF…"
+          }
+        }
+      }
+    },
     "Choose folder…" : {
       "comment" : "Destination radio option. Opens a panel to pick a folder.",
       "localizations" : {
@@ -208,6 +239,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Copiado tal cual — se abre sin contraseña"
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "comment" : "Edit menu item (hidden main menu).",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar"
           }
         }
       }
@@ -278,6 +320,17 @@
         }
       }
     },
+    "Cut" : {
+      "comment" : "Edit menu item (hidden main menu).",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cortar"
+          }
+        }
+      }
+    },
     "Desktop" : {
       "comment" : "Destination radio option. Saves to the Desktop folder.",
       "localizations" : {
@@ -289,9 +342,50 @@
         }
       }
     },
-    "Done" : {},
-    "Hide" : {},
-    "More" : {},
+    "Done" : {
+      "comment" : "Button on the done step: close the summary and return to the start.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Listo"
+          }
+        }
+      }
+    },
+    "Edit" : {
+      "comment" : "Title of the Edit menu in the hidden main menu. Never shown, but reachable through Accessibility.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edición"
+          }
+        }
+      }
+    },
+    "Hide" : {
+      "comment" : "Password step: small button that masks the typed password again.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar"
+          }
+        }
+      }
+    },
+    "More" : {
+      "comment" : "Help text and accessibility label of the ellipsis menu button in the footer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Más"
+          }
+        }
+      }
+    },
     "No open password — permissions only" : {
       "comment" : "File row note. The PDF opens without a password and only restricts permissions such as printing or copying.",
       "localizations" : {
@@ -347,8 +441,28 @@
         }
       }
     },
-    "Open at Login" : {},
-    "Password" : {},
+    "Open at Login" : {
+      "comment" : "Ellipsis menu: checkable item that makes Unlatch start when the user logs in.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir al iniciar sesión"
+          }
+        }
+      }
+    },
+    "Password" : {
+      "comment" : "Password step: placeholder and accessibility label of the password field.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contraseña"
+          }
+        }
+      }
+    },
     "Password didn’t match — not saved" : {
       "comment" : "File row note. The shared password did not open this file, so it was not saved.",
       "localizations" : {
@@ -371,8 +485,50 @@
         }
       }
     },
-    "Quit" : {},
-    "Quit Unlatch" : {},
+    "Paste" : {
+      "comment" : "Edit menu item (hidden main menu).",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pegar"
+          }
+        }
+      }
+    },
+    "Quit" : {
+      "comment" : "Footer button that quits the app.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salir"
+          }
+        }
+      }
+    },
+    "Quit Unlatch" : {
+      "comment" : "Help text and accessibility label of the footer's Quit button, and the title of the main menu's Quit item. Keep the app name as is.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salir de Unlatch"
+          }
+        }
+      }
+    },
+    "Redo" : {
+      "comment" : "Edit menu item (hidden main menu).",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rehacer"
+          }
+        }
+      }
+    },
     "Remove PDF passwords" : {
       "comment" : "Header, right side, when no files are loaded: what the app does.",
       "localizations" : {
@@ -384,7 +540,17 @@
         }
       }
     },
-    "Removes the open password so the file opens without one. Nothing leaves your Mac." : {},
+    "Removes the open password so the file opens without one. Nothing leaves your Mac." : {
+      "comment" : "Idle step: privacy caption under the Choose PDFs button.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quita la contraseña de apertura para que el archivo se abra sin ella. Nada sale de tu Mac."
+          }
+        }
+      }
+    },
     "Same folder, add “-unlocked”" : {
       "comment" : "Destination radio option. Saves next to the original with a suffix. “-unlocked” is the literal text added to the file name and is not translated.",
       "localizations" : {
@@ -407,7 +573,17 @@
         }
       }
     },
-    "Save" : {},
+    "Save" : {
+      "comment" : "Button on the destination step: write the unlocked copies.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar"
+          }
+        }
+      }
+    },
     "Saved" : {
       "comment" : "Done step title when one file was saved.",
       "localizations" : {
@@ -419,10 +595,61 @@
         }
       }
     },
-    "See the available update" : {},
-    "Show" : {},
-    "Show in Finder" : {},
-    "That password didn’t work. Try again." : {},
+    "See the available update" : {
+      "comment" : "Help text of the footer's Update Available button.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ver la actualización disponible"
+          }
+        }
+      }
+    },
+    "Select All" : {
+      "comment" : "Edit menu item (hidden main menu).",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seleccionar todo"
+          }
+        }
+      }
+    },
+    "Show" : {
+      "comment" : "Password step: small button that reveals the typed password. Same length as Hide.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar"
+          }
+        }
+      }
+    },
+    "Show in Finder" : {
+      "comment" : "Button on the done step: reveal the saved files in Finder.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar en el Finder"
+          }
+        }
+      }
+    },
+    "That password didn’t work. Try again." : {
+      "comment" : "Password step: inline error after none of the PDFs opened with the password.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esa contraseña no funcionó. Inténtalo de nuevo."
+          }
+        }
+      }
+    },
     "This PDF needs a password" : {
       "comment" : "Password step title when a single file is password protected.",
       "localizations" : {
@@ -445,7 +672,28 @@
         }
       }
     },
-    "Unlatch" : {},
+    "Undo" : {
+      "comment" : "Edit menu item (hidden main menu).",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deshacer"
+          }
+        }
+      }
+    },
+    "Unlatch couldn't read the selected files." : {
+      "comment" : "Error text macOS shows when the Unlock with Unlatch Services entry was used but the files could not be read. Keep the app name as is.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlatch no pudo leer los archivos seleccionados."
+          }
+        }
+      }
+    },
     "Unlatch opens when you log in" : {
       "comment" : "Tooltip of the Open at Login menu item when it is on.",
       "localizations" : {
@@ -468,7 +716,17 @@
         }
       }
     },
-    "Unlock" : {},
+    "Unlock" : {
+      "comment" : "Button on the password step: try the password and unlock the PDFs.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desbloquear"
+          }
+        }
+      }
+    },
     "Unlocked" : {
       "comment" : "File row note after the password was removed and the file saved.",
       "localizations" : {
@@ -480,8 +738,28 @@
         }
       }
     },
-    "Unlocking…" : {},
-    "Update Available" : {},
+    "Unlocking…" : {
+      "comment" : "Shown with a spinner while the passwords are being checked.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desbloqueando…"
+          }
+        }
+      }
+    },
+    "Update Available" : {
+      "comment" : "Footer button, shown only when a new version exists, and its accessibility label.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización disponible"
+          }
+        }
+      }
+    },
     "Update Available…" : {
       "comment" : "Menu item shown instead of “Check for Updates…” when a new version is available.",
       "localizations" : {

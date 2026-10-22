@@ -44,7 +44,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Text("Unlatch")
+            Text(verbatim: "Unlatch")
                 .font(.system(size: 13, weight: .semibold))
             Spacer()
             Text(model.headerText)
@@ -104,7 +104,7 @@ struct PopoverView: View {
                 )
             }
             Toggle(
-                "Open at Login",
+                Strings.openAtLogin,
                 isOn: Binding(get: { model.loginItem.isOn }, set: { model.setLaunchAtLogin($0) })
             )
             .disabled(!control.isEnabled)
@@ -120,12 +120,12 @@ struct PopoverView: View {
         .buttonStyle(.borderless)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("More")
-        .accessibilityLabel("More")
+        .help(Strings.more)
+        .accessibilityLabel(Strings.more)
         // Only when there is something to announce: an empty string still
         // exposes an AXValue (checked with the AX API), and the design wants none.
         if update.showsUpdateIndicator {
-            menu.accessibilityValue("Update available")
+            menu.accessibilityValue(StatusItemPresentation.updateAvailableValue)
         } else {
             menu
         }
@@ -142,30 +142,30 @@ struct PopoverView: View {
     }
 
     private var updateAvailableButton: some View {
-        FooterButton(title: "Update Available", tint: .accentColor, showsDot: true) {
+        FooterButton(title: Strings.updateAvailable, tint: .accentColor, showsDot: true) {
             updater.checkForUpdates()
         }
-        .help("See the available update")
-        .accessibilityLabel("Update Available")
+        .help(Strings.seeAvailableUpdate)
+        .accessibilityLabel(Strings.updateAvailable)
     }
 
     /// Unobtrusive quit affordance in the footer, reachable from every
     /// step. `.accessory` apps have no Dock icon and no application menu, so
     /// this is the only way to quit besides Force Quit.
     private var quitButton: some View {
-        FooterButton(title: "Quit", symbol: "power") {
+        FooterButton(title: Strings.quit, symbol: "power") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
-        .help("Quit Unlatch")
-        .accessibilityLabel("Quit Unlatch")
+        .help(Strings.quitUnlatch)
+        .accessibilityLabel(Strings.quitUnlatch)
     }
 
     private var workingView: some View {
         VStack(spacing: 12) {
             ProgressView()
                 .controlSize(.small)
-            Text("Unlocking…")
+            Text(Strings.unlocking)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }

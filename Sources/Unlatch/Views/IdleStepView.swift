@@ -13,7 +13,7 @@ struct IdleStepView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             chooseButton
-            Text("Removes the open password so the file opens without one. Nothing leaves your Mac.")
+            Text(Strings.idleCaption)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
@@ -33,7 +33,7 @@ struct IdleStepView: View {
                     .font(.system(size: 24))
                     .foregroundStyle(.primary.opacity(0.72))
                     .accessibilityHidden(true)
-                Text("Choose PDFs…")
+                Text(Strings.choosePDFs)
                     .font(.system(size: 13, weight: .medium))
             }
             .frame(maxWidth: .infinity)

@@ -88,6 +88,55 @@ private func loadServicesEntry() throws -> [String: Any] {
     #expect(FinderHandoff.instancesRespond(to: NSSelectorFromString(message + ":userData:error:")))
 }
 
+// MARK: Languages (Design/spanish-localization.md §2.6)
+
+@Test func templateDeclaresEnglishAndSpanish() throws {
+    let plist = try loadTemplate()
+    #expect(plist["CFBundleDevelopmentRegion"] as? String == "en")
+    #expect(plist["CFBundleLocalizations"] as? [String] == ["en", "es"])
+}
+
+/// Every language the catalog translates must be declared, and every declared language must be in
+/// the catalog, or the app is English on a Mac set to the one that was forgotten.
+@Test func templateLocalizationsMatchTheCatalog() throws {
+    let plist = try loadTemplate()
+    let declared = try #require(plist["CFBundleLocalizations"] as? [String])
+    let url = repositoryRoot().appendingPathComponent(
+        "Sources/Unlatch/Resources/Localizable.xcstrings")
+    let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
+    let catalog = try #require(json as? [String: Any])
+    var languages: Set<String> = [try #require(catalog["sourceLanguage"] as? String)]
+    let strings = try #require(catalog["strings"] as? [String: [String: Any]])
+    for entry in strings.values {
+        languages.formUnion((entry["localizations"] as? [String: Any])?.keys.map { $0 } ?? [])
+    }
+    #expect(Set(declared) == languages)
+}
+
+/// macOS localizes a Services menu title from `ServicesMenu.strings` in the app bundle's
+/// `<lang>.lproj`, keyed by the English `default` title (Apple QA1605). It never reads the
+/// resource bundle that `Bundle.module` points at, so the file lives under Resources/ and
+/// Scripts/package-app.sh copies it into Contents/Resources.
+@Test func servicesMenuTitleIsTranslatedForEveryDeclaredLanguage() throws {
+    let plist = try loadTemplate()
+    let service = try loadServicesEntry()
+    let menuItem = try #require(service["NSMenuItem"] as? [String: Any])
+    let title = try #require(menuItem["default"] as? String)
+    let declared = try #require(plist["CFBundleLocalizations"] as? [String])
+    for language in declared where language != "en" {
+        let url = repositoryRoot().appendingPathComponent(
+            "Resources/\(language).lproj/ServicesMenu.strings")
+        let data = try Data(contentsOf: url)
+        let table = try #require(
+            PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: String])
+        #expect(Set(table.keys) == [title], "\(language): the key must be the template's default title")
+        let translated = try #require(table[title])
+        #expect(!translated.isEmpty)
+        #expect(translated != title)
+    }
+}
+
 @Test func templateDeclaresPDFAsAnAlternateDocumentType() throws {
     let plist = try loadTemplate()
     let types = try #require(plist["CFBundleDocumentTypes"] as? [[String: Any]])
