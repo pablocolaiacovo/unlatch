@@ -32,12 +32,24 @@ enum Step: Equatable, Sendable {
 enum DestinationOption: CaseIterable, Equatable, Sendable {
     case suffix, replace, desktop, other
 
-    var label: String {
+    var label: LocalizedStringResource {
         switch self {
-        case .suffix: "Same folder, add “-unlocked”"
-        case .replace: "Same folder, replace original"
-        case .desktop: "Desktop"
-        case .other: "Choose folder…"
+        case .suffix:
+            LocalizedStringResource(
+                "Same folder, add “-unlocked”", bundle: .unlatch,
+                comment: "Destination radio option. Saves next to the original with a suffix. “-unlocked” is the literal text added to the file name and is not translated.")
+        case .replace:
+            LocalizedStringResource(
+                "Same folder, replace original", bundle: .unlatch,
+                comment: "Destination radio option. Overwrites the original file with the unlocked copy.")
+        case .desktop:
+            LocalizedStringResource(
+                "Desktop", bundle: .unlatch,
+                comment: "Destination radio option. Saves to the Desktop folder.")
+        case .other:
+            LocalizedStringResource(
+                "Choose folder…", bundle: .unlatch,
+                comment: "Destination radio option. Opens a panel to pick a folder.")
         }
     }
 }
@@ -81,12 +93,24 @@ enum SaveFailure: Equatable, Sendable {
     }
 
     /// Short, human note for the file row — never a raw `localizedDescription`.
-    var note: String {
+    var note: LocalizedStringResource {
         switch self {
-        case .wrongPassword: "Password didn’t match — not saved"
-        case .unreadable: "Couldn’t be read — not saved"
-        case .writeFailed: "Couldn’t write the file — not saved"
-        case .copyFailed: "Couldn’t be copied — not saved"
+        case .wrongPassword:
+            LocalizedStringResource(
+                "Password didn’t match — not saved", bundle: .unlatch,
+                comment: "File row note. The shared password did not open this file, so it was not saved.")
+        case .unreadable:
+            LocalizedStringResource(
+                "Couldn’t be read — not saved", bundle: .unlatch,
+                comment: "File row note. The file could not be read, so it was not saved.")
+        case .writeFailed:
+            LocalizedStringResource(
+                "Couldn’t write the file — not saved", bundle: .unlatch,
+                comment: "File row note. Writing the unlocked copy failed, so nothing was saved for this file.")
+        case .copyFailed:
+            LocalizedStringResource(
+                "Couldn’t be copied — not saved", bundle: .unlatch,
+                comment: "File row note. Copying a file that needed no unlocking failed, so it was not saved.")
         }
     }
 }
@@ -194,55 +218,96 @@ func abbreviatedPath(_ url: URL) -> String {
 }
 
 /// Header right side: "Remove PDF passwords" with no files, else a count.
-func headerNote(fileCount: Int) -> String {
-    guard fileCount > 0 else { return "Remove PDF passwords" }
-    return fileCount == 1 ? "1 file" : "\(fileCount) files"
-}
-
-func passwordTitle(encryptedCount: Int) -> String {
-    encryptedCount > 1 ? "\(encryptedCount) files need a password" : "This PDF needs a password"
-}
-
-func passwordSubtitle(encrypted: [LoadedFile]) -> String {
-    if encrypted.count > 1 {
-        return "We’ll try the same password on all of them. Anything that doesn’t match gets skipped."
+func headerNote(fileCount: Int) -> LocalizedStringResource {
+    guard fileCount > 0 else {
+        return LocalizedStringResource(
+            "Remove PDF passwords", bundle: .unlatch,
+            comment: "Header, right side, when no files are loaded: what the app does.")
     }
-    return encrypted.first?.name ?? ""
+    return LocalizedStringResource(
+        "\(fileCount) files", bundle: .unlatch,
+        comment: "Header, right side: how many files are loaded. The value is a number, and 1 needs the singular.")
+}
+
+func passwordTitle(encryptedCount: Int) -> LocalizedStringResource {
+    guard encryptedCount > 1 else {
+        return LocalizedStringResource(
+            "This PDF needs a password", bundle: .unlatch,
+            comment: "Password step title when a single file is password protected.")
+    }
+    return LocalizedStringResource(
+        "\(encryptedCount) files need a password", bundle: .unlatch,
+        comment: "Password step title when several files are password protected. The value is always 2 or more.")
+}
+
+func passwordSubtitle(encrypted: [LoadedFile]) -> LocalizedStringResource {
+    if encrypted.count > 1 {
+        return LocalizedStringResource(
+            "We’ll try the same password on all of them. Anything that doesn’t match gets skipped.",
+            bundle: .unlatch,
+            comment: "Password step subtitle when several files are protected: one password is tried on all of them.")
+    }
+    return verbatim(encrypted.first?.name ?? "")
 }
 
 /// Zero saved files is the failure state: nothing was written, so the step
 /// must not read as a success. `failedCount` makes a partial batch honest
 /// instead of only reporting the successes.
-func doneTitle(savedCount: Int, failedCount: Int = 0) -> String {
+func doneTitle(savedCount: Int, failedCount: Int = 0) -> LocalizedStringResource {
     guard failedCount > 0 else {
-        if savedCount == 0 { return "Couldn’t save — nothing was written" }
-        return savedCount > 1 ? "\(savedCount) files saved" : "Saved"
+        if savedCount == 0 {
+            return LocalizedStringResource(
+                "Couldn’t save — nothing was written", bundle: .unlatch,
+                comment: "Done step title when no file could be saved.")
+        }
+        return savedCount > 1
+            ? LocalizedStringResource(
+                "\(savedCount) files saved", bundle: .unlatch,
+                comment: "Done step title when several files were saved. The value is always 2 or more.")
+            : LocalizedStringResource(
+                "Saved", bundle: .unlatch,
+                comment: "Done step title when one file was saved.")
     }
     if savedCount == 0 {
         return failedCount > 1
-            ? "Couldn’t save — all \(failedCount) files failed"
-            : "Couldn’t save — the file failed"
+            ? LocalizedStringResource(
+                "Couldn’t save — all \(failedCount) files failed", bundle: .unlatch,
+                comment: "Done step title when every file of a batch failed. The value is always 2 or more.")
+            : LocalizedStringResource(
+                "Couldn’t save — the file failed", bundle: .unlatch,
+                comment: "Done step title when the single file failed to save.")
     }
-    return "\(savedCount) saved, \(failedCount) failed"
+    return LocalizedStringResource(
+        "\(savedCount) saved, \(failedCount) failed", bundle: .unlatch,
+        comment: "Done step title for a partial batch: how many files were saved, then how many failed. Either value can be 1, so each needs its own singular and plural form.")
 }
 
 /// The monospaced "where it went" line on the done step. A single file shows
 /// its full path; a batch in one folder summarizes that folder the way the
-/// design does; a batch spanning folders states the spread truthfully.
-func doneSummary(destinations: [URL], option: DestinationOption) -> String {
-    guard let first = destinations.first else { return "" }
-    if destinations.count == 1 { return abbreviatedPath(first) }
+/// design does; a batch spanning folders states the spread truthfully. `nil`
+/// when nothing was saved.
+func doneSummary(destinations: [URL], option: DestinationOption) -> LocalizedStringResource? {
+    guard let first = destinations.first else { return nil }
+    if destinations.count == 1 { return verbatim(abbreviatedPath(first)) }
 
     let folders = Set(destinations.map { $0.deletingLastPathComponent().standardizedFileURL.path })
     guard folders.count == 1 else {
-        return "\(destinations.count) files in \(folders.count) folders"
+        return LocalizedStringResource(
+            "\(destinations.count) files in \(folders.count) folders", bundle: .unlatch,
+            comment: "Done step summary for a batch saved into several folders: file count, then folder count. Both values are always 2 or more.")
     }
 
     let dir = abbreviatedPath(first.deletingLastPathComponent())
     switch option {
-    case .suffix: return dir + "/…-unlocked.pdf"
-    case .replace: return dir + "/ (originals replaced)"
-    case .desktop, .other: return dir + "/"
+    case .suffix:
+        // The real file name pattern the app writes, so it is not translated.
+        return verbatim(dir + "/…-unlocked.pdf")
+    case .replace:
+        return LocalizedStringResource(
+            "\(dir)/ (originals replaced)", bundle: .unlatch,
+            comment: "Done step summary when a batch overwrote its originals. The value is a folder path followed by a slash; move it if the language needs.")
+    case .desktop, .other:
+        return verbatim(dir + "/")
     }
 }
 
@@ -253,20 +318,32 @@ func destinationHint(
     sample: URL?,
     desktopFolder: URL,
     chosenFolder: URL?
-) -> String {
+) -> LocalizedStringResource {
     switch option {
     case .suffix:
-        guard let sample else { return "next to the original" }
-        return abbreviatedPath(destinationURL(
-            for: sample, option: .suffix, desktopFolder: desktopFolder, chosenFolder: nil))
+        guard let sample else {
+            return LocalizedStringResource(
+                "next to the original", bundle: .unlatch,
+                comment: "Hint under the “Same folder, add -unlocked” option before a sample path is known.")
+        }
+        return verbatim(abbreviatedPath(destinationURL(
+            for: sample, option: .suffix, desktopFolder: desktopFolder, chosenFolder: nil)))
     case .replace:
-        guard let sample else { return "overwrites the original" }
-        return abbreviatedPath(sample)
+        guard let sample else {
+            return LocalizedStringResource(
+                "overwrites the original", bundle: .unlatch,
+                comment: "Hint under the “Same folder, replace original” option before a sample path is known.")
+        }
+        return verbatim(abbreviatedPath(sample))
     case .desktop:
-        return abbreviatedPath(desktopFolder) + "/"
+        return verbatim(abbreviatedPath(desktopFolder) + "/")
     case .other:
-        guard let chosenFolder else { return "opens a save panel" }
-        return abbreviatedPath(chosenFolder) + "/"
+        guard let chosenFolder else {
+            return LocalizedStringResource(
+                "opens a save panel", bundle: .unlatch,
+                comment: "Hint under the “Choose folder…” option before a folder has been chosen.")
+        }
+        return verbatim(abbreviatedPath(chosenFolder) + "/")
     }
 }
 
@@ -274,12 +351,29 @@ func destinationHint(
 /// (`CFBundleShortVersionString`, `CFBundleVersion`) and passes them through
 /// untouched, so `git describe` forms like `1.0.0-3-gabc1234-dirty` survive.
 /// Missing or empty values (no Info.plist under `swift run`) read as "dev".
-func versionLabel(version: String?, build: String?) -> String {
-    let version = version.flatMap { $0.isEmpty ? nil : $0 }
+func versionLabel(version: String?, build: String?) -> LocalizedStringResource {
+    let version = version.flatMap { $0.isEmpty ? nil : $0 } ?? "dev"
     let build = build.flatMap { $0.isEmpty ? nil : $0 }
-    let base = "Version " + (version ?? "dev")
-    guard let build else { return base }
-    return base + " (\(build))"
+    guard let build else {
+        return LocalizedStringResource(
+            "Version \(version)", bundle: .unlatch,
+            comment: "Disabled menu item showing the app version, for example “Version 1.2.0”. The value is a version number, or “dev” in a development build.")
+    }
+    return LocalizedStringResource(
+        "Version \(version) (\(build))", bundle: .unlatch,
+        comment: "Disabled menu item showing the app version and build number, for example “Version 1.2.0 (42)”.")
+}
+
+/// The destination step's question. The count is not shown, so the code picks
+/// the key and each language words the singular and plural sentences itself.
+func destinationQuestion(usableCount: Int) -> LocalizedStringResource {
+    usableCount > 1
+        ? LocalizedStringResource(
+            "Where should the unlocked files go?", bundle: .unlatch,
+            comment: "Destination step title when several files will be saved.")
+        : LocalizedStringResource(
+            "Where should the unlocked file go?", bundle: .unlatch,
+            comment: "Destination step title when one file will be saved.")
 }
 
 // MARK: - File rows
@@ -292,7 +386,7 @@ enum RowTone: Equatable, Sendable {
 struct RowInfo: Equatable, Sendable {
     let badge: String
     let tone: RowTone
-    let note: String
+    let note: LocalizedStringResource
 }
 
 /// Badge and note for one file row, matching the design's `buildRows`.
@@ -306,24 +400,38 @@ func rowInfo(for file: LoadedFile, done: Bool) -> RowInfo {
     }
     switch file.kind {
     case .corrupt:
-        return RowInfo(badge: "!", tone: .error, note: "Not a readable PDF — skipped")
+        return RowInfo(badge: "!", tone: .error, note: LocalizedStringResource(
+                "Not a readable PDF — skipped", bundle: .unlatch,
+                comment: "File row note. The file is not a PDF the app can read, so it is skipped."))
     case .owner:
         return RowInfo(
             badge: "i", tone: .warning,
             note: done && file.unlocked
-                ? "Copied as-is — opens without a password"
-                : "No open password — permissions only")
+                ? LocalizedStringResource(
+                    "Copied as-is — opens without a password", bundle: .unlatch,
+                    comment: "File row note after saving a PDF that only had permission restrictions: it was copied unchanged and already opens without a password.")
+                : LocalizedStringResource(
+                    "No open password — permissions only", bundle: .unlatch,
+                    comment: "File row note. The PDF opens without a password and only restricts permissions such as printing or copying."))
     case .plain:
         return RowInfo(
             badge: "i", tone: .neutral,
             note: done && file.unlocked
-                ? "Not encrypted — copied as-is"
-                : "Not encrypted — nothing to unlock")
+                ? LocalizedStringResource(
+                    "Not encrypted — copied as-is", bundle: .unlatch,
+                    comment: "File row note after saving a PDF that had no protection: it was copied unchanged.")
+                : LocalizedStringResource(
+                    "Not encrypted — nothing to unlock", bundle: .unlatch,
+                    comment: "File row note. The PDF has no protection at all, so there is nothing to unlock."))
     case .encrypted:
         if done && file.unlocked {
-            return RowInfo(badge: "✓", tone: .success, note: "Unlocked")
+            return RowInfo(badge: "✓", tone: .success, note: LocalizedStringResource(
+                    "Unlocked", bundle: .unlatch,
+                    comment: "File row note after the password was removed and the file saved."))
         }
-        return RowInfo(badge: "•", tone: .neutral, note: "Password protected")
+        return RowInfo(badge: "•", tone: .neutral, note: LocalizedStringResource(
+                "Password protected", bundle: .unlatch,
+                comment: "File row note. The PDF needs a password to open."))
     }
 }
 
@@ -347,12 +455,17 @@ struct StatusItemPresentation: Equatable, Sendable {
     /// The dot on the icon. Same condition as the footer's indicator.
     let showsUpdateBadge: Bool
     /// `nil`, or `updateAvailableValue`.
-    let accessibilityValue: String?
-    let toolTip: String
+    let accessibilityValue: LocalizedStringResource?
+    let toolTip: LocalizedStringResource
 
+    /// The app name: a `String`, never translated.
     static let accessibilityLabel = "Unlatch"
-    static let updateAvailableValue = "Update available"
-    static let updateAvailableToolTip = "Unlatch: update available"
+    static let updateAvailableValue = LocalizedStringResource(
+        "Update available", bundle: .unlatch,
+        comment: "Accessibility value of the menu bar icon and the More button when a new version is available.")
+    static let updateAvailableToolTip = LocalizedStringResource(
+        "Unlatch: update available", bundle: .unlatch,
+        comment: "Tooltip of the menu bar icon when a new version is available. “Unlatch” is the app name.")
 }
 
 /// `showsUpdateBadge` is `updateFooterPresentation(for: updateState).showsUpdateIndicator`, so the
@@ -368,7 +481,7 @@ func statusItemPresentation(
         accessibilityValue: badge ? StatusItemPresentation.updateAvailableValue : nil,
         toolTip: badge
             ? StatusItemPresentation.updateAvailableToolTip
-            : StatusItemPresentation.accessibilityLabel)
+            : verbatim(StatusItemPresentation.accessibilityLabel))
 }
 
 // MARK: - Launch at Login
@@ -397,23 +510,32 @@ enum LoginItemStatus: Equatable, Sendable {
 struct LoginItemControl: Equatable, Sendable {
     let isOn: Bool
     let isEnabled: Bool
-    let help: String
+    let help: LocalizedStringResource
 }
 
 func loginItemControl(for status: LoginItemStatus) -> LoginItemControl {
     switch status {
     case .enabled:
-        LoginItemControl(isOn: true, isEnabled: true, help: "Unlatch opens when you log in")
+        LoginItemControl(isOn: true, isEnabled: true, help: LocalizedStringResource(
+                "Unlatch opens when you log in", bundle: .unlatch,
+                comment: "Tooltip of the Open at Login menu item when it is on."))
     case .disabled:
-        LoginItemControl(isOn: false, isEnabled: true, help: "Open Unlatch when you log in")
+        LoginItemControl(isOn: false, isEnabled: true, help: LocalizedStringResource(
+                "Open Unlatch when you log in", bundle: .unlatch,
+                comment: "Tooltip of the Open at Login menu item when it is off."))
     case .requiresApproval:
         LoginItemControl(
             isOn: false, isEnabled: true,
-            help: "Turned off in System Settings > General > Login Items. Check to open Login Items and allow Unlatch.")
+            help: LocalizedStringResource(
+                "Turned off in System Settings > General > Login Items. Check to open Login Items and allow Unlatch.",
+                bundle: .unlatch,
+                comment: "Tooltip of the Open at Login menu item when the user switched Unlatch off in the macOS login items settings. Do not name the System Settings pane in translations: it has different names across Spanish-speaking regions."))
     case .unavailable:
         LoginItemControl(
             isOn: false, isEnabled: false,
-            help: "Available when Unlatch runs from an app bundle")
+            help: LocalizedStringResource(
+                "Available when Unlatch runs from an app bundle", bundle: .unlatch,
+                comment: "Tooltip of the disabled Open at Login menu item when the app runs outside an app bundle, for example during development."))
     }
 }
 
@@ -495,14 +617,18 @@ func updateButtonState(
 /// What the popover footer shows for the updater (option C, #57).
 struct UpdateFooterPresentation: Equatable, Sendable {
     /// The update item in the ellipsis menu. `nil` leaves it out of the menu.
-    let menuItemTitle: String?
+    let menuItemTitle: LocalizedStringResource?
     let menuItemEnabled: Bool
     /// The accent "Update Available" footer button and the dot on the ellipsis button.
     let showsUpdateIndicator: Bool
 
-    static let checkTitle = "Check for Updates…"
+    static let checkTitle = LocalizedStringResource(
+        "Check for Updates…", bundle: .unlatch,
+        comment: "Menu item that checks for a new version now.")
     /// Confirmed by the maintainer on 2026-10-14 (Design/sparkle-updates.md §6 question 5).
-    static let updateAvailableTitle = "Update Available…"
+    static let updateAvailableTitle = LocalizedStringResource(
+        "Update Available…", bundle: .unlatch,
+        comment: "Menu item shown instead of “Check for Updates…” when a new version is available.")
 }
 
 /// `.hidden`: no item, no indicator. `.checkDisabled`: `checkTitle`, disabled, no indicator.
@@ -530,10 +656,12 @@ func updateFooterPresentation(for state: UpdateButtonState) -> UpdateFooterPrese
 
 /// The "Check Automatically" item in the ellipsis menu (#71).
 struct AutomaticChecksMenuItem: Equatable, Sendable {
-    let title: String
+    let title: LocalizedStringResource
     let isChecked: Bool
 
-    static let checkAutomaticallyTitle = "Check Automatically"
+    static let checkAutomaticallyTitle = LocalizedStringResource(
+        "Check Automatically", bundle: .unlatch,
+        comment: "Checkable menu item: whether the app looks for new versions by itself.")
 }
 
 /// `nil` (the item is left out) unless availability is `.enabled`, matching how the update item

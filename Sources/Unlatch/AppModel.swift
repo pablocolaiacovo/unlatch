@@ -31,7 +31,7 @@ final class AppModel {
     var chosenFolder: URL?
 
     var savedURLs: [URL] = []
-    var savedTo = ""
+    var savedTo: LocalizedStringResource?
 
     private let loginItemService: any LoginItemService
     /// Read from the system at launch and every time the popover opens,
@@ -66,7 +66,7 @@ final class AppModel {
     /// The persistent rows section shows whenever files are loaded, except
     /// while the spinner is up.
     var showsFileRows: Bool { !files.isEmpty && step != .working }
-    var headerText: String { headerNote(fileCount: files.count) }
+    var headerText: LocalizedStringResource { headerNote(fileCount: files.count) }
     /// Sample file for the destination hints: the first usable one.
     var sampleFile: URL? { usableFiles.first?.url }
     var loginItem: LoginItemControl { loginItemControl(for: loginItemStatus) }
@@ -110,7 +110,7 @@ final class AppModel {
             verifiedPassword = nil
             passwordError = false
             savedURLs = []
-            savedTo = ""
+            savedTo = nil
             step = Unlatch.step(afterLoading: classified.map(\.kind))
         }
     }
@@ -259,6 +259,6 @@ final class AppModel {
         destination = .suffix
         chosenFolder = nil
         savedURLs = []
-        savedTo = ""
+        savedTo = nil
     }
 }

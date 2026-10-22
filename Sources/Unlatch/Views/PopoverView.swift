@@ -177,7 +177,7 @@ struct PopoverView: View {
 /// The footer's plain 11 pt button with a hover capsule, shared by Quit and
 /// "Update Available" so the two can't drift apart.
 private struct FooterButton: View {
-    let title: String
+    let title: LocalizedStringResource
     var symbol: String?
     var tint: Color?
     var showsDot = false

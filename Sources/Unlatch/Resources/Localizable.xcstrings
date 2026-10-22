@@ -1,0 +1,603 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@" : {
+      "comment" : "A file name or path shown as is. Do not translate.",
+      "shouldTranslate" : false
+    },
+    "%@/ (originals replaced)" : {
+      "comment" : "Done step summary when a batch overwrote its originals. The value is a folder path followed by a slash; move it if the language needs.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@/ (originales reemplazados)"
+          }
+        }
+      }
+    },
+    "%lld files" : {
+      "comment" : "Header, right side: how many files are loaded. The value is a number, and 1 needs the singular.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld file"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld files"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld archivo"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld archivos"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld files in %lld folders" : {
+      "comment" : "Done step summary for a batch saved into several folders: file count, then folder count. Both values are always 2 or more.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld files in %2$lld folders"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld archivos en %2$lld carpetas"
+          }
+        }
+      }
+    },
+    "%lld files need a password" : {
+      "comment" : "Password step title when several files are password protected. The value is always 2 or more.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld archivos necesitan una contraseña"
+          }
+        }
+      }
+    },
+    "%lld files saved" : {
+      "comment" : "Done step title when several files were saved. The value is always 2 or more.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld archivos guardados"
+          }
+        }
+      }
+    },
+    "%lld saved, %lld failed" : {
+      "comment" : "Done step title for a partial batch: how many files were saved, then how many failed. Either value can be 1, so each needs its own singular and plural form.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld saved, %2$lld failed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@saved@, %#@failed@"
+          },
+          "substitutions" : {
+            "saved" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg guardado"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg guardados"
+                    }
+                  }
+                }
+              }
+            },
+            "failed" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg falló"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg fallaron"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Available when Unlatch runs from an app bundle" : {
+      "comment" : "Tooltip of the disabled Open at Login menu item when the app runs outside an app bundle, for example during development.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disponible cuando Unlatch se ejecuta desde un paquete de app"
+          }
+        }
+      }
+    },
+    "Cancel" : {},
+    "Check Automatically" : {
+      "comment" : "Checkable menu item: whether the app looks for new versions by itself.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprobar automáticamente"
+          }
+        }
+      }
+    },
+    "Check for Updates…" : {
+      "comment" : "Menu item that checks for a new version now.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar actualizaciones…"
+          }
+        }
+      }
+    },
+    "Choose PDFs…" : {},
+    "Choose folder…" : {
+      "comment" : "Destination radio option. Opens a panel to pick a folder.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir carpeta…"
+          }
+        }
+      }
+    },
+    "Copied as-is — opens without a password" : {
+      "comment" : "File row note after saving a PDF that only had permission restrictions: it was copied unchanged and already opens without a password.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiado tal cual — se abre sin contraseña"
+          }
+        }
+      }
+    },
+    "Couldn’t be copied — not saved" : {
+      "comment" : "File row note. Copying a file that needed no unlocking failed, so it was not saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo copiar — no se guardó"
+          }
+        }
+      }
+    },
+    "Couldn’t be read — not saved" : {
+      "comment" : "File row note. The file could not be read, so it was not saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer — no se guardó"
+          }
+        }
+      }
+    },
+    "Couldn’t save — all %lld files failed" : {
+      "comment" : "Done step title when every file of a batch failed. The value is always 2 or more.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar — fallaron los %lld archivos"
+          }
+        }
+      }
+    },
+    "Couldn’t save — nothing was written" : {
+      "comment" : "Done step title when no file could be saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar — no se escribió nada"
+          }
+        }
+      }
+    },
+    "Couldn’t save — the file failed" : {
+      "comment" : "Done step title when the single file failed to save.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar — falló el archivo"
+          }
+        }
+      }
+    },
+    "Couldn’t write the file — not saved" : {
+      "comment" : "File row note. Writing the unlocked copy failed, so nothing was saved for this file.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo escribir el archivo — no se guardó"
+          }
+        }
+      }
+    },
+    "Desktop" : {
+      "comment" : "Destination radio option. Saves to the Desktop folder.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escritorio"
+          }
+        }
+      }
+    },
+    "Done" : {},
+    "Hide" : {},
+    "More" : {},
+    "No open password — permissions only" : {
+      "comment" : "File row note. The PDF opens without a password and only restricts permissions such as printing or copying.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin contraseña de apertura — solo permisos"
+          }
+        }
+      }
+    },
+    "Not a readable PDF — skipped" : {
+      "comment" : "File row note. The file is not a PDF the app can read, so it is skipped.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No es un PDF legible — se omitió"
+          }
+        }
+      }
+    },
+    "Not encrypted — copied as-is" : {
+      "comment" : "File row note after saving a PDF that had no protection: it was copied unchanged.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin cifrar — copiado tal cual"
+          }
+        }
+      }
+    },
+    "Not encrypted — nothing to unlock" : {
+      "comment" : "File row note. The PDF has no protection at all, so there is nothing to unlock.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin cifrar — nada que desbloquear"
+          }
+        }
+      }
+    },
+    "Open Unlatch when you log in" : {
+      "comment" : "Tooltip of the Open at Login menu item when it is off.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Unlatch al iniciar sesión"
+          }
+        }
+      }
+    },
+    "Open at Login" : {},
+    "Password" : {},
+    "Password didn’t match — not saved" : {
+      "comment" : "File row note. The shared password did not open this file, so it was not saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La contraseña no coincide — no se guardó"
+          }
+        }
+      }
+    },
+    "Password protected" : {
+      "comment" : "File row note. The PDF needs a password to open.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protegido con contraseña"
+          }
+        }
+      }
+    },
+    "Quit" : {},
+    "Quit Unlatch" : {},
+    "Remove PDF passwords" : {
+      "comment" : "Header, right side, when no files are loaded: what the app does.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar contraseñas de PDF"
+          }
+        }
+      }
+    },
+    "Removes the open password so the file opens without one. Nothing leaves your Mac." : {},
+    "Same folder, add “-unlocked”" : {
+      "comment" : "Destination radio option. Saves next to the original with a suffix. “-unlocked” is the literal text added to the file name and is not translated.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Misma carpeta, agregar “-unlocked”"
+          }
+        }
+      }
+    },
+    "Same folder, replace original" : {
+      "comment" : "Destination radio option. Overwrites the original file with the unlocked copy.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Misma carpeta, reemplazar el original"
+          }
+        }
+      }
+    },
+    "Save" : {},
+    "Saved" : {
+      "comment" : "Done step title when one file was saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardado"
+          }
+        }
+      }
+    },
+    "See the available update" : {},
+    "Show" : {},
+    "Show in Finder" : {},
+    "That password didn’t work. Try again." : {},
+    "This PDF needs a password" : {
+      "comment" : "Password step title when a single file is password protected.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este PDF necesita una contraseña"
+          }
+        }
+      }
+    },
+    "Turned off in System Settings > General > Login Items. Check to open Login Items and allow Unlatch." : {
+      "comment" : "Tooltip of the Open at Login menu item when the user switched Unlatch off in the macOS login items settings. Do not name the System Settings pane in translations: it has different names across Spanish-speaking regions.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desactivado en los ajustes de inicio de sesión de macOS. Marca la opción para abrirlos y permitir Unlatch."
+          }
+        }
+      }
+    },
+    "Unlatch" : {},
+    "Unlatch opens when you log in" : {
+      "comment" : "Tooltip of the Open at Login menu item when it is on.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlatch se abre al iniciar sesión"
+          }
+        }
+      }
+    },
+    "Unlatch: update available" : {
+      "comment" : "Tooltip of the menu bar icon when a new version is available. “Unlatch” is the app name.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlatch: actualización disponible"
+          }
+        }
+      }
+    },
+    "Unlock" : {},
+    "Unlocked" : {
+      "comment" : "File row note after the password was removed and the file saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desbloqueado"
+          }
+        }
+      }
+    },
+    "Unlocking…" : {},
+    "Update Available" : {},
+    "Update Available…" : {
+      "comment" : "Menu item shown instead of “Check for Updates…” when a new version is available.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización disponible…"
+          }
+        }
+      }
+    },
+    "Update available" : {
+      "comment" : "Accessibility value of the menu bar icon and the More button when a new version is available.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización disponible"
+          }
+        }
+      }
+    },
+    "Version %@" : {
+      "comment" : "Disabled menu item showing the app version, for example “Version 1.2.0”. The value is a version number, or “dev” in a development build.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versión %@"
+          }
+        }
+      }
+    },
+    "Version %@ (%@)" : {
+      "comment" : "Disabled menu item showing the app version and build number, for example “Version 1.2.0 (42)”.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Version %1$@ (%2$@)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versión %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "We’ll try the same password on all of them. Anything that doesn’t match gets skipped." : {
+      "comment" : "Password step subtitle when several files are protected: one password is tried on all of them.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probaremos la misma contraseña en todos. Los que no coincidan se omitirán."
+          }
+        }
+      }
+    },
+    "Where should the unlocked file go?" : {
+      "comment" : "Destination step title when one file will be saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Dónde quieres guardar el archivo desbloqueado?"
+          }
+        }
+      }
+    },
+    "Where should the unlocked files go?" : {
+      "comment" : "Destination step title when several files will be saved.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Dónde quieres guardar los archivos desbloqueados?"
+          }
+        }
+      }
+    },
+    "next to the original" : {
+      "comment" : "Hint under the “Same folder, add -unlocked” option before a sample path is known.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "junto al original"
+          }
+        }
+      }
+    },
+    "opens a save panel" : {
+      "comment" : "Hint under the “Choose folder…” option before a folder has been chosen.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "abre un panel para guardar"
+          }
+        }
+      }
+    },
+    "overwrites the original" : {
+      "comment" : "Hint under the “Same folder, replace original” option before a sample path is known.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reemplaza el original"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

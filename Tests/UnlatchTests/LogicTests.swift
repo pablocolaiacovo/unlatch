@@ -81,6 +81,30 @@ private let desktop = URL(fileURLWithPath: "/tmp/Desktop", isDirectory: true)
 
 // MARK: - Row mapping
 
+/// A row as plain values, with the note resolved in `language`. `RowInfo` holds a
+/// `LocalizedStringResource`, which only compares equal to the same key, arguments, bundle and
+/// locale, so tests compare the resolved text instead.
+private struct RowText: Equatable {
+    let badge: String
+    let tone: RowTone
+    let note: String
+
+    init(_ info: RowInfo, _ language: String) {
+        badge = info.badge
+        tone = info.tone
+        note = resolved(info.note, language)
+    }
+
+    init(badge: String, tone: RowTone, note: String) {
+        self.badge = badge
+        self.tone = tone
+        self.note = note
+    }
+}
+
+private func enRow(_ info: RowInfo) -> RowText { RowText(info, "en") }
+private func esRow(_ info: RowInfo) -> RowText { RowText(info, "es") }
+
 private func file(
     _ kind: FileKind, skipped: Bool = false, unlocked: Bool = false,
     failure: SaveFailure? = nil
@@ -93,35 +117,35 @@ private func file(
 }
 
 @Test func encryptedRowPendingAndDone() {
-    let pending = rowInfo(for: file(.encrypted), done: false)
-    #expect(pending == RowInfo(badge: "•", tone: .neutral, note: "Password protected"))
+    let pending = enRow(rowInfo(for: file(.encrypted), done: false))
+    #expect(pending == RowText(badge: "•", tone: .neutral, note: "Password protected"))
 
-    let done = rowInfo(for: file(.encrypted, unlocked: true), done: true)
-    #expect(done == RowInfo(badge: "✓", tone: .success, note: "Unlocked"))
+    let done = enRow(rowInfo(for: file(.encrypted, unlocked: true), done: true))
+    #expect(done == RowText(badge: "✓", tone: .success, note: "Unlocked"))
 }
 
 @Test func skippedEncryptedRowKeepsPendingLookWhenDone() {
-    let skipped = rowInfo(for: file(.encrypted, skipped: true), done: true)
-    #expect(skipped == RowInfo(badge: "•", tone: .neutral, note: "Password protected"))
+    let skipped = enRow(rowInfo(for: file(.encrypted, skipped: true), done: true))
+    #expect(skipped == RowText(badge: "•", tone: .neutral, note: "Password protected"))
 }
 
 @Test func ownerRowPendingAndDone() {
-    let pending = rowInfo(for: file(.owner), done: false)
-    #expect(pending == RowInfo(
+    let pending = enRow(rowInfo(for: file(.owner), done: false))
+    #expect(pending == RowText(
         badge: "i", tone: .warning, note: "No open password — permissions only"))
 
-    let done = rowInfo(for: file(.owner, unlocked: true), done: true)
-    #expect(done == RowInfo(
+    let done = enRow(rowInfo(for: file(.owner, unlocked: true), done: true))
+    #expect(done == RowText(
         badge: "i", tone: .warning, note: "Copied as-is — opens without a password"))
 }
 
 @Test func plainRowPendingAndDone() {
-    let pending = rowInfo(for: file(.plain), done: false)
-    #expect(pending == RowInfo(
+    let pending = enRow(rowInfo(for: file(.plain), done: false))
+    #expect(pending == RowText(
         badge: "i", tone: .neutral, note: "Not encrypted — nothing to unlock"))
 
-    let done = rowInfo(for: file(.plain, unlocked: true), done: true)
-    #expect(done == RowInfo(
+    let done = enRow(rowInfo(for: file(.plain, unlocked: true), done: true))
+    #expect(done == RowText(
         badge: "i", tone: .neutral, note: "Not encrypted — copied as-is"))
 }
 
@@ -137,39 +161,41 @@ private func file(
 }
 
 @Test func plainAndOwnerNotesAreDistinct() {
-    #expect(rowInfo(for: file(.plain), done: false).note
-        != rowInfo(for: file(.owner), done: false).note)
-    #expect(rowInfo(for: file(.plain, unlocked: true), done: true).note
-        != rowInfo(for: file(.owner, unlocked: true), done: true).note)
+    for language in ["en", "es"] {
+        #expect(resolved(rowInfo(for: file(.plain), done: false).note, language)
+            != resolved(rowInfo(for: file(.owner), done: false).note, language))
+        #expect(resolved(rowInfo(for: file(.plain, unlocked: true), done: true).note, language)
+            != resolved(rowInfo(for: file(.owner, unlocked: true), done: true).note, language))
+    }
 }
 
 @Test func corruptRowAlwaysSkipped() {
-    let info = rowInfo(for: file(.corrupt), done: false)
-    #expect(info == RowInfo(badge: "!", tone: .error, note: "Not a readable PDF — skipped"))
-    #expect(rowInfo(for: file(.corrupt), done: true) == info)
+    let info = enRow(rowInfo(for: file(.corrupt), done: false))
+    #expect(info == RowText(badge: "!", tone: .error, note: "Not a readable PDF — skipped"))
+    #expect(enRow(rowInfo(for: file(.corrupt), done: true)) == info)
 }
 
 // MARK: - Failed row mapping
 
 @Test func failedEncryptedRowShowsDistinctErrorNotes() {
-    #expect(rowInfo(for: file(.encrypted, failure: .wrongPassword), done: true)
-        == RowInfo(badge: "!", tone: .error, note: "Password didn’t match — not saved"))
-    #expect(rowInfo(for: file(.encrypted, failure: .unreadable), done: true)
-        == RowInfo(badge: "!", tone: .error, note: "Couldn’t be read — not saved"))
-    #expect(rowInfo(for: file(.encrypted, failure: .writeFailed), done: true)
-        == RowInfo(badge: "!", tone: .error, note: "Couldn’t write the file — not saved"))
+    #expect(enRow(rowInfo(for: file(.encrypted, failure: .wrongPassword), done: true))
+        == RowText(badge: "!", tone: .error, note: "Password didn’t match — not saved"))
+    #expect(enRow(rowInfo(for: file(.encrypted, failure: .unreadable), done: true))
+        == RowText(badge: "!", tone: .error, note: "Couldn’t be read — not saved"))
+    #expect(enRow(rowInfo(for: file(.encrypted, failure: .writeFailed), done: true))
+        == RowText(badge: "!", tone: .error, note: "Couldn’t write the file — not saved"))
 }
 
 @Test func failedOwnerRowUsesCopyFailedFallback() {
-    #expect(rowInfo(for: file(.owner, failure: .copyFailed), done: true)
-        == RowInfo(badge: "!", tone: .error, note: "Couldn’t be copied — not saved"))
+    #expect(enRow(rowInfo(for: file(.owner, failure: .copyFailed), done: true))
+        == RowText(badge: "!", tone: .error, note: "Couldn’t be copied — not saved"))
 }
 
 @Test func failureIsOnlyShownWhenDone() {
     // A failure recorded before the done step (shouldn't happen, but the
     // pending look must win if it ever did) never leaks into an earlier step.
-    let pending = rowInfo(for: file(.encrypted, failure: .writeFailed), done: false)
-    #expect(pending == RowInfo(badge: "•", tone: .neutral, note: "Password protected"))
+    let pending = enRow(rowInfo(for: file(.encrypted, failure: .writeFailed), done: false))
+    #expect(pending == RowText(badge: "•", tone: .neutral, note: "Password protected"))
 }
 
 @Test func unlockErrorMapsToMatchingSaveFailure() {
@@ -181,58 +207,62 @@ private func file(
 // MARK: - Display strings
 
 @Test func headerNoteCountsFiles() {
-    #expect(headerNote(fileCount: 0) == "Remove PDF passwords")
-    #expect(headerNote(fileCount: 1) == "1 file")
-    #expect(headerNote(fileCount: 4) == "4 files")
+    #expect(en(headerNote(fileCount: 0)) == "Remove PDF passwords")
+    #expect(en(headerNote(fileCount: 1)) == "1 file")
+    #expect(en(headerNote(fileCount: 4)) == "4 files")
 }
 
 @Test func passwordCopySingleVersusBatch() {
     let one = [file(.encrypted)]
-    #expect(passwordTitle(encryptedCount: 1) == "This PDF needs a password")
-    #expect(passwordSubtitle(encrypted: one) == "a.pdf")
+    #expect(en(passwordTitle(encryptedCount: 1)) == "This PDF needs a password")
+    #expect(en(passwordSubtitle(encrypted: one)) == "a.pdf")
 
     let two = [file(.encrypted), file(.encrypted)]
-    #expect(passwordTitle(encryptedCount: 2) == "2 files need a password")
-    #expect(passwordSubtitle(encrypted: two)
+    #expect(en(passwordTitle(encryptedCount: 2)) == "2 files need a password")
+    #expect(en(passwordSubtitle(encrypted: two))
         == "We’ll try the same password on all of them. Anything that doesn’t match gets skipped.")
 }
 
 @Test func doneTitleSingleVersusBatch() {
-    #expect(doneTitle(savedCount: 1) == "Saved")
-    #expect(doneTitle(savedCount: 3) == "3 files saved")
+    #expect(en(doneTitle(savedCount: 1)) == "Saved")
+    #expect(en(doneTitle(savedCount: 3)) == "3 files saved")
 }
 
 @Test func doneTitleZeroSavedIsFailure() {
-    #expect(doneTitle(savedCount: 0) == "Couldn’t save — nothing was written")
+    #expect(en(doneTitle(savedCount: 0)) == "Couldn’t save — nothing was written")
 }
 
 @Test func doneTitlePartialBatchReportsBoth() {
-    #expect(doneTitle(savedCount: 3, failedCount: 2) == "3 saved, 2 failed")
-    #expect(doneTitle(savedCount: 1, failedCount: 1) == "1 saved, 1 failed")
+    #expect(en(doneTitle(savedCount: 3, failedCount: 2)) == "3 saved, 2 failed")
+    #expect(en(doneTitle(savedCount: 1, failedCount: 1)) == "1 saved, 1 failed")
 }
 
 @Test func doneTitleAllFailedNamesTheCount() {
-    #expect(doneTitle(savedCount: 0, failedCount: 1) == "Couldn’t save — the file failed")
-    #expect(doneTitle(savedCount: 0, failedCount: 3) == "Couldn’t save — all 3 files failed")
+    #expect(en(doneTitle(savedCount: 0, failedCount: 1)) == "Couldn’t save — the file failed")
+    #expect(en(doneTitle(savedCount: 0, failedCount: 3)) == "Couldn’t save — all 3 files failed")
+}
+
+/// `doneSummary` resolved in English, or `nil` when there is nothing to show.
+private func summary(_ destinations: [URL], _ option: DestinationOption) -> String? {
+    doneSummary(destinations: destinations, option: option).map(en)
 }
 
 @Test func doneSummaryFormats() {
     let a = URL(fileURLWithPath: "/tmp/Documents/A-unlocked.pdf")
     let b = URL(fileURLWithPath: "/tmp/Documents/B-unlocked.pdf")
-    #expect(doneSummary(destinations: [a], option: .suffix) == "/tmp/Documents/A-unlocked.pdf")
-    #expect(doneSummary(destinations: [a, b], option: .suffix) == "/tmp/Documents/…-unlocked.pdf")
-    #expect(doneSummary(destinations: [a, b], option: .replace)
-        == "/tmp/Documents/ (originals replaced)")
-    #expect(doneSummary(destinations: [a, b], option: .desktop) == "/tmp/Documents/")
-    #expect(doneSummary(destinations: [], option: .suffix) == "")
+    #expect(summary([a], .suffix) == "/tmp/Documents/A-unlocked.pdf")
+    #expect(summary([a, b], .suffix) == "/tmp/Documents/…-unlocked.pdf")
+    #expect(summary([a, b], .replace) == "/tmp/Documents/ (originals replaced)")
+    #expect(summary([a, b], .desktop) == "/tmp/Documents/")
+    #expect(doneSummary(destinations: [], option: .suffix) == nil)
 }
 
 @Test func doneSummarySpanningFoldersStatesTheSpread() {
     let a = URL(fileURLWithPath: "/tmp/Documents/A-unlocked.pdf")
     let b = URL(fileURLWithPath: "/tmp/Archive/B-unlocked.pdf")
     let c = URL(fileURLWithPath: "/tmp/Archive/C-unlocked.pdf")
-    #expect(doneSummary(destinations: [a, b], option: .suffix) == "2 files in 2 folders")
-    #expect(doneSummary(destinations: [a, b, c], option: .replace) == "3 files in 2 folders")
+    #expect(summary([a, b], .suffix) == "2 files in 2 folders")
+    #expect(summary([a, b, c], .replace) == "3 files in 2 folders")
 }
 
 // MARK: - Save jobs
@@ -305,43 +335,43 @@ private func file(
 }
 
 @Test func destinationHints() {
-    #expect(destinationHint(
+    #expect(en(destinationHint(
         option: .suffix, sample: source, desktopFolder: desktop, chosenFolder: nil
-    ) == "/tmp/Documents/Q3-Financials-unlocked.pdf")
-    #expect(destinationHint(
+    )) == "/tmp/Documents/Q3-Financials-unlocked.pdf")
+    #expect(en(destinationHint(
         option: .replace, sample: source, desktopFolder: desktop, chosenFolder: nil
-    ) == "/tmp/Documents/Q3-Financials.pdf")
-    #expect(destinationHint(
+    )) == "/tmp/Documents/Q3-Financials.pdf")
+    #expect(en(destinationHint(
         option: .desktop, sample: source, desktopFolder: desktop, chosenFolder: nil
-    ) == "/tmp/Desktop/")
-    #expect(destinationHint(
+    )) == "/tmp/Desktop/")
+    #expect(en(destinationHint(
         option: .other, sample: source, desktopFolder: desktop, chosenFolder: nil
-    ) == "opens a save panel")
-    #expect(destinationHint(
+    )) == "opens a save panel")
+    #expect(en(destinationHint(
         option: .other, sample: source, desktopFolder: desktop,
         chosenFolder: URL(fileURLWithPath: "/tmp/Unlocked", isDirectory: true)
-    ) == "/tmp/Unlocked/")
+    )) == "/tmp/Unlocked/")
 }
 
 // MARK: - Version label
 
 @Test func versionLabelForRelease() {
-    #expect(versionLabel(version: "1.0.0", build: "42") == "Version 1.0.0 (42)")
+    #expect(en(versionLabel(version: "1.0.0", build: "42")) == "Version 1.0.0 (42)")
 }
 
 @Test func versionLabelPassesDescribeStringsThrough() {
-    #expect(versionLabel(version: "0.0.0-abc1234", build: "7") == "Version 0.0.0-abc1234 (7)")
+    #expect(en(versionLabel(version: "0.0.0-abc1234", build: "7")) == "Version 0.0.0-abc1234 (7)")
     #expect(
-        versionLabel(version: "1.0.0-3-gabc1234-dirty", build: "45")
+        en(versionLabel(version: "1.0.0-3-gabc1234-dirty", build: "45"))
             == "Version 1.0.0-3-gabc1234-dirty (45)")
 }
 
 @Test func versionLabelFallsBackToDevWhenBothMissing() {
-    #expect(versionLabel(version: nil, build: nil) == "Version dev")
-    #expect(versionLabel(version: "", build: "") == "Version dev")
+    #expect(en(versionLabel(version: nil, build: nil)) == "Version dev")
+    #expect(en(versionLabel(version: "", build: "")) == "Version dev")
 }
 
 @Test func versionLabelWithOnlyOneValue() {
-    #expect(versionLabel(version: "1.0.0", build: nil) == "Version 1.0.0")
-    #expect(versionLabel(version: nil, build: "42") == "Version dev (42)")
+    #expect(en(versionLabel(version: "1.0.0", build: nil)) == "Version 1.0.0")
+    #expect(en(versionLabel(version: nil, build: "42")) == "Version dev (42)")
 }

@@ -150,9 +150,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let image = presentation.showsUpdateBadge ? Self.badged(symbol) : symbol
         image.isTemplate = true
         button.image = image
-        button.toolTip = presentation.toolTip
+        button.toolTip = String(localized: presentation.toolTip)
         button.setAccessibilityLabel(StatusItemPresentation.accessibilityLabel)
-        button.setAccessibilityValue(presentation.accessibilityValue)
+        button.setAccessibilityValue(presentation.accessibilityValue.map { String(localized: $0) })
     }
 
     /// The symbol with a dot hanging off its top-trailing corner, separated from the glyph by a
