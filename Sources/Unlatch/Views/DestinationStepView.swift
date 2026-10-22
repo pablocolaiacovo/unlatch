@@ -20,8 +20,8 @@ struct DestinationStepView: View {
 
             HStack(spacing: 8) {
                 Spacer()
-                Button("Cancel") { model.reset() }
-                Button("Save") { model.save() }
+                Button(Strings.cancel) { model.reset() }
+                Button(Strings.save) { model.save() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 16)

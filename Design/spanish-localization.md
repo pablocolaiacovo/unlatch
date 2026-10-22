@@ -47,8 +47,10 @@ resolves them in the view's locale.
   `es.lproj`).
 - Anything in `UnlatchCore`. It stays string-free (§2.5).
 - Translating the output file name suffix `-unlocked` (open question 1).
-- Localized `Info.plist` values (`InfoPlist.strings`). The display name stays "Unlatch", and
-  `NSHumanReadableCopyright` is only shown in Finder's Get Info.
+- Localized `Info.plist` values through `InfoPlist.strings`. The display name stays "Unlatch", and
+  `NSHumanReadableCopyright` is only shown in Finder's Get Info. `CFBundleTypeName` ("PDF Document")
+  is not shown for a PDF, because Finder takes the kind from the `com.adobe.pdf` type. The one
+  Info.plist value users do see, the Services menu title, is localized (§2.9.1).
 
 ## 2. Design
 
@@ -575,6 +577,8 @@ any runner (§2.7), and Spanish cases set `es` explicitly.
 | Views/PopoverView.swift | Quit | footer button | — | Strings |
 | Views/PopoverView.swift | Quit Unlatch | footer help + accessibility label | — | Strings (same key as the main menu item) |
 | Views/PopoverView.swift | Unlocking… | working step | — | Strings |
+| FinderHandoff.swift | Unlatch couldn't read the selected files. | Services error text | — | Strings, `String(localized:)` (§2.9.1) |
+| Info.plist.template | Unlock with Unlatch | Services menu title | — | `Resources/es.lproj/ServicesMenu.strings`, not the catalog (§2.9.1) |
 
 `AppUpdater.swift`, `LoginItem.swift`, `PopoverDismissalMonitor.swift`, and
 `PopoverHostingController.swift` have no user-facing strings. Sparkle's windows and alerts come from
@@ -594,6 +598,31 @@ Some example translations, for direction only. The maintainer, a native speaker,
 | `%lld files` (one / other) | %lld archivo / %lld archivos |
 | `%lld saved, %lld failed` | `%#@saved@, %#@failed@` with "%arg guardado / guardados", "%arg falló / fallaron" |
 | Check Automatically | Comprobar automáticamente (Sparkle's own `es` wording) |
+
+### 2.9.1 Finder quick action strings (#93, #96)
+
+The Finder hand-off added two user-facing strings and one Info.plist value that looks like one.
+
+- **Services error text.** `FinderHandoff.unlockPDFs` sets `error.pointee` when the pasteboard holds
+  no file URL. macOS shows that text, so it goes through the catalog:
+  `String(localized: Strings.finderCouldntReadFiles)`. The English text is unchanged, apostrophe
+  included.
+- **Services menu title.** `NSServices > NSMenuItem > default = "Unlock with Unlatch"` is read by
+  `pbs`, not by `Bundle.module`, so the catalog cannot translate it. Apple's QA1605 describes the
+  mechanism, and `pbs` itself references a `ServicesMenu` table: a `ServicesMenu.strings` file in the
+  app bundle's `<lang>.lproj`, keyed by the English `default` text, with the translation as the value.
+  If there is no match, the English title shows. It lives in the repository at
+  `Resources/es.lproj/ServicesMenu.strings` ("Desbloquear con Unlatch"), next to the template that
+  holds the key. `Scripts/package-app.sh` must copy it to `Unlatch.app/Contents/Resources/es.lproj/`
+  before the app is signed (task D3 below). `InfoPlistTemplateTests` checks that the file exists for
+  every declared language and that its only key is the template's title, so a reworded title cannot
+  silently drop the translation.
+- **Everything else.** `CFBundleTypeName` is not shown for PDFs (see the non-goals). `NSPortName` is
+  an identifier. `FinderHandoff` and `AppModel` have no alert, panel message, or accessibility text
+  beyond what §2.9 already lists. `NSLog` lines stay English.
+
+A side effect worth knowing: once `Contents/Resources/es.lproj` exists in the app, the main bundle has
+a real `.lproj` too, which is also the fallback for M3 in §2.6.
 
 ### 2.10 Keeping the catalog in step with the code
 
@@ -753,6 +782,10 @@ RELEASING.md.
 - M4. On an English Mac or account (or with the per-app setting at English): everything is English
   and identical to v1.2.
 - M5. `swift run Unlatch` shows English (expected, §2.4).
+- M6. With macOS in Spanish and the packaged app registered (copied to `/Applications` and launched
+  once), select a PDF in Finder: the right-click Services (Quick Actions) list shows "Desbloquear con
+  Unlatch". In English it shows "Unlock with Unlatch". `pbs -update` may be needed after the first
+  launch.
 
 ## 5. Implementation plan
 
@@ -833,6 +866,8 @@ Depends on T1. This is the user-facing PR.
 - Catalog: all new keys translated. `LocalizationTests.catalogIsFullyTranslated` and
   `sourcesUseTheAppBundle` added. Both must pass.
 - `Resources/Info.plist.template`: §2.6 keys and comment. `InfoPlistTemplateTests`: the two new tests.
+- Finder strings (§2.9.1): `Strings.finderCouldntReadFiles`, and `Resources/es.lproj/ServicesMenu.strings`
+  with a test that its key matches the template. T2 does not touch `Scripts/package-app.sh`; that is D3.
 - PR body: screenshots of each step in Spanish (light and dark) from the packaged app, plus the
   results of M1 to M4.
 
@@ -860,6 +895,24 @@ Acceptance criteria:
 - `__Snapshots__/PopoverSnapshotTests/` holds 28 PNGs. The 14 English ones are byte-identical to
   `main` (`git diff --stat` lists only additions).
 - CI is green, including on "Re-run all jobs".
+
+### D3 (`devops`): Package the Services menu translation
+
+Depends on T2's `Resources/es.lproj/ServicesMenu.strings`. In `Scripts/package-app.sh`, after the
+Info.plist and icon steps and before `sign "$APP_BUNDLE"`:
+
+```bash
+# Services menu title (Resources/es.lproj/ServicesMenu.strings): macOS reads it from the app
+# bundle's own lproj, not from the module resource bundle.
+for LPROJ in "$REPO_ROOT"/Resources/*.lproj; do
+    [[ -d "$LPROJ" ]] && ditto "$LPROJ" "$APP_BUNDLE/Contents/Resources/$(basename "$LPROJ")"
+done
+```
+
+No separate signing step: the files are plain resources, and the app's signature seals
+`Contents/Resources`. Verified in a throwaway copy of `dist/Unlatch.app` with the directory added and
+the app re-signed: `codesign --verify --deep --strict` passes. Ship D3 with or right after T2, or the
+Services entry stays English on a Spanish Mac while the rest of the app is Spanish.
 
 ### D2 (`devops`): CI catalog-sync check
 

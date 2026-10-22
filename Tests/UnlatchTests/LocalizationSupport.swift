@@ -18,3 +18,9 @@ func resolved(_ resource: LocalizedStringResource, _ language: String) -> String
 
 func en(_ resource: LocalizedStringResource) -> String { resolved(resource, "en") }
 func es(_ resource: LocalizedStringResource) -> String { resolved(resource, "es") }
+
+/// The repository root, found from this file's path: Tests/UnlatchTests/<this file>.
+func repositoryRoot(file: String = #filePath) -> URL {
+    URL(fileURLWithPath: file)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+}

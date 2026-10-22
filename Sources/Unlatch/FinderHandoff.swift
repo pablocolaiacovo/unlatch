@@ -62,7 +62,7 @@ final class FinderHandoff: NSObject {
                 options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         NSLog("Unlatch: hand-off received %d file(s) via %@", urls.count, "Services")
         guard !urls.isEmpty else {
-            error.pointee = "Unlatch couldn't read the selected files." as NSString
+            error.pointee = String(localized: Strings.finderCouldntReadFiles) as NSString
             return
         }
         receive(urls)

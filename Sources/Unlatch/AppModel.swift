@@ -219,7 +219,7 @@ final class AppModel {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Choose"
+        panel.prompt = String(localized: Strings.chooseFolderPrompt)
         panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
         isPresentingPanel = true

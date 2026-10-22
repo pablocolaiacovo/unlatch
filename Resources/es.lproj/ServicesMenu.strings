@@ -1,0 +1,5 @@
+/* Spanish title of the Services menu entry declared in Resources/Info.plist.template
+   (NSServices > NSMenuItem > default). The key is that English title, character for
+   character. Packaged into Unlatch.app/Contents/Resources/es.lproj by
+   Scripts/package-app.sh. InfoPlistTemplateTests checks the key. */
+"Unlock with Unlatch" = "Desbloquear con Unlatch";
