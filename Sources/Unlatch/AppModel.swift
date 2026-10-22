@@ -22,8 +22,9 @@ final class AppModel {
     /// Incremented on each failed attempt to drive the shake animation.
     var shakeCount = 0
 
-    /// Bumped on every load; a finishing classification task from an older
-    /// generation is stale and its result is dropped.
+    /// Bumped on every load and reset. A classification, password check, or
+    /// save that finishes under an older generation belongs to a batch that
+    /// is gone, and its result is dropped.
     private var loadGeneration = 0
 
     var destination: DestinationOption = .suffix
@@ -94,6 +95,10 @@ final class AppModel {
         onLoad?()
         loadGeneration += 1
         let generation = loadGeneration
+        // Leave any step that acts on the previous batch (Save, Unlock) right
+        // away instead of when classification lands. Idle has no such action,
+        // so it stays put and doesn't flash the "Unlocking…" spinner.
+        if step != .idle { step = .working }
         Task {
             let classified = await Task.detached {
                 urls.map { LoadedFile(url: $0, kind: FileKind(classify($0))) }
@@ -104,6 +109,8 @@ final class AppModel {
             password = ""
             verifiedPassword = nil
             passwordError = false
+            savedURLs = []
+            savedTo = ""
             step = Unlatch.step(afterLoading: classified.map(\.kind))
         }
     }
@@ -116,11 +123,13 @@ final class AppModel {
         let attempt = password
         guard !attempt.isEmpty else { return }
         let targets = encryptedFiles.map(\.url)
+        let generation = loadGeneration
         step = .working
         Task {
             let matched = await Task.detached {
                 Set(targets.filter { passwordWorks(attempt, for: $0) })
             }.value
+            guard generation == loadGeneration else { return }
             if matched.isEmpty {
                 step = .password
                 passwordError = true
@@ -163,6 +172,7 @@ final class AppModel {
             desktopFolder: desktopFolder, chosenFolder: chosenFolder,
             password: verifiedPassword)
         guard !jobs.isEmpty else { return }
+        let generation = loadGeneration
         step = .working
         Task {
             // The concrete Error thrown by executeSaveJob is not Sendable, so
@@ -180,6 +190,9 @@ final class AppModel {
                     }
                 }
             }.value
+            // The files are written, but a newer batch owns the rows and the
+            // step now, so none of this outcome may land on it.
+            guard generation == loadGeneration else { return }
             // Duplicate source URLs shouldn't happen — load(_:) doesn't dedupe
             // today, but nothing guarantees a future caller won't feed the
             // same file in twice — so uniqueKeysWithValues (which traps on a
@@ -236,6 +249,7 @@ final class AppModel {
     }
 
     func reset() {
+        loadGeneration += 1
         step = .idle
         files = []
         password = ""
