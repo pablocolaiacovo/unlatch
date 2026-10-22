@@ -62,12 +62,18 @@ jobs:
       # The glob is **/Package.resolved, so a changed pin (a dependency bump) produces a
       # new key and a cold cache on its first run. The Xcode/Swift version above is baked
       # into the key by hand since it isn't derived from any file in the repo.
+      # The "-release" segment marks a cache that also holds .build/release. actions/cache
+      # never re-saves on an exact key hit, so the prefix was changed once to make the
+      # first run after the release test build was added save a cache containing it. The
+      # second restore key still restores the older debug-only cache on that first run, so
+      # it isn't fully cold.
       - name: Cache .build
         uses: actions/cache@v6
         with:
           path: .build
-          key: macos-27-xcode27.0-spm-${{ hashFiles('**/Package.resolved', 'Package.swift') }}
+          key: macos-27-xcode27.0-spm-release-${{ hashFiles('**/Package.resolved', 'Package.swift') }}
           restore-keys: |
+            macos-27-xcode27.0-spm-release-
             macos-27-xcode27.0-spm-
 
       - name: Build
@@ -79,17 +85,28 @@ jobs:
       # still failing the test, so this required check stays red until a human commits the
       # images. SNAPSHOT_ARTIFACTS is where the library writes the failing renders.
       - name: Test
+        id: test
         env:
           UNLATCH_SNAPSHOTS: require
           SNAPSHOT_TESTING_RECORD: failed
           SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/snapshots/failures
         run: swift test
 
+      # Compile-only check of the package and its test targets in release configuration, so
+      # code that builds in debug but breaks only in release (see #69, #73) fails the PR that
+      # causes it. After Test so a snapshot failure still reaches the collect/upload steps
+      # below. It deliberately doesn't run after a Test failure, which is already red.
+      # Doesn't run the tests. -enable-testing is what `swift test -c release` adds on its
+      # own; without it the tests' @testable imports don't resolve in a plain release build.
+      - name: Build tests (release)
+        run: swift build -c release --build-tests -Xswiftc -enable-testing
+
       # Both snapshot directories go under one root in runner.temp so the artifact has a
       # stable layout (failures/ and recorded/). Passing a workspace path and a temp path
-      # to upload-artifact together would root the layout at /.
+      # to upload-artifact together would root the layout at /. Only when Test failed: a
+      # release-only failure has no new snapshots worth uploading.
       - name: Collect snapshots
-        if: failure()
+        if: failure() && steps.test.outcome == 'failure'
         run: |
           mkdir -p "${{ runner.temp }}/snapshots"
           if [ -d Tests/UnlatchTests/__Snapshots__ ]; then
@@ -99,7 +116,7 @@ jobs:
       # The run attempt is in the name so a re-run never collides with the first attempt's
       # artifact. if-no-files-found: ignore because a compile failure produces no snapshots.
       - name: Upload snapshots
-        if: failure()
+        if: failure() && steps.test.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: popover-snapshots-${{ github.run_attempt }}
