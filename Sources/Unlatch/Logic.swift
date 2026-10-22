@@ -28,6 +28,43 @@ enum Step: Equatable, Sendable {
     case idle, password, working, destination, done
 }
 
+/// Files handed to Unlatch from outside the popover, held until they can be
+/// loaded. Keeps file URLs only, drops duplicates by standardized path, and
+/// preserves first-seen order.
+struct IncomingFiles: Equatable, Sendable {
+    private(set) var urls: [URL] = []
+
+    var isEmpty: Bool { urls.isEmpty }
+
+    mutating func add(_ new: [URL]) {
+        var seen = Set(urls.map { $0.standardizedFileURL.path })
+        for url in new where url.isFileURL {
+            if seen.insert(url.standardizedFileURL.path).inserted {
+                urls.append(url)
+            }
+        }
+    }
+
+    /// Returns everything accumulated and empties the buffer.
+    mutating func take() -> [URL] {
+        defer { urls = [] }
+        return urls
+    }
+}
+
+/// What to do with files that arrive from outside the popover.
+enum ExternalOpenAction: Equatable, Sendable {
+    case loadNow
+    /// A password check or save is in flight (`.working`), or an NSOpenPanel
+    /// is up. Loading now would let that work's completion write into the new
+    /// batch, so hold the files until it finishes.
+    case holdUntilIdle
+}
+
+func externalOpenAction(step: Step, isPresentingPanel: Bool) -> ExternalOpenAction {
+    step == .working || isPresentingPanel ? .holdUntilIdle : .loadNow
+}
+
 /// Where the unlocked output goes; mirrors the design's four radio options.
 enum DestinationOption: CaseIterable, Equatable, Sendable {
     case suffix, replace, desktop, other
