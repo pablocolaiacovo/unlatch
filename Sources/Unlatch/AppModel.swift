@@ -60,7 +60,9 @@ final class AppModel {
     @ObservationIgnored var onLoad: (@MainActor () -> Void)?
 
     /// True while browse() or chooseOtherFolder() runs its modal NSOpenPanel.
-    var isPresentingPanel = false
+    /// No view reads it, so it is not observed; it stays settable (not
+    /// private) because the tests set it to simulate an open panel.
+    @ObservationIgnored var isPresentingPanel = false
     /// The newest request received while busy. Each hold replaces it rather
     /// than adding to it (newest wins). private(set) so tests can read it.
     @ObservationIgnored private(set) var heldExternalFiles = IncomingFiles()

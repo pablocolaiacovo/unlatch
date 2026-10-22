@@ -55,7 +55,8 @@ struct IncomingFiles: Equatable, Sendable {
 /// What to do with files that arrive from outside the popover.
 enum ExternalOpenAction: Equatable, Sendable {
     case loadNow
-    /// A password check or save is in flight (`.working`), or an NSOpenPanel
+    /// A password check, a save, or a classification started from a non-idle
+    /// step is in flight (all show `.working`), or an NSOpenPanel
     /// is up. Loading now would let that work's completion write into the new
     /// batch, so hold the files until it finishes.
     case holdUntilIdle
