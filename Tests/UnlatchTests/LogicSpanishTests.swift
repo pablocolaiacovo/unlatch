@@ -21,7 +21,7 @@ private func file(
 // MARK: - Plurals and counts
 
 @Test func headerNoteInSpanish() {
-    #expect(es(headerNote(fileCount: 0)) == "Quitar contraseñas de PDF")
+    #expect(es(headerNote(fileCount: 0)) == "Quitar contraseñas")
     #expect(es(headerNote(fileCount: 1)) == "1 archivo")
     #expect(es(headerNote(fileCount: 2)) == "2 archivos")
     #expect(en(headerNote(fileCount: 1)) == "1 file")
@@ -153,13 +153,13 @@ private func file(
     #expect(es(loginItemControl(for: .requiresApproval).help)
         == "Desactivado en los ajustes de inicio de sesión de macOS. Marca la opción para abrirlos y permitir Unlatch.")
     #expect(es(loginItemControl(for: .unavailable).help)
-        == "Disponible cuando Unlatch se ejecuta desde un paquete de app")
+        == "Disponible cuando Unlatch se ejecuta desde una App")
 }
 
 @Test func updateMenuItemsInSpanish() {
     #expect(es(UpdateFooterPresentation.checkTitle) == "Buscar actualizaciones…")
     #expect(es(UpdateFooterPresentation.updateAvailableTitle) == "Actualización disponible…")
-    #expect(es(AutomaticChecksMenuItem.checkAutomaticallyTitle) == "Comprobar automáticamente")
+    #expect(es(AutomaticChecksMenuItem.checkAutomaticallyTitle) == "Verificar automáticamente")
 }
 
 // MARK: - Every string, in both languages

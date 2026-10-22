@@ -161,7 +161,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disponible cuando Unlatch se ejecuta desde un paquete de app"
+            "value" : "Disponible cuando Unlatch se ejecuta desde una App"
           }
         }
       }
@@ -173,7 +173,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Comprobar automáticamente"
+            "value" : "Verificar automáticamente"
           }
         }
       }
@@ -379,7 +379,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quitar contraseñas de PDF"
+            "value" : "Quitar contraseñas"
           }
         }
       }
