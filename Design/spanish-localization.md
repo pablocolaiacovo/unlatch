@@ -3,6 +3,9 @@
 Issue: #86, "Show the app in Spanish when macOS is set to Spanish" (`enhancement`, `area:app`,
 `area:release`, milestone v1.3).
 
+**Status: implemented.** Every task in §5 is done (PRs #98, #99, #101, #103, #104, #105). The
+maintainer verified it on v1.3.0-beta.2 on 2026-10-22 (§4, manual checks).
+
 Everything marked "observed" in this document was checked on the toolchain this repository uses:
 macOS 27.0.1 (26A434), Xcode 27.0, Swift 6.4, `swift build` with its default build system
 (`swiftbuild`, see `.build/.buildSystem_debug`), `swift-tools-version: 6.3`. The checks used a
@@ -782,6 +785,11 @@ RELEASING.md.
   once), select a PDF in Finder: the right-click Services (Quick Actions) list shows "Desbloquear con
   Unlatch". In English it shows "Unlock with Unlatch". `pbs -update` may be needed after the first
   launch.
+
+**Result (2026-10-22, v1.3.0-beta.2, build 71):** the maintainer reported that M1 (light and
+dark), M3, M6 and the beta smoke test on a clean machine (RELEASING.md step 3, which covers M2)
+all passed. M4 was covered by M3's per-app English setting. M5 was not run; §2.4 already
+observed it.
 
 ## 5. Implementation plan
 
