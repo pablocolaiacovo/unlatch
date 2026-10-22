@@ -1,8 +1,12 @@
+import AppKit
 import Foundation
 import Testing
 
+@testable import Unlatch
+
 // Guards on the Sparkle keys in Resources/Info.plist.template
-// (Design/sparkle-updates.md, §4).
+// (Design/sparkle-updates.md, §4) and on the Finder hand-off keys
+// (Design/finder-quick-action.md, §4).
 
 private func loadTemplate() throws -> [String: Any] {
     // Tests/UnlatchTests/<this file> -> repository root.
@@ -54,4 +58,42 @@ private func loadTemplate() throws -> [String: Any] {
 @Test func templateKeepsTheMacOS14Floor() throws {
     let plist = try loadTemplate()
     #expect(plist["LSMinimumSystemVersion"] as? String == "14.0")
+}
+
+private func loadServicesEntry() throws -> [String: Any] {
+    let plist = try loadTemplate()
+    let services = try #require(plist["NSServices"] as? [[String: Any]])
+    #expect(services.count == 1)
+    return try #require(services.first)
+}
+
+@Test func templateDeclaresTheUnlockService() throws {
+    let plist = try loadTemplate()
+    let service = try loadServicesEntry()
+    #expect(service["NSMessage"] as? String == "unlockPDFs")
+    #expect(service["NSSendFileTypes"] as? [String] == ["com.adobe.pdf"])
+    // Without it macOS registers the service but never shows it.
+    #expect(service["NSRequiredContext"] is [String: Any])
+    #expect(service["NSPortName"] as? String == plist["CFBundleName"] as? String)
+    let menuItem = try #require(service["NSMenuItem"] as? [String: Any])
+    let title = try #require(menuItem["default"] as? String)
+    #expect(!title.isEmpty)
+}
+
+@MainActor @Test func serviceMessageMatchesTheHandoffSelector() throws {
+    let service = try loadServicesEntry()
+    let message = try #require(service["NSMessage"] as? String)
+    // A mismatch fails silently at runtime: pbs routes to a selector that
+    // doesn't exist. This test is the only guard.
+    #expect(FinderHandoff.instancesRespond(to: NSSelectorFromString(message + ":userData:error:")))
+}
+
+@Test func templateDeclaresPDFAsAnAlternateDocumentType() throws {
+    let plist = try loadTemplate()
+    let types = try #require(plist["CFBundleDocumentTypes"] as? [[String: Any]])
+    #expect(types.count == 1)
+    let pdf = try #require(types.first)
+    #expect(pdf["CFBundleTypeRole"] as? String == "Viewer")
+    #expect(pdf["LSHandlerRank"] as? String == "Alternate")
+    #expect(pdf["LSItemContentTypes"] as? [String] == ["com.adobe.pdf"])
 }
