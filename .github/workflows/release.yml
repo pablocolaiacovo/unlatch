@@ -120,6 +120,41 @@ jobs:
             exit 1
           fi
 
+      # Finder hand-off checks (issue #14, Design/finder-quick-action.md
+      # section 4). The Services entry and the PDF document type live in
+      # Info.plist.template; this fails the release if either does not survive
+      # packaging. `pbs` is not on the runner's PATH, so it is called by full
+      # path, and its output is captured then grepped: `pbs | grep -q` under
+      # pipefail fails intermittently (grep exits early, pbs dies of SIGPIPE;
+      # see PR #52 and Scripts/package-app.sh). The PlugIns check guards the
+      # design's "no nested code" assumption: a later Quick Action extension
+      # has to update this step on purpose.
+      - name: Verify Finder hand-off
+        run: |
+          set -euo pipefail
+          APP=dist/Unlatch.app
+
+          PBS_OUTPUT="$(/System/Library/CoreServices/pbs -read_bundle "$APP" 2>&1)"
+          echo "$PBS_OUTPUT"
+          for expected in 'NSMessage = unlockPDFs' 'NSPortName = Unlatch' 'com.adobe.pdf'; do
+            if ! grep -qF "$expected" <<<"$PBS_OUTPUT"; then
+              echo "::error::pbs -read_bundle did not report '$expected' for $APP; the Finder Services entry is missing or malformed in Info.plist" >&2
+              exit 1
+            fi
+          done
+
+          RANK="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDocumentTypes:0:LSHandlerRank' "$APP/Contents/Info.plist" 2>&1 || true)"
+          echo "LSHandlerRank=$RANK"
+          if [[ "$RANK" != "Alternate" ]]; then
+            echo "::error::CFBundleDocumentTypes:0:LSHandlerRank is '$RANK', expected 'Alternate'; Unlatch must not claim the default PDF handler" >&2
+            exit 1
+          fi
+
+          if [[ -e "$APP/Contents/PlugIns" ]]; then
+            echo "::error::$APP/Contents/PlugIns exists; the Finder design assumes no nested code. Update this step on purpose if an extension is added." >&2
+            exit 1
+          fi
+
       # Sparkle bundle checks (issue #13, Design/sparkle-updates.md section
       # 2.8). Conditional on the binary linking Sparkle (package-app.sh embeds the
       # framework exactly then), so this passes on a build without Sparkle but
