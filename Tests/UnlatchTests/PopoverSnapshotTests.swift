@@ -95,6 +95,13 @@ struct PopoverSnapshotTests {
         assertPopoverSnapshot(fixture.makeModel(), named: fixture.rawValue)
     }
 
+    /// The same steps in Spanish, to check that the longer strings fit the fixed 372 pt popover.
+    @Test(arguments: PopoverFixture.allCases)
+    func popoverSpanish(_ fixture: PopoverFixture) {
+        assertPopoverSnapshot(
+            fixture.makeModel(), named: "\(fixture.rawValue)-es", locale: Locale(identifier: "es"))
+    }
+
     #if DEBUG
     /// The footer's "Update Available" button, with no Sparkle object behind it.
     /// Debug only, like `AppUpdater.previewingUpdateAvailable()`.
@@ -102,6 +109,12 @@ struct PopoverSnapshotTests {
         assertPopoverSnapshot(
             PopoverFixture.idle.makeModel(), updater: .previewingUpdateAvailable(),
             named: "footerUpdateAvailable")
+    }
+
+    @Test func footerUpdateAvailableSpanish() {
+        assertPopoverSnapshot(
+            PopoverFixture.idle.makeModel(), updater: .previewingUpdateAvailable(),
+            named: "footerUpdateAvailable-es", locale: Locale(identifier: "es"))
     }
     #endif
 }

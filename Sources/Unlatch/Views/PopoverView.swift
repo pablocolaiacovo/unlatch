@@ -8,6 +8,8 @@ import SwiftUI
 struct PopoverView: View {
     @Bindable var model: AppModel
     let updater: AppUpdater
+    /// Overrides the environment's locale when set (snapshot tests only). Nil leaves it alone.
+    var locale: Locale? = nil
 
     /// The bundle's version never changes while running, so build it once.
     private static let versionText = versionLabel(
@@ -40,6 +42,9 @@ struct PopoverView: View {
             footer
         }
         .frame(width: 372)
+        .transformEnvironment(\.locale) { environment in
+            if let locale { environment = locale }
+        }
     }
 
     private var header: some View {
