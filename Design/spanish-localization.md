@@ -877,18 +877,22 @@ Acceptance criteria:
 
 ## 6. Open questions
 
-1. **`needs-decision`: Does the "add suffix" option write `-unlocked` in Spanish too?** Today
+**Resolved by the maintainer on 2026-10-21:** all three questions are accepted as recommended
+("Go with the recommended approach"). `-unlocked` stays in every language, Spanish uses informal
+"tú", and the login item help text does not name the System Settings pane.
+
+1. **Resolved 2026-10-21 (was `needs-decision`): Does the "add suffix" option write `-unlocked` in Spanish too?** Today
    `destinationURL` always appends `-unlocked`, and the option label quotes it. Translating the suffix
    ("-desbloqueado") would make output file names depend on the UI language. That would break anyone's
    scripts or habits across machines and widen the change into `destinationURL` and its tests.
    **Recommendation: keep `-unlocked` in every language**, and quote it literally in the Spanish label
    ("Misma carpeta, agregar “-unlocked”").
-2. **`needs-decision`: Spanish register and vocabulary.** Neutral `es` must read well in Spain and
+2. **Resolved 2026-10-21 (was `needs-decision`): Spanish register and vocabulary.** Neutral `es` must read well in Spain and
    Latin America. **Recommendation: informal "tú"**, which macOS's own Spanish uses, as does
    Sparkle's `es` ("Siempre puedes buscar actualizaciones…"). Prefer vocabulary that is neutral across
    regions ("archivo", "carpeta", "contraseña"). The maintainer reviews every string in T1 and T2,
    and tests and snapshots follow the approved wording.
-3. **`needs-decision`: How the login item help text names System Settings.** macOS calls the app
+3. **Resolved 2026-10-21 (was `needs-decision`): How the login item help text names System Settings.** macOS calls the app
    "Ajustes del Sistema" in `es` and, as far as can be told without a Latin American Spanish Mac at
    hand, "Configuración del Sistema" in `es-419`. Our one `es` table serves both. **Recommendation:
    phrase it without naming the pane path**, for example "Desactivado en los ajustes de inicio de
