@@ -79,6 +79,21 @@ jobs:
       - name: Build
         run: swift build
 
+      # The string catalog must match the strings the code uses (Design/spanish-localization.md,
+      # section 2.10). The script re-syncs Localizable.xcstrings from the .stringsdata the
+      # debug build emits; any diff means the code and the catalog disagree. No second full
+      # build: plain `swift build` already uses Swift Build (the same engine and debug
+      # configuration the script asks for), so the script's own build step is a no-op after
+      # "Build". Keep this step directly after "Build" and keep the script's build flags in
+      # step with it, or this turns into a duplicate build.
+      - name: Check string catalog
+        run: |
+          Scripts/sync-strings.sh
+          if ! git diff --exit-code -- Sources/Unlatch/Resources/Localizable.xcstrings; then
+            echo "::error file=Sources/Unlatch/Resources/Localizable.xcstrings::The string catalog does not match the strings in the code. Run Scripts/sync-strings.sh locally, translate the new entries (Spanish) in Localizable.xcstrings, and commit the catalog."
+            exit 1
+          fi
+
       # UNLATCH_SNAPSHOTS=require runs the popover snapshot suite unconditionally (locally it
       # is gated on the rendering environment). SNAPSHOT_TESTING_RECORD=failed makes a
       # mismatched or missing reference get (re)written in the runner's workspace while
