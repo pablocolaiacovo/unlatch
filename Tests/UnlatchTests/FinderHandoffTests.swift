@@ -76,15 +76,18 @@ private func waitForCall(_ recorder: Recorder, count: Int = 1) async {
 }
 
 @MainActor @Test func discardPendingDropsBufferedFilesAndCancelsTheFlush() async {
-    let handoff = FinderHandoff(coalescingDelay: .milliseconds(50))
+    let handoff = FinderHandoff(coalescingDelay: .milliseconds(400))
     let recorder = Recorder()
-    let b = pdf("b")
+    let a = pdf("a"), b = pdf("b")
     handoff.connect { recorder.record($0) }
-    handoff.receive([pdf("a")])
+    handoff.receive([a])
+    try? await Task.sleep(for: .milliseconds(300))
     handoff.discardPending()
+    handoff.receive([b])
+    // If a's timer survived, it would fire about 100 ms from here and deliver
+    // early; the timer receive(b) starts fires about 400 ms from here.
     try? await Task.sleep(for: .milliseconds(200))
     #expect(recorder.calls.isEmpty)
-    handoff.receive([b])
     await waitForCall(recorder)
     #expect(recorder.calls == [[b]])
 }
