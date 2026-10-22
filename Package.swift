@@ -5,6 +5,8 @@ import PackageDescription
 
 let package = Package(
     name: "UnlatchCore",
+    // English is the source language of Sources/Unlatch/Resources/Localizable.xcstrings.
+    defaultLocalization: "en",
     // PDFKit is Apple-only, so declare the platform rather than let consumers
     // discover it as an import failure. The menu bar app's macOS 14 floor is
     // for @Observable and NSApp.activate(ignoringOtherApps:), not for
@@ -41,6 +43,8 @@ let package = Package(
         .executableTarget(
             name: "Unlatch",
             dependencies: ["UnlatchCore", .product(name: "Sparkle", package: "Sparkle")],
+            // The string catalog; Swift Build compiles it into UnlatchCore_Unlatch.bundle.
+            resources: [.process("Resources")],
             linkerSettings: [
                 // Inside Unlatch.app the framework lives in Contents/Frameworks.
                 .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),

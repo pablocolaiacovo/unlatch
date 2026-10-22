@@ -60,5 +60,5 @@ private func destinationModel(with url: URL) -> AppModel {
     #expect(model.step == .idle)
     #expect(model.files.isEmpty)
     #expect(model.savedURLs.isEmpty)
-    #expect(model.savedTo.isEmpty)
+    #expect(model.savedTo == nil)
 }

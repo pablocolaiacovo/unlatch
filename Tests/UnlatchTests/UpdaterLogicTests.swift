@@ -122,14 +122,14 @@ func betaVersionsFollowTheBetaChannel(version: String) {
 
 @Test func disabledCheckShowsADisabledItemWithoutIndicator() {
     let presentation = updateFooterPresentation(for: .checkDisabled)
-    #expect(presentation.menuItemTitle == "Check for Updates…")
+    #expect(presentation.menuItemTitle.map(en) == "Check for Updates…")
     #expect(presentation.menuItemEnabled == false)
     #expect(presentation.showsUpdateIndicator == false)
 }
 
 @Test func enabledCheckShowsAnEnabledItemWithoutIndicator() {
     let presentation = updateFooterPresentation(for: .check)
-    #expect(presentation.menuItemTitle == "Check for Updates…")
+    #expect(presentation.menuItemTitle.map(en) == "Check for Updates…")
     #expect(presentation.menuItemEnabled == true)
     #expect(presentation.showsUpdateIndicator == false)
 }
@@ -142,8 +142,8 @@ func betaVersionsFollowTheBetaChannel(version: String) {
 }
 
 @Test func footerCopyEndsInASingleEllipsisCharacter() {
-    #expect(UpdateFooterPresentation.checkTitle == "Check for Updates\u{2026}")
-    #expect(UpdateFooterPresentation.updateAvailableTitle == "Update Available\u{2026}")
+    #expect(en(UpdateFooterPresentation.checkTitle) == "Check for Updates\u{2026}")
+    #expect(en(UpdateFooterPresentation.updateAvailableTitle) == "Update Available\u{2026}")
 }
 
 @Test func swiftRunShowsNoUpdateUIEndToEnd() {
@@ -192,9 +192,9 @@ func attentionAndSessionEndClearTheIndicator(event: UpdateReminderEvent, current
 
 @Test(arguments: [true, false])
 func automaticChecksItemIsShownWhenTheUpdaterIsEnabled(isOn: Bool) {
-    #expect(
-        automaticChecksMenuItem(availability: .enabled, isOn: isOn)
-            == AutomaticChecksMenuItem(title: "Check Automatically", isChecked: isOn))
+    let item = automaticChecksMenuItem(availability: .enabled, isOn: isOn)
+    #expect(item.map { en($0.title) } == "Check Automatically")
+    #expect(item?.isChecked == isOn)
 }
 
 @Test(arguments: [
@@ -206,5 +206,5 @@ func automaticChecksItemIsHiddenWhenTheUpdaterIsDisabled(reason: UpdaterDisabled
 }
 
 @Test func automaticChecksTitleHasNoEllipsis() {
-    #expect(AutomaticChecksMenuItem.checkAutomaticallyTitle == "Check Automatically")
+    #expect(en(AutomaticChecksMenuItem.checkAutomaticallyTitle) == "Check Automatically")
 }
