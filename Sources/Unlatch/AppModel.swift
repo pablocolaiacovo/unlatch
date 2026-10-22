@@ -78,7 +78,6 @@ final class AppModel {
     /// The persistent rows section shows whenever files are loaded, except
     /// while the spinner is up.
     var showsFileRows: Bool { !files.isEmpty && step != .working }
-    var headerText: LocalizedStringResource { headerNote(fileCount: files.count) }
     /// Sample file for the destination hints: the first usable one.
     var sampleFile: URL? { usableFiles.first?.url }
     var loginItem: LoginItemControl { loginItemControl(for: loginItemStatus) }

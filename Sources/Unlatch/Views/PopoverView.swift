@@ -52,9 +52,6 @@ struct PopoverView: View {
             Text(verbatim: "Unlatch")
                 .font(.system(size: 13, weight: .semibold))
             Spacer()
-            Text(model.headerText)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
         }
         .padding(.top, 11)
         .padding(.horizontal, 14)

@@ -206,12 +206,6 @@ private func file(
 
 // MARK: - Display strings
 
-@Test func headerNoteCountsFiles() {
-    #expect(en(headerNote(fileCount: 0)) == "Remove PDF passwords")
-    #expect(en(headerNote(fileCount: 1)) == "1 file")
-    #expect(en(headerNote(fileCount: 4)) == "4 files")
-}
-
 @Test func passwordCopySingleVersusBatch() {
     let one = [file(.encrypted)]
     #expect(en(passwordTitle(encryptedCount: 1)) == "This PDF needs a password")

@@ -20,14 +20,6 @@ private func file(
 
 // MARK: - Plurals and counts
 
-@Test func headerNoteInSpanish() {
-    #expect(es(headerNote(fileCount: 0)) == "Quitar contraseñas")
-    #expect(es(headerNote(fileCount: 1)) == "1 archivo")
-    #expect(es(headerNote(fileCount: 2)) == "2 archivos")
-    #expect(en(headerNote(fileCount: 1)) == "1 file")
-    #expect(en(headerNote(fileCount: 2)) == "2 files")
-}
-
 @Test func passwordCopyInSpanish() {
     #expect(es(passwordTitle(encryptedCount: 1)) == "Este PDF necesita una contraseña")
     #expect(es(passwordTitle(encryptedCount: 3)) == "3 archivos necesitan una contraseña")
@@ -197,11 +189,6 @@ private let samples: [Sample] = {
     }
     for failure in [SaveFailure.wrongPassword, .unreadable, .writeFailed, .copyFailed] {
         list.append(Sample(name: "note \(failure)", resource: failure.note))
-    }
-    for count in [0, 1, 2, 11] {
-        list.append(Sample(
-            name: "header \(count)", resource: headerNote(fileCount: count),
-            contains: count > 0 ? ["\(count)"] : []))
     }
     for count in [1, 3] {
         list.append(Sample(
