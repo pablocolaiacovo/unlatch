@@ -630,8 +630,17 @@ collects
 `.build/out/Intermediates.noindex/*/Debug/Unlatch-p.build/Objects-normal/*/*.stringsdata`, excluding
 the `-testable-` variant, and fails if none are found, because the path is a Swift Build internal and
 may move. Finally it runs `xcrun xcstringstool sync Sources/Unlatch/Resources/Localizable.xcstrings
---stringsdata <files>`. Developers run it after adding or changing a string, translate the new
-entries, and commit the catalog.
+--stringsdata <files>`. Developers run it after adding, changing, or removing a string, translate the
+new entries, and commit the catalog.
+
+Sync deletes a key the code no longer uses only if it has no translations. A translated one stays,
+marked `"extractionState": "stale"`, which `catalogIsFullyTranslated` rejects (#109). So the script
+then deletes every stale entry with `jq` and prints the keys it removed. `jq`'s formatting differs
+from `xcstringstool`'s (`": "` against `" : "`), and a sync with nothing to change does not rewrite
+the file, so the `jq` step also adds an empty placeholder entry and the script syncs again. That
+sync drops the placeholder as an unused untranslated key and writes the catalog in its own format.
+`xcstringstool` writes the file without a final newline whenever it changes it, and leaves the file
+untouched when nothing changed, so the script appends a newline when one is missing.
 
 D2 adds a CI step after "Build": run the script, then `git diff --exit-code --
 Sources/Unlatch/Resources/Localizable.xcstrings`. That fails when the code has a key the catalog lacks,
