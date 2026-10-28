@@ -1,0 +1,6 @@
+{
+    "ignoredFiles": [
+        "Tests/UnlatchTests/__Snapshots__/*",
+        "Tests/UnlatchTests/__Snapshots__/PopoverSnapshotTests/*"
+    ]
+}
