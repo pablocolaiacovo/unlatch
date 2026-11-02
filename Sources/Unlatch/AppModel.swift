@@ -104,6 +104,7 @@ final class AppModel {
     /// Runs `panel` modally. Activating first raises it above other apps, and
     /// `onPanelWillOpen` moves the popover behind it.
     private func runPanel(_ panel: NSOpenPanel) -> NSApplication.ModalResponse {
+        panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
         return whilePresentingPanel { panel.runModal() }
     }

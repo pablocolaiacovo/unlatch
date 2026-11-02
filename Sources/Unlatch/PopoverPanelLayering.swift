@@ -2,11 +2,11 @@ import AppKit
 
 /// Moves the popover's window below a modal `NSOpenPanel` while one is open.
 ///
-/// A status item's popover window sits at level 25, above the level 8 that
-/// `runModal()` gives the panel. `runModal()` resets the panel's level even if
-/// it is set first, so the only way to get the panel in front is to lower the
-/// popover. `.floating` keeps the popover above other apps' normal windows,
-/// where it stays visible behind the panel.
+/// A status item's popover window sits at level 25, above the panel's level 8
+/// (`.modalPanel`). Measured on macOS 27, `runModal()` keeps the panel at level
+/// 8 even if a higher level is set first, so the way to get the panel in front
+/// is to lower the popover. `.floating` keeps the popover above other apps'
+/// normal windows, where it stays visible behind the panel.
 @MainActor
 final class PopoverPanelLayering {
     static let loweredLevel = NSWindow.Level.floating
