@@ -70,6 +70,10 @@ final class AppModel {
     /// panel, so whatever the outside hand-off still buffers can't replace the
     /// user's pick.
     @ObservationIgnored var onPanelConfirmed: (@MainActor () -> Void)?
+    /// Set by `StatusItemController`. Called just before a panel opens and
+    /// just after it closes, so the AppKit layer can keep the popover behind it.
+    @ObservationIgnored var onPanelWillOpen: (@MainActor () -> Void)?
+    @ObservationIgnored var onPanelDidClose: (@MainActor () -> Void)?
 
     var encryptedFiles: [LoadedFile] { files.filter { $0.kind == .encrypted } }
     var usableFiles: [LoadedFile] { files.filter { $0.kind != .corrupt && !$0.skipped } }
@@ -86,20 +90,34 @@ final class AppModel {
 
     // StatusItemController's dismissal monitor ignores outside interactions
     // while an NSOpenPanel is modal (NSApp.modalWindow != nil), so opening
-    // this panel no longer dismisses the popover. `.level = .modalPanel`
-    // keeps the panel in front, and activating first raises it above other
-    // apps too.
+    // this panel no longer dismisses the popover. runPanel(_:) keeps the panel
+    // in front of the popover and of other apps.
     func browse() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
+        let response = runPanel(panel)
+        browsePanelClosed(urls: response == .OK ? panel.urls : nil)
+    }
+
+    /// Runs `panel` modally. Activating first raises it above other apps, and
+    /// `onPanelWillOpen` moves the popover behind it.
+    private func runPanel(_ panel: NSOpenPanel) -> NSApplication.ModalResponse {
         panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
+        return whilePresentingPanel { panel.runModal() }
+    }
+
+    /// The bookkeeping around a modal panel, apart from `runPanel(_:)` so the
+    /// tests can run it without a panel.
+    func whilePresentingPanel<Response>(_ present: () -> Response) -> Response {
         isPresentingPanel = true
-        let response = panel.runModal()
+        onPanelWillOpen?()
+        let response = present()
         isPresentingPanel = false
-        browsePanelClosed(urls: response == .OK ? panel.urls : nil)
+        onPanelDidClose?()
+        return response
     }
 
     /// What browse() does once its panel closes; `nil` means cancelled. A
@@ -219,11 +237,7 @@ final class AppModel {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.prompt = String(localized: Strings.chooseFolderPrompt)
-        panel.level = .modalPanel
-        NSApp.activate(ignoringOtherApps: true)
-        isPresentingPanel = true
-        let response = panel.runModal()
-        isPresentingPanel = false
+        let response = runPanel(panel)
         folderPanelClosed(url: response == .OK ? panel.url : nil)
     }
 

@@ -16,6 +16,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         isModalPanelOpen: { NSApp.modalWindow != nil },
         close: { [weak self] in self?.closePopover() }
     )
+    private let panelLayering = PopoverPanelLayering()
     private var mouseUpHighlightMonitor: Any?
 
     init(model: AppModel, updater: AppUpdater) {
@@ -26,6 +27,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         super.init()
 
         model.onLoad = { [weak self] in self?.presentAndFocus() }
+        model.onPanelWillOpen = { [weak self] in self?.lowerPopoverBehindPanel() }
+        model.onPanelDidClose = { [weak self] in self?.panelLayering.restore() }
         updater.onWillPresent = { [weak self] in self?.closePopover() }
 
         configureStatusItem()
@@ -73,11 +76,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.performClose(nil)
     }
 
+    private func lowerPopoverBehindPanel() {
+        panelLayering.lower(popover.contentViewController?.view.window)
+    }
+
     // MARK: NSPopoverDelegate
 
     func popoverDidShow(_ notification: Notification) {
         dismissalMonitor.start()
         updateHighlight()
+        // A popover reopened while a panel is up must not cover it either.
+        if model.isPresentingPanel { lowerPopoverBehindPanel() }
     }
 
     func popoverDidClose(_ notification: Notification) {
