@@ -2,8 +2,13 @@ import SwiftUI
 
 /// The four destination radio options with monospaced path hints, plus
 /// Cancel/Save. "Choose folder…" opens a folder picker on click.
+///
+/// The radios are hand-drawn to carry a path hint, so they get what an AppKit radio group gives for
+/// free: the group takes focus when the step appears, arrows move the selection, Space re-chooses
+/// the current option, and VoiceOver sees a real radio group.
 struct DestinationStepView: View {
     @Bindable var model: AppModel
+    @FocusState private var optionsFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -17,6 +22,29 @@ struct DestinationStepView: View {
                     optionRow(option)
                 }
             }
+            .focusable()
+            .focused($optionsFocused)
+            .onMoveCommand { direction in
+                switch direction {
+                case .up: select(model.destination.moved(by: -1))
+                case .down: select(model.destination.moved(by: 1))
+                default: break
+                }
+            }
+            .onKeyPress(.space) {
+                select(model.destination)
+                return .handled
+            }
+            .accessibilityRepresentation {
+                Picker(selection: selection) {
+                    ForEach(DestinationOption.allCases, id: \.self) { option in
+                        Text(option.label) + Text(verbatim: ", ") + Text(hint(for: option))
+                    }
+                } label: {
+                    Text(destinationQuestion(usableCount: model.usableFiles.count))
+                }
+                .pickerStyle(.radioGroup)
+            }
 
             HStack(spacing: 8) {
                 Spacer()
@@ -27,6 +55,28 @@ struct DestinationStepView: View {
             .padding(.top, 16)
         }
         .padding(14)
+        .onAppear { optionsFocused = true }
+    }
+
+    private var selection: Binding<DestinationOption> {
+        Binding(get: { model.destination }, set: { select($0) })
+    }
+
+    private func select(_ option: DestinationOption) {
+        if option == .other {
+            model.chooseOtherFolder()
+        } else {
+            model.destination = option
+        }
+    }
+
+    private func hint(for option: DestinationOption) -> LocalizedStringResource {
+        destinationHint(
+            option: option,
+            sample: model.sampleFile,
+            desktopFolder: model.desktopFolder,
+            chosenFolder: model.chosenFolder
+        )
     }
 
     private func optionRow(_ option: DestinationOption) -> some View {
@@ -52,12 +102,7 @@ struct DestinationStepView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(option.label)
                     .font(.system(size: 13))
-                Text(destinationHint(
-                    option: option,
-                    sample: model.sampleFile,
-                    desktopFolder: model.desktopFolder,
-                    chosenFolder: model.chosenFolder
-                ))
+                Text(hint(for: option))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary.opacity(0.9))
                 .lineLimit(1)
@@ -65,12 +110,6 @@ struct DestinationStepView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            if option == .other {
-                model.chooseOtherFolder()
-            } else {
-                model.destination = option
-            }
-        }
+        .onTapGesture { select(option) }
     }
 }

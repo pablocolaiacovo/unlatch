@@ -227,4 +227,15 @@ extension Color {
             blue: Double(hex & 0xFF) / 255
         )
     }
+
+    /// Inline error text, lighter in dark mode so it stays readable on the popover.
+    static let errorText = Color(nsColor: NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let hex = isDark ? PopoverPalette.errorTextDark : PopoverPalette.errorTextLight
+        return NSColor(
+            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1)
+    })
 }

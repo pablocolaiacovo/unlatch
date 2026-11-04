@@ -70,6 +70,13 @@ func externalOpenAction(step: Step, isPresentingPanel: Bool) -> ExternalOpenActi
 enum DestinationOption: CaseIterable, Equatable, Sendable {
     case suffix, replace, desktop, other
 
+    /// The option an arrow key lands on. Stops at the ends, like an AppKit radio group.
+    func moved(by offset: Int) -> DestinationOption {
+        let options = Self.allCases
+        let index = options.firstIndex(of: self)! + offset
+        return options[min(max(index, 0), options.count - 1)]
+    }
+
     var label: LocalizedStringResource {
         switch self {
         case .suffix:
@@ -407,6 +414,22 @@ func destinationQuestion(usableCount: Int) -> LocalizedStringResource {
 /// Semantic badge tone; the view maps tones to the design's exact colors.
 enum RowTone: Equatable, Sendable {
     case neutral, success, warning, error
+}
+
+/// The hand-picked popover colors, as sRGB hex. `PopoverPaletteTests` holds them to 4.5:1: badge
+/// fills against their white glyph, error text against light and dark popover backgrounds.
+enum PopoverPalette {
+    static let errorTextLight: UInt32 = 0xA33F2B
+    static let errorTextDark: UInt32 = 0xF59482
+
+    static func badgeFill(_ tone: RowTone) -> UInt32 {
+        switch tone {
+        case .neutral: 0x737378
+        case .success: 0x2F7F4B
+        case .warning: 0x887224
+        case .error: 0xC24A32
+        }
+    }
 }
 
 struct RowInfo: Equatable, Sendable {

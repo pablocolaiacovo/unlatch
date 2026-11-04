@@ -22,7 +22,7 @@ struct FileRowList: View {
         let info = rowInfo(for: file, done: done)
         return HStack(spacing: 8) {
             Circle()
-                .fill(badgeColor(info.tone))
+                .fill(Color(hex: PopoverPalette.badgeFill(info.tone)))
                 .frame(width: 14, height: 14)
                 .overlay(
                     Text(info.badge)
@@ -44,21 +44,9 @@ struct FileRowList: View {
         .padding(.vertical, 5)
     }
 
-    private func badgeColor(_ tone: RowTone) -> Color {
-        switch tone {
-        // systemGray, not primary.opacity: primary flips to white in dark
-        // mode, which would erase the white badge glyph. A mid gray keeps
-        // the white text legible in both appearances.
-        case .neutral: Color(nsColor: .systemGray)
-        case .success: Color(hex: 0x3A9D5D)
-        case .warning: Color(hex: 0xB9A24A)
-        case .error: Color(hex: 0xD0563E)
-        }
-    }
-
     private func noteColor(_ tone: RowTone) -> Color {
         switch tone {
-        case .error: Color(hex: 0xB04A34)
+        case .error: .errorText
         default: Color.secondary
         }
     }
