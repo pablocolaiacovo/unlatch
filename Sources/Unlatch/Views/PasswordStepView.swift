@@ -42,7 +42,7 @@ struct PasswordStepView: View {
             if model.passwordError {
                 Text(Strings.passwordDidntWork)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color(hex: 0xC9302C))
+                    .foregroundStyle(Color.errorText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
             }
