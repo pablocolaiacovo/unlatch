@@ -29,7 +29,8 @@
 # Sparkle:
 #   If the built binary links @rpath/Sparkle.framework, the script embeds
 #   .build/release/Sparkle.framework in Contents/Frameworks, removes its
-#   unused XPC services, and signs it inside-out. A binary that does not link
+#   unused XPC services, signs it inside-out, and copies THIRD-PARTY-NOTICES.md
+#   (Sparkle's license) into Contents/Resources. A binary that does not link
 #   Sparkle skips all of that, so this script works before and after the
 #   dependency lands. See Design/sparkle-updates.md, section 2.3.
 #
@@ -172,6 +173,12 @@ if grep -q '@rpath/Sparkle.framework/' <<<"$LINKED_LIBS"; then
     sign "$FW/Versions/B/Autoupdate"
     sign "$FW/Versions/B/Updater.app"
     sign "$FW"
+
+    # Sparkle's license requires its notice wherever the framework is redistributed.
+    # Sealed by the app signature below.
+    NOTICES="$REPO_ROOT/THIRD-PARTY-NOTICES.md"
+    [[ -f "$NOTICES" ]] || { echo "error: embedding Sparkle but $NOTICES is missing" >&2; exit 1; }
+    cp "$NOTICES" "$APP_BUNDLE/Contents/Resources/"
 fi
 
 RESOURCE_BUNDLE_SRC="$REPO_ROOT/.build/release/${PACKAGE_NAME}_${APP_NAME}.bundle"
