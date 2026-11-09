@@ -51,6 +51,9 @@ Lifecycle of a change:
 - Never hardcode a version number. The git tag is the only source of truth.
 - Never commit signing material or credentials. `.gitignore` already excludes them; do not weaken it.
 - Report actual command output. A task is done when the build is clean and tests pass, not before.
+- Push tags, publish or delete releases, and close milestones only inside `/release` with an exact
+  version. Asked any other way ("cut a beta", "release 1.4"), tell the maintainer to run
+  `/release vX.Y.Z`.
 - `gh` posts as the maintainer. Never post or commit a maintainer decision the maintainer did not make;
   if one no longer fits, stop and report.
 - Human-only decisions (paid Apple Developer membership, cutting scope, App Store distribution) get a
