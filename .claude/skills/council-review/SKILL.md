@@ -36,5 +36,7 @@ Report in this order: verdict (merge / merge after fixes / do not merge), **Must
 list with `path:line` and the one-line scenario, **Nice to have**, **Dismissed**, then each reviewer's
 build and test result.
 
-Then fix the must-fix items in order, run `swift build` and `swift test`, and show the output. Leave
+Then fix the must-fix items in order, run `swift build` and `swift test`, and show the output. When
+the target is a PR, fix only on its head branch: if the checkout is on another branch, run
+`gh pr checkout <n>` when the working tree is clean; otherwise stop after the report and say why. Leave
 nice-to-haves for the maintainer to pick; do not fix them unasked.

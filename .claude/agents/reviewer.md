@@ -48,7 +48,8 @@ live in `RELEASING.md`.
    - **Tests.** New behaviour without a test; a fixture added without `generate-fixtures.sh` being able
      to reproduce it; placeholder tests left in place; tests that pass for the wrong reason.
    - **Release hygiene.** Version numbers hardcoded anywhere; signing material or credentials in the
-     diff; the PR title not readable as a changelog line; missing `Closes #N`; missing labels.
+     diff. When the target is a PR, also: the title not readable as a changelog line, missing
+     `Closes #N`, missing labels. A branch or working tree has no PR metadata yet; skip those checks.
 5. For each finding, verify it before reporting: point at the exact line, describe the concrete input or
    sequence that triggers it, and say what the wrong outcome is. A finding you cannot trigger in your
    head with a specific scenario is a question, not a finding; put it in a separate short list.
