@@ -73,8 +73,8 @@ enum DestinationOption: CaseIterable, Equatable, Sendable {
     /// The option an arrow key lands on. Stops at the ends, like an AppKit radio group.
     func moved(by offset: Int) -> DestinationOption {
         let options = Self.allCases
-        let index = options.firstIndex(of: self)! + offset
-        return options[min(max(index, 0), options.count - 1)]
+        guard let current = options.firstIndex(of: self) else { return self }
+        return options[min(max(current + offset, 0), options.count - 1)]
     }
 
     var label: LocalizedStringResource {

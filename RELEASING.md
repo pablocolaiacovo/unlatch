@@ -223,8 +223,8 @@ Zero results, or every remaining issue explicitly moved to the next milestone.
 
 **Exception: a mid-milestone beta.** A beta (`vX.Y.Z-beta.N`) may be cut while its milestone still
 has open issues, but only when the maintainer approves that exact version — typically to exercise
-release-pipeline changes that only a tag push runs, or to get an early build to testers. The task
-handed to `release-manager` names the version and states that the maintainer approved a
+release-pipeline changes that only a tag push runs, or to get an early build to testers. The
+maintainer runs `/release` with that exact version and says in the same session that it is an approved
 mid-milestone beta; without both, this check applies as written. An early beta does not commit the
 milestone: the final `vX.Y.Z` still requires the check above, and later betas increment `N`.
 
