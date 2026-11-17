@@ -199,6 +199,32 @@ func destinationURL(
     }
 }
 
+/// Lowercased because the default macOS volume is case-insensitive; on a
+/// case-sensitive one this only numbers a file that didn't strictly need it.
+private func destinationKey(_ url: URL) -> String {
+    url.standardizedFileURL.path.lowercased()
+}
+
+/// `url` if nothing is there, otherwise the first "Name 2.pdf", "Name 3.pdf"…
+/// that is neither on disk nor in `taken`, the way Finder numbers copies.
+func freeDestination(_ url: URL, taken: Set<String> = []) -> URL {
+    func isFree(_ candidate: URL) -> Bool {
+        !taken.contains(destinationKey(candidate))
+            && !FileManager.default.fileExists(atPath: candidate.path)
+    }
+    if isFree(url) { return url }
+    let ext = url.pathExtension
+    let base = url.deletingPathExtension().lastPathComponent
+    let folder = url.deletingLastPathComponent()
+    var number = 2
+    while true {
+        var candidate = folder.appendingPathComponent("\(base) \(number)")
+        if !ext.isEmpty { candidate = candidate.appendingPathExtension(ext) }
+        if isFree(candidate) { return candidate }
+        number += 1
+    }
+}
+
 // MARK: - Save jobs
 
 /// What saving does to one file. Encrypted files go through `unlock`;
@@ -225,11 +251,19 @@ func saveJobs(
     chosenFolder: URL?,
     password: String?
 ) -> [SaveJob] {
-    files.compactMap { file in
+    // Destinations already given out in this batch: two sources with the same
+    // name going to one folder must not land on the same file.
+    var taken = Set<String>()
+    return files.compactMap { file in
         guard file.kind != .corrupt, !file.skipped else { return nil }
-        let destination = destinationURL(
+        var destination = destinationURL(
             for: file.url, option: option,
             desktopFolder: desktopFolder, chosenFolder: chosenFolder)
+        // Only "replace original" may overwrite anything.
+        if option != .replace {
+            destination = freeDestination(destination, taken: taken)
+            taken.insert(destinationKey(destination))
+        }
         return SaveJob(
             source: file.url,
             destination: destination,
@@ -240,7 +274,9 @@ func saveJobs(
 /// Executes one job (blocking; call off the main actor). Copies go through a
 /// temp file and an atomic replace, mirroring `unlock`'s write path; copying
 /// a file onto itself (the "replace original" option) is a no-op success.
-func executeSaveJob(_ job: SaveJob) throws {
+func executeSaveJob(
+    _ job: SaveJob, scratch: URL = FileManager.default.temporaryDirectory
+) throws {
     switch job.action {
     case .unlock(let password):
         try unlock(job.source, password: password, destination: job.destination)
@@ -248,9 +284,11 @@ func executeSaveJob(_ job: SaveJob) throws {
         guard job.source.standardizedFileURL != job.destination.standardizedFileURL else {
             return
         }
-        let temp = FileManager.default.temporaryDirectory
+        let temp = scratch
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("pdf")
+        // After a successful replace the temp file has moved and this finds nothing.
+        defer { try? FileManager.default.removeItem(at: temp) }
         try FileManager.default.copyItem(at: job.source, to: temp)
         _ = try FileManager.default.replaceItemAt(job.destination, withItemAt: temp)
     }
@@ -359,8 +397,9 @@ func destinationHint(
                 "next to the original", bundle: .unlatch,
                 comment: "Hint under the “Same folder, add -unlocked” option before a sample path is known.")
         }
-        return verbatim(abbreviatedPath(destinationURL(
-            for: sample, option: .suffix, desktopFolder: desktopFolder, chosenFolder: nil)))
+        // The name save() will really use for this file, numbered if one is already there.
+        return verbatim(abbreviatedPath(freeDestination(destinationURL(
+            for: sample, option: .suffix, desktopFolder: desktopFolder, chosenFolder: nil))))
     case .replace:
         guard let sample else {
             return LocalizedStringResource(

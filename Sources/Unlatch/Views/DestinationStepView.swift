@@ -49,7 +49,8 @@ struct DestinationStepView: View {
             HStack(spacing: 8) {
                 Spacer()
                 Button(Strings.cancel) { model.reset() }
-                Button(Strings.save) { model.save() }
+                // Says "Replace" when the originals are about to be overwritten.
+                Button(model.destination == .replace ? Strings.replace : Strings.save) { model.save() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 16)

@@ -369,3 +369,89 @@ private func summary(_ destinations: [URL], _ option: DestinationOption) -> Stri
     #expect(en(versionLabel(version: "1.0.0", build: nil)) == "Version 1.0.0")
     #expect(en(versionLabel(version: nil, build: "42")) == "Version dev (42)")
 }
+
+// MARK: - Never overwrite by accident (#124)
+
+@Test func freeDestinationNumbersPastExistingFiles() throws {
+    let wanted = scratchURL()
+    #expect(freeDestination(wanted) == wanted)
+
+    try Data().write(to: wanted)
+    let base = wanted.deletingPathExtension().lastPathComponent
+    let second = wanted.deletingLastPathComponent().appendingPathComponent("\(base) 2.pdf")
+    #expect(freeDestination(wanted) == second)
+
+    try Data().write(to: second)
+    #expect(freeDestination(wanted).lastPathComponent == "\(base) 3.pdf")
+}
+
+@Test func saveJobsNeverTargetAnExistingFileExceptReplace() throws {
+    let original = scratchURL()
+    try Data().write(to: original)
+    let folder = original.deletingLastPathComponent()
+    let batch = [LoadedFile(url: original, kind: .plain)]
+
+    // Saving into the folder the file is already in must not land on the original.
+    let other = saveJobs(
+        for: batch, option: .other, desktopFolder: desktop, chosenFolder: folder, password: nil)
+    #expect(other[0].destination != original)
+    #expect(!FileManager.default.fileExists(atPath: other[0].destination.path))
+
+    let replace = saveJobs(
+        for: batch, option: .replace, desktopFolder: desktop, chosenFolder: nil, password: nil)
+    #expect(replace[0].destination == original)
+}
+
+@Test func saveJobsKeepSameNamedFilesApartInOneBatch() {
+    let batch = ["/tmp/A/Report.pdf", "/tmp/B/report.pdf", "/tmp/C/Report.pdf"]
+        .map { LoadedFile(url: URL(fileURLWithPath: $0), kind: .plain) }
+    let names = saveJobs(
+        for: batch, option: .desktop, desktopFolder: desktop, chosenFolder: nil, password: nil
+    ).map(\.destination.lastPathComponent)
+    #expect(names == ["Report.pdf", "report 2.pdf", "Report 3.pdf"])
+}
+
+// MARK: - No temporary file left behind (#125)
+
+@Test func failedCopyLeavesNoTemporaryFile() throws {
+    let source = scratchURL()
+    try Data("pdf".utf8).write(to: source)
+    let scratch = scratchURL(ext: "scratch")
+    try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+    let missingFolder = scratchURL(ext: "missing").appendingPathComponent("out.pdf")
+
+    #expect(throws: (any Error).self) {
+        try executeSaveJob(
+            SaveJob(source: source, destination: missingFolder, action: .copy), scratch: scratch)
+    }
+    #expect(try FileManager.default.contentsOfDirectory(atPath: scratch.path).isEmpty)
+}
+
+/// The repro in #124: `X-unlocked.pdf` already sits next to `X.pdf`.
+@Test func suffixOptionNumbersPastAnExistingUnlockedFile() throws {
+    let original = scratchURL()
+    let base = original.deletingPathExtension().lastPathComponent
+    let folder = original.deletingLastPathComponent()
+    try Data().write(to: folder.appendingPathComponent("\(base)-unlocked.pdf"))
+    let numbered = folder.appendingPathComponent("\(base)-unlocked 2.pdf")
+
+    let jobs = saveJobs(
+        for: [LoadedFile(url: original, kind: .encrypted)], option: .suffix,
+        desktopFolder: desktop, chosenFolder: nil, password: "pw")
+    #expect(jobs[0].destination == numbered)
+
+    // The hint shows the name that will really be written.
+    let hint = destinationHint(
+        option: .suffix, sample: original, desktopFolder: desktop, chosenFolder: nil)
+    #expect(String(localized: hint) == abbreviatedPath(numbered))
+}
+
+/// APFS treats precomposed and decomposed names as one file. Swift compares
+/// strings by canonical equivalence, so the batch check does too.
+@Test func saveJobsKeepNamesApartAcrossUnicodeNormalization() {
+    let batch = ["/tmp/A/Caf\u{00E9}.pdf", "/tmp/B/Cafe\u{0301}.pdf"]
+        .map { LoadedFile(url: URL(fileURLWithPath: $0), kind: .plain) }
+    let jobs = saveJobs(
+        for: batch, option: .desktop, desktopFolder: desktop, chosenFolder: nil, password: nil)
+    #expect(jobs[1].destination.lastPathComponent == "Cafe\u{0301} 2.pdf")
+}
