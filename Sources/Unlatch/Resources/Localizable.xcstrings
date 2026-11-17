@@ -499,6 +499,17 @@
         }
       }
     },
+    "Replace" : {
+      "comment" : "Button on the destination step when “Same folder, replace original” is selected: overwrite the originals with the unlocked copies.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reemplazar"
+          }
+        }
+      }
+    },
     "Same folder, add “-unlocked”" : {
       "comment" : "Destination radio option. Saves next to the original with a suffix. “-unlocked” is the literal text added to the file name and is not translated.",
       "localizations" : {

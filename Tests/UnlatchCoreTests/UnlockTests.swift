@@ -90,3 +90,17 @@ func bothProducersClassifyAndUnlockAlike(
         #expect(result.pageCount == 3, "\(name) lost pages")
     }
 }
+
+// A failed swap must not leave the decrypted temporary copy behind (#125).
+@Test func failedSwapLeavesNoTemporaryFile() throws {
+    let scratch = tempURL().deletingPathExtension()
+    try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+    let missingFolder = tempURL().deletingPathExtension().appendingPathComponent("out.pdf")
+
+    #expect(throws: UnlockError.writeFailed) {
+        try unlock(
+            fixture("user-locked"), password: "hunter2",
+            destination: missingFolder, scratch: scratch)
+    }
+    #expect(try FileManager.default.contentsOfDirectory(atPath: scratch.path).isEmpty)
+}
