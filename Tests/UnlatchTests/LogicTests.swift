@@ -405,8 +405,10 @@ private func summary(_ destinations: [URL], _ option: DestinationOption) -> Stri
 @Test func saveJobsKeepSameNamedFilesApartInOneBatch() {
     let batch = ["/tmp/A/Report.pdf", "/tmp/B/report.pdf", "/tmp/C/Report.pdf"]
         .map { LoadedFile(url: URL(fileURLWithPath: $0), kind: .plain) }
+    // A folder nothing else writes to: freeDestination reads the real disk.
     let names = saveJobs(
-        for: batch, option: .desktop, desktopFolder: desktop, chosenFolder: nil, password: nil
+        for: batch, option: .desktop, desktopFolder: scratchURL(ext: "desktop"),
+        chosenFolder: nil, password: nil
     ).map(\.destination.lastPathComponent)
     #expect(names == ["Report.pdf", "report 2.pdf", "Report 3.pdf"])
 }
@@ -452,6 +454,49 @@ private func summary(_ destinations: [URL], _ option: DestinationOption) -> Stri
     let batch = ["/tmp/A/Caf\u{00E9}.pdf", "/tmp/B/Cafe\u{0301}.pdf"]
         .map { LoadedFile(url: URL(fileURLWithPath: $0), kind: .plain) }
     let jobs = saveJobs(
-        for: batch, option: .desktop, desktopFolder: desktop, chosenFolder: nil, password: nil)
+        for: batch, option: .desktop, desktopFolder: scratchURL(ext: "desktop"),
+        chosenFolder: nil, password: nil)
     #expect(jobs[1].destination.lastPathComponent == "Cafe\u{0301} 2.pdf")
+}
+
+// MARK: - A file that appears after the name was chosen (#124)
+
+@Test func jobsThatMayNotOverwriteFailRatherThanReplace() throws {
+    let locked = scratchURL()
+    let doc = PDFDocument()
+    doc.insert(PDFPage(), at: 0)
+    try #require(doc.write(to: locked, withOptions: [.userPasswordOption: "pw", .ownerPasswordOption: "pw"]))
+    let existing = scratchURL()
+    let precious = Data("precious".utf8)
+    try precious.write(to: existing)
+
+    #expect(throws: (any Error).self) {
+        try executeSaveJob(SaveJob(source: locked, destination: existing, action: .copy))
+    }
+    #expect(throws: UnlockError.writeFailed) {
+        try executeSaveJob(
+            SaveJob(source: locked, destination: existing, action: .unlock(password: "pw")))
+    }
+    #expect(try Data(contentsOf: existing) == precious)
+
+    // "Replace original" is the one job that may.
+    try executeSaveJob(SaveJob(
+        source: locked, destination: existing, action: .unlock(password: "pw"), overwrite: true))
+    #expect(classify(existing) == .notEncrypted)
+}
+
+@Test func saveJobsAllowOverwriteOnlyForReplace() {
+    for option in DestinationOption.allCases {
+        let jobs = saveJobs(
+            for: [file(.encrypted)], option: option,
+            desktopFolder: desktop, chosenFolder: nil, password: "pw")
+        #expect(jobs[0].overwrite == (option == .replace))
+    }
+}
+
+@Test func doneSummaryForNumberedSuffixBatchShowsOnlyTheFolder() {
+    let plain = [URL(fileURLWithPath: "/tmp/D/a-unlocked.pdf"), URL(fileURLWithPath: "/tmp/D/b-unlocked.pdf")]
+    #expect(summary(plain, .suffix) == "/tmp/D/…-unlocked.pdf")
+    let numbered = [plain[0], URL(fileURLWithPath: "/tmp/D/b-unlocked 2.pdf")]
+    #expect(summary(numbered, .suffix) == "/tmp/D/")
 }

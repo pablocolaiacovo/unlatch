@@ -239,6 +239,9 @@ struct SaveJob: Equatable, Sendable {
     let source: URL
     let destination: URL
     let action: SaveAction
+    /// Only "replace original" may write over an existing file. Every other
+    /// job fails rather than replace one that appeared after its name was chosen.
+    var overwrite = false
 }
 
 /// Builds the batch of save jobs. `password` must be the exact string the
@@ -267,30 +270,42 @@ func saveJobs(
         return SaveJob(
             source: file.url,
             destination: destination,
-            action: file.kind == .encrypted ? .unlock(password: password) : .copy)
+            action: file.kind == .encrypted ? .unlock(password: password) : .copy,
+            overwrite: option == .replace)
     }
 }
 
-/// Executes one job (blocking; call off the main actor). Copies go through a
-/// temp file and an atomic replace, mirroring `unlock`'s write path; copying
-/// a file onto itself (the "replace original" option) is a no-op success.
+/// Executes one job (blocking; call off the main actor). The output is staged
+/// in `scratch` and then moved into place: `moveItem` fails if something is
+/// already at the destination, so a job that may not overwrite never does.
+/// Copying a file onto itself (the "replace original" option) is a no-op success.
 func executeSaveJob(
     _ job: SaveJob, scratch: URL = FileManager.default.temporaryDirectory
 ) throws {
+    let staged = scratch
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("pdf")
+    // After a successful move the staged file is gone and this finds nothing.
+    defer { try? FileManager.default.removeItem(at: staged) }
+
     switch job.action {
     case .unlock(let password):
-        try unlock(job.source, password: password, destination: job.destination)
+        guard !job.overwrite else {
+            try unlock(job.source, password: password, destination: job.destination)
+            return
+        }
+        try unlock(job.source, password: password, destination: staged)
+        do {
+            try FileManager.default.moveItem(at: staged, to: job.destination)
+        } catch {
+            throw UnlockError.writeFailed
+        }
     case .copy:
         guard job.source.standardizedFileURL != job.destination.standardizedFileURL else {
             return
         }
-        let temp = scratch
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("pdf")
-        // After a successful replace the temp file has moved and this finds nothing.
-        defer { try? FileManager.default.removeItem(at: temp) }
-        try FileManager.default.copyItem(at: job.source, to: temp)
-        _ = try FileManager.default.replaceItemAt(job.destination, withItemAt: temp)
+        try FileManager.default.copyItem(at: job.source, to: staged)
+        try FileManager.default.moveItem(at: staged, to: job.destination)
     }
 }
 
@@ -372,7 +387,11 @@ func doneSummary(destinations: [URL], option: DestinationOption) -> LocalizedStr
     switch option {
     case .suffix:
         // The real file name pattern the app writes, so it is not translated.
-        return verbatim(dir + "/…-unlocked.pdf")
+        // A batch where some names were numbered ("-unlocked 2") shows only the folder.
+        let allPlain = destinations.allSatisfy {
+            $0.deletingPathExtension().lastPathComponent.hasSuffix("-unlocked")
+        }
+        return verbatim(dir + (allPlain ? "/…-unlocked.pdf" : "/"))
     case .replace:
         return LocalizedStringResource(
             "\(dir)/ (originals replaced)", bundle: .unlatch,

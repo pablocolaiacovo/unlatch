@@ -9,6 +9,9 @@ import SwiftUI
 struct DestinationStepView: View {
     @Bindable var model: AppModel
     @FocusState private var optionsFocused: Bool
+    /// The "-unlocked" hint checks the disk for a free name, so it is computed once when the
+    /// step appears, not on every redraw. The files can't change while this step is up.
+    @State private var suffixHint: LocalizedStringResource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,7 +59,10 @@ struct DestinationStepView: View {
             .padding(.top, 16)
         }
         .padding(14)
-        .onAppear { optionsFocused = true }
+        .onAppear {
+            optionsFocused = true
+            suffixHint = computedHint(for: .suffix)
+        }
     }
 
     private var selection: Binding<DestinationOption> {
@@ -72,6 +78,11 @@ struct DestinationStepView: View {
     }
 
     private func hint(for option: DestinationOption) -> LocalizedStringResource {
+        if option == .suffix, let suffixHint { return suffixHint }
+        return computedHint(for: option)
+    }
+
+    private func computedHint(for option: DestinationOption) -> LocalizedStringResource {
         destinationHint(
             option: option,
             sample: model.sampleFile,
