@@ -508,9 +508,16 @@ What that means in practice:
 From v1.1, Unlatch checks for updates with Sparkle (issue #13). The design is
 [Design/sparkle-updates.md](Design/sparkle-updates.md); the one-time setup is its §2.9.
 
-- **The feed** is <https://pablocolaiacovo.github.io/unlatch/appcast.xml>, the `SUFeedURL` in
-  `Resources/Info.plist.template`. GitHub Pages serves it, deployed by the `deploy-feed` job through
-  Actions, not from a `gh-pages` branch. Nothing in the repository holds the feed: the live feed is
+- **The feed** is <https://unlatch-feed.colaiacovo.workers.dev/appcast.xml>, the `SUFeedURL` in
+  `Resources/Info.plist.template`. That is the `unlatch-feed` Cloudflare Worker in `FeedProxy/`,
+  which returns <https://pablocolaiacovo.github.io/unlatch/appcast.xml> unchanged and counts Sparkle's
+  update checks (Design/feed-usage-counting.md). Builds before this change read the Pages URL
+  directly. Deploy Worker changes with `npm install && npm run deploy` in `FeedProxy/`, signed in
+  with `cf auth login`; never delete the Worker or rename the account's `workers.dev` subdomain, or
+  every shipped build loses updates. Usage counts are at
+  <https://unlatch-feed.colaiacovo.workers.dev/stats>, behind the `DASHBOARD_PASSWORD` Worker
+  secret. GitHub Pages serves the feed itself, deployed by the
+  `deploy-feed` job through Actions, not from a `gh-pages` branch. Nothing in the repository holds the feed: the live feed is
   the state, and every release adds to it. Its items point at the `Unlatch.zip` assets on GitHub
   Releases. Betas are on the `beta` channel of the same feed.
 - **The signing key** is an EdDSA (ed25519) key pair. The public half is `SUPublicEDKey` in

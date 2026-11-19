@@ -21,10 +21,10 @@ private func loadTemplate() throws -> [String: Any] {
     return try #require(plist as? [String: Any])
 }
 
-@Test func templateFeedURLIsTheHTTPSPagesURL() throws {
+@Test func templateFeedURLIsTheFeedWorkerURL() throws {
     let plist = try loadTemplate()
     let feed = try #require(plist["SUFeedURL"] as? String)
-    #expect(feed == "https://pablocolaiacovo.github.io/unlatch/appcast.xml")
+    #expect(feed == "https://unlatch-feed.colaiacovo.workers.dev/appcast.xml")
 }
 
 @Test func templatePublicKeyIsA32ByteEd25519Key() throws {

@@ -1,0 +1,13 @@
+{
+  "name": "unlatch-feed",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "cf deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^2.0.0-rc.2",
+    "cf": "1.0.0-rc.2",
+    "vite": "^8.3.8"
+  }
+}
