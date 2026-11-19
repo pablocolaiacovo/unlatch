@@ -27,8 +27,9 @@ returns the feed from GitHub Pages and counts unique copies per day and app vers
 - **What is never stored:** your IP address, file names, file contents, or passwords. To count a
   copy once per day, the Worker keeps a keyed hash of the IP address and the date until the day
   ends, then deletes it, leaving only the counts.
-- **How to opt out:** turn off **Check Automatically** in the ellipsis (…) menu. Copies that never
-  check are never counted.
+- **How to opt out:** turn off **Check Automatically** in the ellipsis (…) menu. A copy is counted
+  only on days it checks for updates, so with automatic checks off it is counted only on the days
+  you choose **Check for Updates…**.
 
 The Worker's source is in [`FeedProxy/`](FeedProxy) and the design in
 [`Design/feed-usage-counting.md`](Design/feed-usage-counting.md).

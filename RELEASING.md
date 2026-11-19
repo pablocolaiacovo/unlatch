@@ -339,7 +339,8 @@ side; each later one starts only after the ones before it succeed:
    check again as a backstop, for another tag's deploy that landed after `publish`, including
    before a re-run of `appcast` days later. It then publishes `appcast.xml` to GitHub Pages at
    <https://pablocolaiacovo.github.io/unlatch/appcast.xml> and polls the live feed for up to 13
-   minutes, failing if the tag's item is not there.
+   minutes, failing if the tag's item is not there. It polls the `SUFeedURL` of the built app, so
+   from the build that points at the `unlatch-feed` Worker on, the poll goes through the Worker.
 
 The feed is updated after the release exists, so it never points at a missing asset. Once the run
 finishes:
@@ -358,7 +359,7 @@ finishes:
   TAG=v1.1.0     # the tag just pushed
   CHECK="$(mktemp -d)"
   curl -sS -o "$CHECK/appcast.xml" -w '%{http_code}\n' \
-    "https://pablocolaiacovo.github.io/unlatch/appcast.xml?cb=$(date +%s)"   # 200
+    "https://unlatch-feed.colaiacovo.workers.dev/appcast.xml?cb=$(date +%s)"   # 200, through the Worker
   xmllint --xpath "//item[enclosure[contains(@url,'/$TAG/Unlatch.zip')]]" "$CHECK/appcast.xml"
   gh release view "$TAG" --json assets --jq '.assets[] | [.name, .size] | @tsv'
   gh release download "$TAG" -p Unlatch.zip -D "$CHECK"
@@ -516,8 +517,9 @@ From v1.1, Unlatch checks for updates with Sparkle (issue #13). The design is
   with `cf auth login`; never delete the Worker or rename the account's `workers.dev` subdomain, or
   every shipped build loses updates. Usage counts are at
   <https://unlatch-feed.colaiacovo.workers.dev/stats>, behind the `DASHBOARD_PASSWORD` Worker
-  secret. GitHub Pages serves the feed itself, deployed by the
-  `deploy-feed` job through Actions, not from a `gh-pages` branch. Nothing in the repository holds the feed: the live feed is
+  secret. Sign-in attempts are not rate-limited, so keep that password long and random (generated
+  in 1Password). GitHub Pages serves the feed itself, deployed by the `deploy-feed` job through
+  Actions, not from a `gh-pages` branch. Nothing in the repository holds the feed: the live feed is
   the state, and every release adds to it. Its items point at the `Unlatch.zip` assets on GitHub
   Releases. Betas are on the `beta` channel of the same feed.
 - **The signing key** is an EdDSA (ed25519) key pair. The public half is `SUPublicEDKey` in

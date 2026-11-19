@@ -19,23 +19,32 @@ export async function stats(request: Request, env: StatsEnv): Promise<Response> 
 
   const today = new Date().toISOString().slice(0, 10);
   const days = [...Array(DAYS)].map((_, i) => isoDay(today, i - DAYS)); // oldest first, ends yesterday
-  const [totals, todaySoFar, versions] = await env.DB.batch<Record<string, unknown>>([
+  const [totals, pending, versions, first] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare("SELECT day, SUM(copies) AS copies FROM daily WHERE day >= ?1 GROUP BY day").bind(days[0]),
-    env.DB.prepare("SELECT COUNT(*) AS copies FROM seen WHERE day = ?1").bind(today),
+    // Days not rolled up yet: today, and yesterday until the 00:15 UTC cron runs.
+    env.DB.prepare("SELECT day, COUNT(*) AS copies FROM seen GROUP BY day"),
     env.DB.prepare(
       "SELECT day, version, copies FROM daily WHERE day = (SELECT MAX(day) FROM daily) ORDER BY copies DESC",
     ),
+    env.DB.prepare("SELECT MIN(day) AS day FROM (SELECT day FROM daily UNION ALL SELECT day FROM seen)"),
   ]);
   const byDay = new Map(totals.results.map((r) => [String(r.day), Number(r.copies)]));
+  for (const r of pending.results) {
+    const day = String(r.day);
+    byDay.set(day, (byDay.get(day) ?? 0) + Number(r.copies));
+  }
   const series = days.map((day) => ({ day, copies: byDay.get(day) ?? 0 }));
   const latest = series[series.length - 1];
-  const last30 = series.slice(-30);
-  const average30 = last30.reduce((sum, d) => sum + d.copies, 0) / last30.length;
+  // Average only over days since counting began, so the first month isn't diluted by zeros.
+  const firstDay = first.results[0]?.day ? String(first.results[0].day) : today;
+  const window = series.slice(-30).filter((d) => d.day >= firstDay);
+  const average30 = window.length ? window.reduce((sum, d) => sum + d.copies, 0) / window.length : 0;
 
   const html = page({
-    today: Number(todaySoFar.results[0]?.copies ?? 0),
+    today: byDay.get(today) ?? 0,
     latest,
     average30,
+    averageDays: window.length,
     series,
     versions: versions.results.map((r) => ({ day: String(r.day), version: String(r.version), copies: Number(r.copies) })),
   });
@@ -54,7 +63,9 @@ async function authorized(request: Request, password: string): Promise<boolean> 
   if (!header.startsWith("Basic ")) return false;
   let given = "";
   try {
-    given = atob(header.slice(6)).split(":").slice(1).join(":");
+    // atob yields bytes as Latin-1 code units; decode them as UTF-8 so non-ASCII passwords match.
+    const bytes = Uint8Array.from(atob(header.slice(6)), (c) => c.charCodeAt(0));
+    given = new TextDecoder().decode(bytes).split(":").slice(1).join(":");
   } catch {
     return false;
   }
@@ -81,6 +92,7 @@ function page(data: {
   today: number;
   latest: Day;
   average30: number;
+  averageDays: number;
   series: Day[];
   versions: { day: string; version: string; copies: number }[];
 }): string {
@@ -144,11 +156,11 @@ details table { margin-top: 8px; }
 <body>
 <main>
 <h1>Unlatch active copies</h1>
-<p class="sub">Unique copies that checked for updates, per UTC day. Copies with automatic checks off are not counted.</p>
+<p class="sub">Unique copies that checked for updates, automatically or with Check for Updates, per UTC day. A copy that doesn't check on a given day isn't counted for that day.</p>
 
 <div class="tiles">
   <div class="card tile"><div class="label">Yesterday</div><div class="value">${fmt(data.latest.copies)}</div><div class="note">${data.latest.day}</div></div>
-  <div class="card tile"><div class="label">30-day daily average</div><div class="value">${fmt(data.average30)}</div><div class="note">Ending yesterday</div></div>
+  <div class="card tile"><div class="label">30-day daily average</div><div class="value">${fmt(data.average30)}</div><div class="note">${data.averageDays === 30 ? "Ending yesterday" : `Over ${data.averageDays} day${data.averageDays === 1 ? "" : "s"} since counting began`}</div></div>
   <div class="card tile"><div class="label">Today so far</div><div class="value">${fmt(data.today)}</div><div class="note">Rolls up at 00:15 UTC</div></div>
 </div>
 

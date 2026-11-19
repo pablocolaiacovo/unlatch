@@ -84,5 +84,10 @@ checks pass through the Worker to Pages without being counted.
 - The `workers.dev` hostname is tied to this Cloudflare account. Renaming the account subdomain,
   deleting the Worker or moving accounts breaks updates for every copy with this URL until a release
   ships a new one.
+- Workers free plan: 100,000 requests a day per account. Past that, `workers.dev` returns an error
+  until 00:00 UTC and copies on this URL can't check for updates that day. Unlatch is far below it;
+  upgrade to Workers Paid if the dashboard ever approaches it.
+- `/stats` has no rate limit on sign-in attempts, so `DASHBOARD_PASSWORD` must be long and random
+  (a generated 1Password password).
 - The opt-in usage-statistics toggle from #121 does not apply here: update checks were already being
   made, and nothing new is sent. The README discloses the counting.
