@@ -15,56 +15,46 @@ with strict concurrency, deployment target macOS 14. Tests use Swift Testing wit
 `README.md` explains the two PDFKit traps the code is built around. `RELEASING.md` is the canonical
 process document: branching, versioning, labels, milestones, and the release checklist.
 
-## Agents and who does what
+Code conventions: fixtures load through `Bundle.module` with `subdirectory: "Fixtures"`, so keep the
+fixtures' directory structure; no force-unwraps in production code; respect `Sendable` and actor
+isolation instead of silencing strict-concurrency diagnostics.
 
-Route work to the agent that owns it. `architect`, `macos-developer`, `project-owner`, `reviewer`, and
-`release-manager` are defined in `.claude/agents/`; `devops`, `triage`, and `quick-fix` are the
-maintainer's user-level agents and are not in this repository. If an agent in the table is not
-available, the main session does that work under the same rules and guardrails. The table is the map.
+## Workflow
 
-| Task | Agent |
-| --- | --- |
-| Define or reshape release scope, break a goal into issues, manage labels and milestones, write or update process docs and issue templates, decide when a milestone is ready | `project-owner` |
-| Turn a feature idea into a technical design with sized implementation tasks, before any code | `architect` |
-| Write or change Swift code: features, bug fixes, tests, refactors, README sections about the code | `macos-developer` |
-| GitHub Actions workflows, `Scripts/package-app.sh`, signing and notarization wiring, repo secrets, CI failures | `devops` |
-| Review a PR, branch, or working-tree diff before merge | `reviewer` |
-| Rank open PRs and issues, spot blockers, recommend a merge order | `triage` |
-| Execute a release: preflight, beta, tag, watch the workflow, verify the artifact, close the milestone, hotfixes | `release-manager` |
-| Typos, one-line edits, renames with no behaviour change | `quick-fix` |
+The main session does the work: filing issues, planning milestones, Swift changes, workflows and
+scripts. Three skills cover the steps that need more:
 
-Rules that decide the edge cases:
+- **`/design`** before code when an issue adds public API to `UnlatchCore`, involves sandboxing,
+  entitlements, or system integration, or spans more than a couple of files. The design lands in
+  `Design/<slug>.md`. Smaller changes go straight to code; the issue body is the plan.
+- **`/council-review`** on every change before it is opened for merge. Two `reviewer` agents review
+  it independently in fresh contexts; the main session verifies their findings, ranks them into must
+  fix and nice to have, and fixes the must-fix items.
+- **`/release <version>`** cuts a release. Only the maintainer invokes it, with the exact version.
 
-- **Design before code for anything non-trivial.** If an issue touches more than a couple of files,
-  adds public API to `UnlatchCore`, or involves sandboxing, entitlements, or system integration, it goes
-  to `architect` first. The design lands in `Design/<slug>.md` and `macos-developer` builds from it.
-- **Code versus pipeline.** Anything under `Sources/` or `Tests/` is `macos-developer`. Anything under
-  `.github/workflows/` or a script that builds, signs, or publishes is `devops`. `project-owner` owns
-  `.github/release.yml`, `.github/ISSUE_TEMPLATE/`, and `RELEASING.md`.
-- **Planning versus publishing.** `project-owner` may create labels, milestones, and issues when asked.
-  Only `release-manager` pushes tags, publishes or deletes releases, and closes milestones, and only when
-  the task names the exact version.
-- **Review is read-only.** `reviewer` and `triage` report; they do not fix, merge, or close. Findings go
-  back to `macos-developer` or `devops` as a new task.
+Lifecycle of a change:
 
-## Lifecycle of a change
-
-1. `project-owner` files the issue in a milestone, with acceptance criteria as a task list.
-2. `architect` produces a design if the issue calls for one.
-3. `macos-developer` or `devops` implements on a `feature/` or `fix/` branch, with a clean build and
-   passing tests.
-4. `reviewer` reviews the PR. The PR title is the changelog line, so it reads as a user-facing sentence,
-   the body says `Closes #N`, and it carries a type label plus an `area:` label. A PR with no
-   user-facing effect also carries `skip-changelog` to keep it out of the release notes.
+1. File the issue in a milestone, in the format of `.github/ISSUE_TEMPLATE/`, with acceptance criteria
+   as a task list and one type label plus at least one `area:` label (`RELEASING.md`, "Labels").
+2. Run `/design` if the issue calls for one.
+3. Implement on a `feature/` or `fix/` branch until the build is clean and tests pass.
+4. Run `/council-review`, fix the must-fix items, and open the PR. The PR title is the changelog line, so it reads
+   as a user-facing sentence; the body says `Closes #N`; it carries a type label plus an `area:`
+   label, and `skip-changelog` when it has no user-facing effect.
 5. The maintainer squash-merges.
-6. When the milestone is empty, `release-manager` cuts a beta, the maintainer runs the clean-machine
-   smoke test, and `release-manager` tags the release.
+6. When the milestone is empty, the maintainer runs `/release` for a beta, runs the clean-machine smoke
+   test, then runs `/release` for the stable version.
 
-## Guardrails for every agent
+## Guardrails
 
 - Do not commit, push, or change git state unless the task asks for it.
 - Never hardcode a version number. The git tag is the only source of truth.
 - Never commit signing material or credentials. `.gitignore` already excludes them; do not weaken it.
 - Report actual command output. A task is done when the build is clean and tests pass, not before.
+- Push tags, publish or delete releases, and close milestones only inside `/release` with an exact
+  version. Asked any other way ("cut a beta", "release 1.4"), tell the maintainer to run
+  `/release vX.Y.Z`.
+- `gh` posts as the maintainer. Never post or commit a maintainer decision the maintainer did not make;
+  if one no longer fits, stop and report.
 - Human-only decisions (paid Apple Developer membership, cutting scope, App Store distribution) get a
   recommendation and a `needs-decision` label, not a guess.

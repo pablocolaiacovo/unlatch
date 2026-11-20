@@ -37,6 +37,9 @@ enum Strings {
     static let save = LocalizedStringResource(
         "Save", bundle: .unlatch,
         comment: "Button on the destination step: write the unlocked copies.")
+    static let replace = LocalizedStringResource(
+        "Replace", bundle: .unlatch,
+        comment: "Button on the destination step when “Same folder, replace original” is selected: overwrite the originals with the unlocked copies.")
     static let showInFinder = LocalizedStringResource(
         "Show in Finder", bundle: .unlatch,
         comment: "Button on the done step: reveal the saved files in Finder.")

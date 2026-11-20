@@ -256,11 +256,10 @@ final class AppModel {
 
     func save() {
         let option = destination
-        let jobs = saveJobs(
-            for: files, option: option,
-            desktopFolder: desktopFolder, chosenFolder: chosenFolder,
-            password: verifiedPassword)
-        guard !jobs.isEmpty else { return }
+        // Same filter as saveJobs: nothing usable means no jobs.
+        guard !usableFiles.isEmpty else { return }
+        let (batch, desktopFolder, chosenFolder, password) =
+            (files, desktopFolder, chosenFolder, verifiedPassword)
         let generation = loadGeneration
         step = .working
         Task {
@@ -269,7 +268,12 @@ final class AppModel {
             // it's mapped to SaveFailure inside the detached closure — only
             // that Sendable outcome crosses back to the main actor.
             let outcomes = await Task.detached {
-                jobs.map { job -> (source: URL, dest: URL, failure: SaveFailure?) in
+                // Built here, not on the main actor: choosing free names reads the disk.
+                saveJobs(
+                    for: batch, option: option,
+                    desktopFolder: desktopFolder, chosenFolder: chosenFolder,
+                    password: password
+                ).map { job -> (source: URL, dest: URL, failure: SaveFailure?) in
                     do {
                         try executeSaveJob(job)
                         return (job.source, job.destination, nil)

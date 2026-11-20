@@ -4,6 +4,13 @@ import PDFKit
 public enum UnlockError: Error { case wrongPassword, unreadable, writeFailed }
 
 public func unlock(_ source: URL, password: String?, destination: URL) throws {
+    try unlock(
+        source, password: password, destination: destination,
+        scratch: FileManager.default.temporaryDirectory)
+}
+
+/// `scratch` is where the temporary file goes; a parameter so tests can check nothing is left there.
+func unlock(_ source: URL, password: String?, destination: URL, scratch: URL) throws {
     guard let doc = PDFDocument(url: source) else { throw UnlockError.unreadable }
 
     if doc.isLocked {
@@ -36,16 +43,20 @@ public func unlock(_ source: URL, password: String?, destination: URL) throws {
     }
 
     // Write to a temp file first, then swap it into place atomically.
-    let temp = FileManager.default.temporaryDirectory
+    let temp = scratch
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension("pdf")
+    // The temp file is a decrypted copy: never leave it behind. After a
+    // successful swap it has moved, and this removal finds nothing.
+    defer { try? FileManager.default.removeItem(at: temp) }
 
-    guard rebuilt.write(to: temp) else {
-        try? FileManager.default.removeItem(at: temp)
+    guard rebuilt.write(to: temp) else { throw UnlockError.writeFailed }
+
+    do {
+        _ = try FileManager.default.replaceItemAt(destination, withItemAt: temp)
+    } catch {
         throw UnlockError.writeFailed
     }
-
-    _ = try FileManager.default.replaceItemAt(destination, withItemAt: temp)
 }
 
 /// Recreates an outline subtree against `target`'s pages. A destination whose
