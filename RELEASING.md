@@ -22,6 +22,10 @@ Trunk-based. `main` is always green and always releasable.
 
 - Work happens on short-lived branches off `main`: `feature/...`, `fix/...`. Use `release/...` only
   if a release genuinely needs stabilization while other work continues; this should be rare.
+- **Start every branch from the latest `main`.** Before creating a `feature/` or `fix/` branch, run
+  `git fetch origin` and branch from `origin/main`, not from a local `main` or another branch that
+  may be stale. `main` requires branches to be up to date before merging, so a branch that falls
+  behind is updated with `git merge origin/main`, then built and tested again.
 - Every change lands through a pull request. Nothing is pushed to `main` directly.
 - **Pull requests are squash-merged.** The repository allows squash merges only (merge commits and
   rebase merges are disabled), and the squash commit takes the PR title as its title and the PR body
@@ -29,7 +33,8 @@ Trunk-based. `main` is always green and always releasable.
   line. Write it as a user-facing, imperative sentence — "Unlock PDFs from a Finder Quick Action",
   not "wip: fix stuff" and not a dump of commit subjects. If you would not want to read it in release
   notes, retitle before merging.
-- The PR body references its issue with `Closes #N`.
+- The PR body references its issue with `Closes #N`, or `Part of #N` when the issue stays open for
+  more work.
 - The PR carries the labels that decide its release-note section: `enhancement`, `bug`, or
   `documentation`, plus its `area:` labels. See [.github/release.yml](.github/release.yml).
 - A PR with no user-facing effect also carries `skip-changelog`, which keeps it out of the release
@@ -339,7 +344,8 @@ side; each later one starts only after the ones before it succeed:
    check again as a backstop, for another tag's deploy that landed after `publish`, including
    before a re-run of `appcast` days later. It then publishes `appcast.xml` to GitHub Pages at
    <https://pablocolaiacovo.github.io/unlatch/appcast.xml> and polls the live feed for up to 13
-   minutes, failing if the tag's item is not there.
+   minutes, failing if the tag's item is not there. It polls the `SUFeedURL` of the built app, so
+   from the build that points at the `unlatch-feed` Worker on, the poll goes through the Worker.
 
 The feed is updated after the release exists, so it never points at a missing asset. Once the run
 finishes:
@@ -358,7 +364,7 @@ finishes:
   TAG=v1.1.0     # the tag just pushed
   CHECK="$(mktemp -d)"
   curl -sS -o "$CHECK/appcast.xml" -w '%{http_code}\n' \
-    "https://pablocolaiacovo.github.io/unlatch/appcast.xml?cb=$(date +%s)"   # 200
+    "https://unlatch-feed.colaiacovo.workers.dev/appcast.xml?cb=$(date +%s)"   # 200, through the Worker
   xmllint --xpath "//item[enclosure[contains(@url,'/$TAG/Unlatch.zip')]]" "$CHECK/appcast.xml"
   gh release view "$TAG" --json assets --jq '.assets[] | [.name, .size] | @tsv'
   gh release download "$TAG" -p Unlatch.zip -D "$CHECK"
@@ -508,8 +514,16 @@ What that means in practice:
 From v1.1, Unlatch checks for updates with Sparkle (issue #13). The design is
 [Design/sparkle-updates.md](Design/sparkle-updates.md); the one-time setup is its §2.9.
 
-- **The feed** is <https://pablocolaiacovo.github.io/unlatch/appcast.xml>, the `SUFeedURL` in
-  `Resources/Info.plist.template`. GitHub Pages serves it, deployed by the `deploy-feed` job through
+- **The feed** is <https://unlatch-feed.colaiacovo.workers.dev/appcast.xml>, the `SUFeedURL` in
+  `Resources/Info.plist.template`. That is the `unlatch-feed` Cloudflare Worker in `FeedProxy/`,
+  which returns <https://pablocolaiacovo.github.io/unlatch/appcast.xml> unchanged and counts Sparkle's
+  update checks (Design/feed-usage-counting.md). Builds before this change read the Pages URL
+  directly. Deploy Worker changes with `npm install && npm run deploy` in `FeedProxy/`, signed in
+  with `cf auth login`; never delete the Worker or rename the account's `workers.dev` subdomain, or
+  every shipped build loses updates. Usage counts are at
+  <https://unlatch-feed.colaiacovo.workers.dev/stats>, behind the `DASHBOARD_PASSWORD` Worker
+  secret. Sign-in attempts are not rate-limited, so keep that password long and random (generated
+  in 1Password). GitHub Pages serves the feed itself, deployed by the `deploy-feed` job through
   Actions, not from a `gh-pages` branch. Nothing in the repository holds the feed: the live feed is
   the state, and every release adds to it. Its items point at the `Unlatch.zip` assets on GitHub
   Releases. Betas are on the `beta` channel of the same feed.

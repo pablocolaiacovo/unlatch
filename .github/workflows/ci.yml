@@ -148,3 +148,30 @@ jobs:
           if [ -n "$(git status --porcelain -- Tests/UnlatchTests/__Snapshots__/RECORDED_ON.txt)" ]; then
             echo "::warning title=Snapshot environment changed::The runner's rendering environment differs from the one the committed snapshots were recorded in. The snapshots still pass within tolerance. Run the 'Record snapshots' workflow and commit the result to re-baseline."
           fi
+
+  # The feed Worker (FeedProxy/, Design/feed-usage-counting.md) is deployed by hand with
+  # `npm run deploy`; this only proves it type-checks and builds. The dry run makes no API
+  # requests, so it needs no Cloudflare credentials.
+  feed-worker:
+    name: feed-worker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: FeedProxy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: FeedProxy/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run check

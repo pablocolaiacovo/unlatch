@@ -42,9 +42,11 @@
          equivalent inside a real bundle. -->
     <key>LSUIElement</key>
     <true/>
-    <!-- Sparkle appcast, served over https from GitHub Pages. -->
+    <!-- Sparkle appcast: a Cloudflare Worker that serves the GitHub Pages feed and counts
+         update checks (FeedProxy/, Design/feed-usage-counting.md). Every build ships with this
+         URL, so the Worker and its workers.dev subdomain must stay. -->
     <key>SUFeedURL</key>
-    <string>https://pablocolaiacovo.github.io/unlatch/appcast.xml</string>
+    <string>https://unlatch-feed.colaiacovo.workers.dev/appcast.xml</string>
     <!-- Public EdDSA key; the private half lives only in the release secret. -->
     <key>SUPublicEDKey</key>
     <string>c1nkY1mfZROc+woQU0n8BKTxwcySykispaZaMbshWy0=</string>

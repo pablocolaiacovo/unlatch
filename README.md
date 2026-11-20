@@ -10,11 +10,29 @@ open password removed, wherever you choose. Files that already open without a pa
 Unlatch is local and private. Your files never leave the Mac and nothing is uploaded: there is no
 server, no account, and no network access involved in classifying or unlocking a PDF. The only
 network traffic is the [update check](#updates) and, when you choose to install one, the download
-from GitHub. Nothing about your files is sent, and Sparkle's system profiling is off.
+from GitHub. Nothing about your files is sent, and Sparkle's system profiling is off. Update checks
+are counted anonymously so the maintainer can tell how many copies are in use; see [Privacy](#privacy).
 
 ![Unlatch unlocking a password-protected PDF, step by step](docs/demo.gif)
 
 ![Unlatch classifying three PDFs as password protected, owner-restricted, and unreadable](docs/screenshot.png)
+
+## Privacy
+
+Unlatch has no analytics and sends nothing about your files. The one thing it reports, indirectly,
+is that a copy exists: the [update check](#updates) goes to a small Cloudflare Worker, which
+returns the feed from GitHub Pages and counts unique copies per day and app version.
+
+- **What is kept:** for each day, the app version and how many copies checked. Nothing else.
+- **What is never stored:** your IP address, file names, file contents, or passwords. To count a
+  copy once per day, the Worker keeps a keyed hash of the IP address and the date until the day
+  ends, then deletes it, leaving only the counts.
+- **How to opt out:** turn off **Check Automatically** in the ellipsis (…) menu. A copy is counted
+  only on days it checks for updates, so with automatic checks off it is counted only on the days
+  you choose **Check for Updates…**.
+
+The Worker's source is in [`FeedProxy/`](FeedProxy) and the design in
+[`Design/feed-usage-counting.md`](Design/feed-usage-counting.md).
 
 ## Why this exists
 
@@ -93,7 +111,7 @@ Shortcuts > Services > Files and Folders. Open With keeps working.
 
 Unlatch updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle
 asks whether it may check for updates automatically. If you allow it, Unlatch checks once a day, in
-the background, a signed feed at `https://pablocolaiacovo.github.io/unlatch/appcast.xml`, and it only
+the background, a signed feed at `https://unlatch-feed.colaiacovo.workers.dev/appcast.xml`, and it only
 installs an update whose EdDSA signature verifies. If you say no, Unlatch never checks on its own, and
 **Check for Updates…** still works. To change your answer later, in either direction, choose
 **Check Automatically** in the ellipsis (…) menu.
