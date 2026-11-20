@@ -37,7 +37,8 @@ Lifecycle of a change:
 1. File the issue in a milestone, in the format of `.github/ISSUE_TEMPLATE/`, with acceptance criteria
    as a task list and one type label plus at least one `area:` label (`RELEASING.md`, "Labels").
 2. Run `/design` if the issue calls for one.
-3. Implement on a `feature/` or `fix/` branch until the build is clean and tests pass.
+3. Fetch and branch from the latest `origin/main` (`RELEASING.md`, "Branching and pull requests"),
+   then implement on a `feature/` or `fix/` branch until the build is clean and tests pass.
 4. Run `/council-review`, fix the must-fix items, and open the PR. The PR title is the changelog line, so it reads
    as a user-facing sentence; the body says `Closes #N`; it carries a type label plus an `area:`
    label, and `skip-changelog` when it has no user-facing effect.
